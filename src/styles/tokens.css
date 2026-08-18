@@ -1,0 +1,40 @@
+/*
+  A records office, not a fantasy character sheet.
+  The book's own fiction opens on a document laid out like a fingerprint
+  register — two rows of five boxes, no header, no explanation. So a leader
+  here is a filed record with a case number, and the palette is filing-cabinet
+  iron and stamp ink rather than parchment.
+*/
+:root {
+  --ink: #15181d;
+  --slate: #1e232b;
+  --panel: #232932;
+  --panel-hover: #2a313b;
+  --line: #333c47;
+  --line-soft: #2a323c;
+
+  --card: #e7e2d4;
+  --card-line: #c3bca8;
+  --card-ink: #221d16;
+  --card-mute: #6f665a;
+
+  --oxide: #a8342a;
+  --oxide-dim: #4a2320;
+  --brass: #b8913f;
+  --brass-bg: #2b2921;
+
+  --text: #d5d9de;
+  --mute: #828c99;
+  --faint: #5a626c;
+
+  --display: 'Bodoni Moda', Georgia, serif;
+  --data: 'Courier Prime', 'Courier New', monospace;
+  --body: Georgia, 'Times New Roman', serif;
+
+  /* Hank's voice — warmer than the rest of the interface on purpose.
+     The UI is a filing cabinet; he's the fire next to it. */
+  --ember: #c98a4b;
+  --ember-dim: #2e2519;
+
+  --step: 4px;
+}

@@ -1,0 +1,261 @@
+import { arsenalTotal, campaignRating, isAnnihilated, ANNIHILATION_THRESHOLD } from './campaign.js'
+
+/**
+ * The Campaign object — the shape everything else hangs off.
+ *
+ * Replaces the single-leader model. A campaign holds several arsenals (one per
+ * player) plus a shared week log, because the rules require players to see each
+ * other's numbers: max encounter size is min(both arsenals) + 6, and the
+ * soulstone bonus compares campaign ratings. Arsenals are public by design.
+ *
+ * Mirrors docs/data-model.md. When that changes, this changes.
+ *
+ * NOTHING derived is stored. Current week, arsenal totals, campaign ratings and
+ * injury counts are all computed on read — a stored copy is a copy that goes
+ * stale the moment an injury lands.
+ */
+
+export const SCHEMA_VERSION = 1
+
+export const DEFAULT_HOUSE_RULES = {
+  /** The book leaves a 3-cost first hire computing to −2 and never resolves it. */
+  allowNegativeHireCost: false,
+  surchargeBeforeDiscount: true,
+  /** The book explicitly invites groups to use 3 days, or 1, or anything. */
+  weekLengthDays: 7,
+}
+
+const uid = (prefix) =>
+  `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
+
+/* ── factories ──────────────────────────────────────────────────── */
+
+export function createLeader(patch = {}) {
+  return {
+    name: '',
+    archetype: '',
+    characteristics: [],
+    size: 2,
+    base: 30,
+    advancementPath: '',
+    representingModel: '',
+    picks: { attack: [], tactical: [], ability: [] },
+    trigger: '',
+    experience: { boxesChecked: 0 },
+    advancements: [],
+    miraculousRecoveryUsed: false,
+    ...patch,
+  }
+}
+
+export function createArsenal(patch = {}) {
+  return {
+    id: uid('ars'),
+    userId: null,          // set once accounts exist
+    displayName: '',
+    faction: '',
+    keywords: ['', ''],
+    scrip: 0,
+    leader: createLeader(),
+    crewCard: { effect: '', choice: '' },
+    models: [],
+    injuries: [],
+    equipment: [],
+    ...patch,
+  }
+}
+
+export function createCampaign(patch = {}) {
+  const arsenal = patch.arsenals?.[0] || createArsenal()
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    id: uid('cmp'),
+    name: '',
+    weeksTotal: 12,
+    startedAt: Date.now(),
+    weekOffset: 0,
+    houseRules: { ...DEFAULT_HOUSE_RULES },
+    joinCode: null,
+    members: [],
+    arsenals: [arsenal],
+    games: [],
+    /** Which arsenal belongs to this device. Replaced by userId once signed in. */
+    localArsenalId: arsenal.id,
+    ...patch,
+  }
+}
+
+export function createModel(patch = {}) {
+  return {
+    id: uid('mdl'),
+    slug: null,
+    name: '',
+    cost: 0,
+    addedWeek: 1,
+    scripPaid: 0,
+    titleGroup: null,
+    annihilated: false,
+    ...patch,
+  }
+}
+
+export function createGame(patch = {}) {
+  return {
+    id: uid('gam'),
+    arsenalId: null,
+    opponentArsenalId: null,
+    week: 1,
+    playedAt: Date.now(),
+    encounterSize: null,
+    strategy: '',
+    schemesCompleted: 0,
+    vpSelf: 0,
+    vpOpponent: 0,
+    result: null,           // 'win' | 'loss' | 'draw'
+    withdrew: false,
+    withdrewOnTurn: null,
+    campaignRatingSelf: null,
+    campaignRatingOpponent: null,
+    equipmentHired: [],     // [{ equipmentId, modelId }] — chosen fresh each game
+    killedModelIds: [],     // drives phase 6 injury flips
+    aftermath: {},
+    ...patch,
+  }
+}
+
+/* ── selectors ──────────────────────────────────────────────────── */
+
+/**
+ * Week boundaries are a calendar fact, not a counter. Storing `currentWeek`
+ * means it's wrong whenever nobody remembers to advance it, and every player's
+ * device disagrees. `weekOffset` is the escape hatch for groups who skip a week.
+ */
+export function currentWeek(campaign, now = Date.now()) {
+  const days = campaign.houseRules?.weekLengthDays || 7
+  const elapsed = Math.floor((now - campaign.startedAt) / (days * 86400000))
+  return Math.max(1, elapsed + 1 + (campaign.weekOffset || 0))
+}
+
+export function isCampaignOver(campaign, now = Date.now()) {
+  return currentWeek(campaign, now) > campaign.weeksTotal
+}
+
+export function weeksRemaining(campaign, now = Date.now()) {
+  return Math.max(0, campaign.weeksTotal - currentWeek(campaign, now))
+}
+
+export function getArsenal(campaign, arsenalId) {
+  return campaign.arsenals.find((a) => a.id === arsenalId) || null
+}
+
+export function myArsenal(campaign) {
+  return getArsenal(campaign, campaign.localArsenalId)
+}
+
+/** Annihilated models leave the arsenal total — they can't be hired. */
+export function liveModels(arsenal) {
+  return arsenal.models.filter((m) => !m.annihilated)
+}
+
+export function totalFor(arsenal) {
+  return arsenalTotal(liveModels(arsenal))
+}
+
+/**
+ * Injuries attach to exactly one subject:
+ *   modelId    — an ordinary model, or an Emissary/Effigy
+ *   titleGroup — a titled model; every version shares the injury
+ *   neither    — the leader
+ * Stored once against the group is the only shape that can't drift.
+ */
+export function injuriesFor(arsenal, { modelId = null, titleGroup = null } = {}) {
+  return arsenal.injuries.filter((inj) => {
+    if (inj.removedAt) return false
+    if (titleGroup) return inj.titleGroup === titleGroup
+    if (modelId) return inj.modelId === modelId && !inj.titleGroup
+    return !inj.modelId && !inj.titleGroup
+  })
+}
+
+export function injuryCountForModel(arsenal, model) {
+  return injuriesFor(arsenal, model.titleGroup
+    ? { titleGroup: model.titleGroup }
+    : { modelId: model.id }).length
+}
+
+export function modelIsAnnihilated(arsenal, model) {
+  return isAnnihilated(injuryCountForModel(arsenal, model))
+}
+
+/** Every live injury in the crew, counted once per titled group. */
+export function activeInjuryCount(arsenal) {
+  return arsenal.injuries.filter((inj) => !inj.removedAt).length
+}
+
+/**
+ * Campaign rating is per-GAME, because it counts equipment selected when
+ * hiring rather than equipment owned. Pass the game's equipment list.
+ */
+export function ratingForGame(arsenal, game) {
+  return campaignRating({
+    equipmentHired: game?.equipmentHired?.length || 0,
+    leaderAdvancements: arsenal.leader.advancements?.length || 0,
+    totemAdvancements: 0,
+    injuriesInCrew: activeInjuryCount(arsenal),
+  })
+}
+
+/** Every player must add at least one model each week except the first. */
+export function mustHireThisWeek(arsenal, week) {
+  if (week <= 1) return false
+  return !arsenal.models.some((m) => m.addedWeek === week)
+}
+
+export function gamesInWeek(campaign, arsenalId, week) {
+  return campaign.games.filter((g) => g.arsenalId === arsenalId && g.week === week)
+}
+
+export { ANNIHILATION_THRESHOLD }
+
+/* ── migration ──────────────────────────────────────────────────── */
+
+/**
+ * Lifts a v0.1 single-leader record into a campaign.
+ *
+ * The old shape had faction, keywords, scrip and arsenal sitting on the leader
+ * itself. Those belong to the arsenal; only the leader's own fields stay.
+ * Runs once, on read, when a saved leader is found and no campaign is.
+ */
+export function migrateLeaderToCampaign(old) {
+  if (!old) return null
+
+  const arsenal = createArsenal({
+    faction: old.faction || '',
+    keywords: old.keywords || ['', ''],
+    displayName: '',
+    leader: createLeader({
+      name: old.name || '',
+      archetype: old.archetype || '',
+      characteristics: old.characteristics || [],
+      size: old.size ?? 2,
+      base: old.base ?? 30,
+      advancementPath: old.advancementPath || '',
+      representingModel: old.representingModel || '',
+      picks: old.picks || { attack: [], tactical: [], ability: [] },
+      trigger: old.trigger || '',
+    }),
+    crewCard: old.crewCard || { effect: '', choice: '' },
+    models: (old.arsenal || []).map((m) =>
+      createModel({ slug: m.slug, name: m.name, cost: m.cost, addedWeek: 1 })
+    ),
+  })
+
+  return createCampaign({ arsenals: [arsenal], localArsenalId: arsenal.id })
+}
+
+/** Future schema bumps chain here rather than scattering version checks. */
+export function migrate(campaign) {
+  if (!campaign) return null
+  if (!campaign.schemaVersion) return { ...campaign, schemaVersion: SCHEMA_VERSION }
+  return campaign
+}
