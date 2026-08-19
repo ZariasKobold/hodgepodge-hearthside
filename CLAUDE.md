@@ -1,10 +1,10 @@
 # CLAUDE.md — Hodgepodge Hearthside project context
 
-<!-- HH v0.4.5 | Last updated: 2026-08-18 -->
+<!-- HH v0.4.6 | Last updated: 2026-08-18 -->
 
 ---
 
-## Current Version: 0.4.5
+## Current Version: 0.4.6
 
 ## Last Updated: 2026-08-18
 
@@ -91,24 +91,24 @@ Save to `docs/audits/audit-vX.Y.Z.md`.
 
 ## ⚠️ NEXT SESSION — pending
 
-### Blocking — do these before writing features
+### Blocking — none. Setup is complete as of 2026-08-18.
 
-1. ~~**D1 does not exist yet.**~~ **Done 2026-08-18.** Database
-   `1d11431a-0507-4ab3-90c2-f2213fb2f831` created, `0001_init.sql` applied
-   local and remote, ten tables verified, binding confirmed live from
-   `wrangler.toml` with no dashboard config. Nothing to do here.
+D1 exists, the schema is applied, sign-in works end to end, and a real account
+and session are in the remote database. Feature work is unblocked.
 
-   **Kept as a warning: `/api/auth/me` is NOT a valid checkpoint for the
-   binding** — it was listed as one until v0.4.2 and it cannot work.
-   `currentUser` short-circuits on `if (!sessionId || !env.DB) return null`,
-   so with no session cookie it returns before touching the database. An
-   unbound `env.DB` returns exactly the same `{"user":null}` as a correct
-   binding. What proves the binding is a request that actually queries D1:
-   `npx wrangler d1 execute hodgepodge-hearthside --remote --command "SELECT name FROM sqlite_master WHERE type='table'"`
-   (ten tables, plus Cloudflare's internal `_cf_KV`), or a real sign-in.
-2. **No OAuth app registered.** Steps 4-5 of the same doc. The redirect URI
-   must match exactly and must be registered for BOTH the custom domain and
-   the `.pages.dev` URL.
+Two facts from that setup worth keeping, because both cost time to learn:
+
+- **`/api/auth/me` is NOT a checkpoint for the D1 binding.** It was listed as
+  one until v0.4.2 and cannot work: `currentUser` short-circuits on
+  `if (!sessionId || !env.DB) return null`, so with no session cookie it
+  returns `{"user":null}` whether the binding exists or not. Prove the binding
+  with a query that touches D1:
+  `npx wrangler d1 execute hodgepodge-hearthside --remote --command "SELECT name FROM sqlite_master WHERE type='table'"`
+  (ten tables, plus Cloudflare's internal `_cf_KV`).
+- **`wrangler.toml` is the only place plaintext config can live.** Once a Pages
+  project has one, the dashboard manages *secrets only* and refuses plain
+  variables outright. The D1 binding and `DISCORD_CLIENT_ID` live in
+  `wrangler.toml`; `DISCORD_CLIENT_SECRET` lives in the dashboard, encrypted.
 
 ### Next feature work, in order
 
@@ -136,12 +136,15 @@ Save to `docs/audits/audit-vX.Y.Z.md`.
   `/api/v1/factions` returns real faction JSON from BiggerHat in production.
   First BiggerHat call ever to actually execute. The other endpoints are still
   unproven; see the bullet above.
-- **The OAuth round trip.** Everything up to the redirect is now exercised:
-  the Functions deploy and route, `/api/auth/me` returns `{"user":null}`,
-  `useAuth` drives a real sign-in control, and `beginOAuth` returns a clean 501
-  when a provider is unconfigured. What has never run is the redirect itself
-  and everything after it — the callback, token exchange, `upsertUser`, session
-  creation, and `useAuth`'s signed-in branch. No account has ever existed.
+- ~~**All auth code.**~~ **Verified end to end 2026-08-18.** A real Discord
+  sign-in completed: consent screen, callback, token exchange, `upsertUser`,
+  the D1 write, session creation, and the badge's signed-in state with a live
+  avatar and name. The remote database holds one user row and one session
+  expiring in 30 days. Confirmed by schema inspection at the same time: the
+  `users` table has no email, password, or token column, so the privacy claim
+  is structural rather than a matter of discipline.
+  Still unexercised: `logout` (never called), session expiry sweeping, Google
+  as a provider, and sign-in from a preview deployment.
 - **`migrateLeaderToCampaign`.** Tested against a synthetic record only.
 
 ### Written but not wired

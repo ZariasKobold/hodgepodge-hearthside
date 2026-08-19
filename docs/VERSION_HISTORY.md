@@ -465,3 +465,50 @@ RESOLVED: setup doc told you to put the client id somewhere that rejects it
 UNVERIFIED: the OAuth round trip, still. Everything is now in place for it
 except the secret, which only the user can enter.
 NEXT: enter the secret in the dashboard, redeploy, then sign in once.
+
+---
+
+### Session 10 — v0.4.6
+Date: 2026-08-18
+
+**Sign-in works. Setup is complete and the blocking list is empty.**
+
+A real Discord account signed in to the deployed site. Everything between the
+button and the database ran for the first time: consent screen, callback, token
+exchange, `upsertUser`, the D1 write, session creation, and `useAuth`'s
+signed-in branch rendering an avatar and name in the masthead.
+
+Verified in the remote database afterwards rather than trusting the UI: one
+`users` row (`provider: discord`, `display_name: Zarias`, avatar stored) and one
+`sessions` row expiring in 29 days, which is the 30-day window behaving.
+
+**The privacy claim is structural.** `pragma_table_info('users')` returns
+exactly `id`, `provider`, `provider_user_id`, `display_name`, `avatar_url`,
+`created_at`. No email column, no password column, no token column. There is
+nowhere for that data to land even by mistake — worth knowing, because "we
+don't store it" is a promise that decays and "there is no column" does not.
+
+**The one failure on the way, and it was the predicted one.** Discord returned
+*Invalid OAuth2 redirect_uri* because the redirect had not been saved in the
+app's Redirects list. Diagnosis took one request: production already returned a
+correct `302` carrying the right client id and a `state` param, which localised
+the fault to Discord's config rather than ours — and confirmed as a side effect
+that `DISCORD_CLIENT_ID` reaches production from `wrangler.toml` `[vars]`,
+which had been an inference until then. **When OAuth fails, read the outbound
+redirect first; it separates our bug from their config in one look.**
+
+Naming the Discord app *Hodgepodge Hearthside* rather than something like
+"OAuth2" paid off at the consent screen, which reads "Hodgepodge Hearthside
+wants to access your Discord account". Players are being asked to hand over
+account access to a fan project; looking legitimate is most of that ask.
+
+Files: CLAUDE.md, package.json, docs/VERSION_HISTORY.md
+RESOLVED: the entire blocking list — D1, OAuth registration, and the auth code
+that had never run
+UNVERIFIED: `logout` has never been called, session expiry sweeping has never
+fired, Google as a provider is unwired, and nobody has signed in from a preview
+deployment. `/keywords/{slug}` remains the last unproven BiggerHat shape.
+`migrateLeaderToCampaign` is still synthetic-only.
+NEXT: the weekly hire UI — highest value, fires eleven times a campaign, both
+halves already written and tested. Needs the `.gap-note` for the negative-scrip
+house rule, visible in both Hank modes.
