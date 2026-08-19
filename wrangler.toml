@@ -1,0 +1,11 @@
+name = "hodgepodge-hearthside"
+compatibility_date = "2026-08-18"
+pages_build_output_dir = "dist"
+
+# Created with:
+#   npx wrangler d1 create hodgepodge-hearthside
+# then paste the database_id it prints below.
+[[d1_databases]]
+binding = "DB"
+database_name = "hodgepodge-hearthside"
+database_id = "PASTE_DATABASE_ID_HERE"

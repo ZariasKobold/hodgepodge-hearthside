@@ -10,9 +10,9 @@
  * every response is held at the edge for an hour — a hundred players building
  * leaders in the same keyword hit BiggerHat once, not a hundred times.
  *
- * Routing: the [[path]] filename is a catch-all, so this handles every
- * request under /api/. Our client calls /api/v1/keywords/... and upstream
- * serves the same shape, so paths pass through unchanged.
+ * Routing: scoped to /api/v1/ rather than /api/ so it cannot swallow
+ * /api/auth/*. Our client calls /api/v1/keywords/... and upstream serves the
+ * same shape, so paths pass through unchanged.
  */
 
 const UPSTREAM = 'https://biggerhat.net'
