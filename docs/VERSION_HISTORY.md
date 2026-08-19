@@ -454,10 +454,12 @@ ran on a *preview* deployment and had `env.DB` bound from the top-level
 tested; the sign-in attempt will show it.
 
 **Redirect URIs, recorded before it wastes an hour:** Discord matches exactly.
-The registered `hodgepodge-hearthside.pages.dev` alias works; a per-deployment
-subdomain like `c16b3590.hodgepodge-hearthside.pages.dev` does not and cannot
-be registered, since it changes every build. Test sign-in from the branch alias
-or the custom domain, never from a deployment URL.
+The registered `hodgepodge-hearthside.pages.dev` is the PRODUCTION alias, not a
+preview one — the bare `<project>.pages.dev` host serves the live deployment.
+(Corrected in session 11; this entry originally called it a branch alias, which
+is wrong.) Preview builds are at `<branch>.` and `<hash>.` subdomains, neither
+registered, so preview sign-in does not work at all. Test sign-in from the
+custom domain.
 
 Files: wrangler.toml, docs/SETUP_D1_AUTH.md, docs/VERSION_HISTORY.md,
        CLAUDE.md, package.json
@@ -512,3 +514,39 @@ deployment. `/keywords/{slug}` remains the last unproven BiggerHat shape.
 NEXT: the weekly hire UI — highest value, fires eleven times a campaign, both
 halves already written and tested. Needs the `.gap-note` for the negative-scrip
 house rule, visible in both Hank modes.
+
+---
+
+### Session 11 — v0.4.7
+Date: 2026-08-18
+
+**docs: correct the preview sign-in claim, and record sign-out as verified**
+
+Sign-out was exercised: the session row is deleted, the cookie cleared, and the
+badge returns to signed out. Two more items off the unverified list.
+
+**Correction.** Sessions 9 and 10 described
+`hodgepodge-hearthside.pages.dev` as a branch alias that would let preview
+deployments sign in. It is the **production** alias — the bare
+`<project>.pages.dev` host serves the live deployment. Preview builds are at
+`<branch>.` and `<hash>.` subdomains, neither of which is registered with
+Discord, so preview sign-in does not work at all rather than partially. The
+error came from testing that host, getting production's response, and reading
+it as evidence the preview path was covered.
+
+This matters at the remote storage adapter and not before. That feature is
+entirely signed-in behaviour, so testing it without preview sign-in means
+exercising writes against the live database from the live site — which is the
+one place you do not want to debug a sync bug. `docs/SETUP_D1_AUTH.md` now
+carries the three steps: standardise on a long-lived branch name, register that
+one redirect, and add the secret to the Preview environment separately.
+
+The per-build `<hash>.` host can never be registered, since it changes every
+deployment. That part was right.
+
+Files: CLAUDE.md, docs/SETUP_D1_AUTH.md, docs/VERSION_HISTORY.md, package.json
+RESOLVED: sign-out unverified; a wrong claim about which hosts can sign in
+UNVERIFIED: session expiry sweeping, Google as a provider, preview sign-in
+(now correctly described as unconfigured rather than untested).
+`/keywords/{slug}` and `migrateLeaderToCampaign` unchanged.
+NEXT: the weekly hire UI.

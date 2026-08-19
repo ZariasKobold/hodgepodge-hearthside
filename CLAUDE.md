@@ -1,10 +1,10 @@
 # CLAUDE.md — Hodgepodge Hearthside project context
 
-<!-- HH v0.4.6 | Last updated: 2026-08-18 -->
+<!-- HH v0.4.7 | Last updated: 2026-08-18 -->
 
 ---
 
-## Current Version: 0.4.6
+## Current Version: 0.4.7
 
 ## Last Updated: 2026-08-18
 
@@ -143,8 +143,16 @@ Two facts from that setup worth keeping, because both cost time to learn:
   expiring in 30 days. Confirmed by schema inspection at the same time: the
   `users` table has no email, password, or token column, so the privacy claim
   is structural rather than a matter of discipline.
-  Still unexercised: `logout` (never called), session expiry sweeping, Google
-  as a provider, and sign-in from a preview deployment.
+  Sign-out verified too: the D1 `DELETE` runs and the badge returns to signed
+  out. Still unexercised: session expiry sweeping, and Google as a provider.
+
+  **Preview deployments cannot sign in**, and this is not a half-finished
+  setup — no preview redirect URI exists. Both registered URIs are production
+  (`hodgepodgehearthside.com` and `hodgepodge-hearthside.pages.dev`, the bare
+  host being the production alias). Preview builds live at `<branch>.` and
+  `<hash>.` subdomains. Harmless until the remote storage adapter, at which
+  point testing signed-in writes would otherwise mean using the live database;
+  `docs/SETUP_D1_AUTH.md` has the three steps to enable it.
 - **`migrateLeaderToCampaign`.** Tested against a synthetic record only.
 
 ### Written but not wired

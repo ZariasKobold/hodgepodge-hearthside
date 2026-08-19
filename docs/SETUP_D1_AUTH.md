@@ -95,12 +95,27 @@ and never reach the browser.
 Redeploy after adding them — variables are picked up at deploy time, so the
 already-live build cannot see them. Pushing any commit does it.
 
-Add the secret to **Preview** as well as Production if you want sign-in to work
-on branch deployments. Note that Discord matches redirect URIs exactly, so
-sign-in works from the branch alias
-(`hodgepodge-hearthside.pages.dev`) but not from a per-deployment subdomain
-(`c16b3590.hodgepodge-hearthside.pages.dev`), which is not registered and
-cannot be.
+### Preview sign-in is NOT configured, and the two URIs above do not cover it
+
+Both registered redirects point at **production**: the custom domain, and
+`hodgepodge-hearthside.pages.dev`, which is the production alias — the bare
+`<project>.pages.dev` host serves the live deployment, not a preview.
+
+Preview deployments are served from `<branch>.hodgepodge-hearthside.pages.dev`
+and `<hash>.hodgepodge-hearthside.pages.dev`. Discord matches redirect URIs
+exactly, so neither can sign in today, and the per-build hash host can never be
+registered because it changes every deployment.
+
+To enable it when it is needed — which is when the remote storage adapter
+lands, since testing that against production means writing to the live database:
+
+1. Standardise on one long-lived branch name, e.g. `preview`.
+2. Register `https://preview.hodgepodge-hearthside.pages.dev/api/auth/discord/callback`.
+3. Add `DISCORD_CLIENT_SECRET` to the **Preview** environment as well — it is
+   separate from Production.
+
+Until then, preview deployments work fully signed out, which is every feature
+that does not touch auth.
 
 ## 6. Test
 
