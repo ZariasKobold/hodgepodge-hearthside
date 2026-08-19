@@ -30,7 +30,11 @@ Verify:
 npx wrangler d1 execute hodgepodge-hearthside --remote --command="SELECT name FROM sqlite_master WHERE type='table'"
 ```
 
-Ten tables.
+Ten tables — `arsenals`, `arsenal_models`, `campaigns`, `campaign_members`,
+`equipment`, `game_equipment`, `games`, `injuries`, `sessions`, `users`.
+
+The listing also shows `_cf_KV`, which is Cloudflare's own internal table, so
+the row count reads eleven. That is normal and not something you added.
 
 ## 3. Bind the database to Pages
 
@@ -78,8 +82,12 @@ Redeploy after adding them — variables are picked up at build.
 
 ## 6. Test
 
-- `https://your-site/api/auth/me` → `{"user":null}` means D1 is bound and
-  reachable.
+- `https://your-site/api/auth/me` → `{"user":null}`. **This does not prove D1
+  is bound.** `currentUser` returns early on
+  `if (!sessionId || !env.DB) return null`, so with no session cookie you get
+  `{"user":null}` whether the binding works or not. It only tells you the
+  Function is deployed and not throwing. The binding is proved by step 2's
+  table listing, and end-to-end by actually signing in below.
 - `https://your-site/api/auth/discord` → bounces to Discord, then back signed in.
 - `/api/auth/me` again → your profile.
 

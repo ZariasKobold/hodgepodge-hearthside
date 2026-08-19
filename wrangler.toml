@@ -8,4 +8,4 @@ pages_build_output_dir = "dist"
 [[d1_databases]]
 binding = "DB"
 database_name = "hodgepodge-hearthside"
-database_id = "PASTE_DATABASE_ID_HERE"
+database_id = "1d11431a-0507-4ab3-90c2-f2213fb2f831"
