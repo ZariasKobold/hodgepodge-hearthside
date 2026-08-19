@@ -433,12 +433,16 @@ any time, so a campaign must survive this app disappearing.
 
 `src/lib/storage.js` becomes two adapters behind the existing interface:
 
-- **local** — what exists now, and the fallback when signed out or offline
-- **remote** — D1 through Pages Functions, when signed in
+- **local** — what exists now, and the fallback when the network or D1 is
+  unreachable *after* a user has been admitted
+- **remote** — D1 through Pages Functions, the primary store
 
 Rules for the split:
-- Signed out, the app works fully against local storage. Accounts are for
-  *sharing*, not for *using*.
+- **Superseded in v0.4.8:** this previously read "signed out, the app works
+  fully against local storage — accounts are for *sharing*, not for *using*."
+  Play is now gated behind sign-in, so there is no signed-out campaign to
+  support. Local storage remains the offline fallback for an admitted user,
+  not an anonymous mode.
 - Every campaign still exports to JSON, from either adapter.
 - Remote failure degrades to local and warns; it never blocks play. Game night
   does not wait for a database.

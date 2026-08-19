@@ -1,10 +1,10 @@
 # CLAUDE.md — Hodgepodge Hearthside project context
 
-<!-- HH v0.4.7 | Last updated: 2026-08-18 -->
+<!-- HH v0.4.8 | Last updated: 2026-08-18 -->
 
 ---
 
-## Current Version: 0.4.7
+## Current Version: 0.4.8
 
 ## Last Updated: 2026-08-18
 
@@ -477,8 +477,26 @@ production one isn't.
 
 Two rules it establishes that are easy to violate:
 
-- **Accounts are for sharing, not for using.** Signed out, the app must work
-  fully against local storage. Never gate play behind a login.
+- **Play is gated behind an account.** Changed in v0.4.8 by owner decision; the
+  rule here previously read "accounts are for sharing, not for using — never
+  gate play behind a login", and that is no longer true. `SignInGate` closes
+  the wizard to anyone not signed in, so every campaign is owned by a `users`
+  row from the moment it is created.
+
+  What the gate must never do is strand someone. Three obligations ride on it:
+  the JSON export stays reachable from the gate itself, so existing local work
+  can always be rescued; the legal disclaimer renders on the gate screen like
+  every other page (§8); and when the backend is unreachable the screen says so
+  plainly instead of offering a button that cannot work. **A backend outage now
+  blocks play entirely** — that is the accepted cost of the decision, and it is
+  why the remote adapter must still degrade rather than hard-fail once a user
+  is admitted.
+
+  Local development uses `VITE_ALLOW_UNAUTHENTICATED=true` in `.env`, which
+  opens the wizard **only** when the backend is genuinely absent. It cannot
+  open a real signed-out session in production, where `available` is true, and
+  deployed builds never carry the flag because it is not among `wrangler.toml`'s
+  `[vars]`.
 - **Never loop a query per arsenal or per model.** D1's free plan caps a Worker
   invocation at 50 queries. Fetch sets.
 

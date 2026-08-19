@@ -11,6 +11,7 @@ import Identity from './components/steps/Identity.jsx'
 import Archetype from './components/steps/Archetype.jsx'
 import Loadout from './components/steps/Loadout.jsx'
 import Record from './components/steps/Record.jsx'
+import SignInGate from './components/SignInGate.jsx'
 import './styles/app.css'
 
 /** A stable case number, so the same leader always files under the same mark. */
@@ -31,6 +32,16 @@ export default function App() {
   // per load, and so the storage adapter has it to hand when it lands.
   const auth = useAuth()
 
+  // Play is gated behind an account (CLAUDE.md §12). The one escape hatch is
+  // for local development, where Vite serves no Functions so signing in is
+  // impossible: an opt-in flag opens the wizard, and ONLY when the backend is
+  // genuinely absent. It cannot open a real signed-out session in production,
+  // because `available` is true there — and production builds never carry the
+  // flag, since it lives in .env and is not among wrangler.toml's [vars].
+  const devBypass =
+    import.meta.env.VITE_ALLOW_UNAUTHENTICATED === 'true' && !auth.available
+  const admitted = Boolean(auth.user) || devBypass
+
   const archetype = getArchetype(leader.archetype)
 
   const canAdvance = useMemo(() => {
@@ -49,15 +60,17 @@ export default function App() {
   return (
     <HankProvider>
     <div className="shell">
-      <Masthead step={step} onJump={setStep} fileNumber={fileNumber(leader)} auth={auth} />
+      <Masthead step={step} onJump={setStep} fileNumber={fileNumber(leader)} auth={auth} admitted={admitted} />
 
       <main className="wrap">
-        {step === 0 && <Identity leader={leader} set={set} />}
-        {step === 1 && <Archetype leader={leader} set={set} />}
-        {step === 2 && archetype && (
+        {!admitted && <SignInGate auth={auth} />}
+
+        {admitted && step === 0 && <Identity leader={leader} set={set} />}
+        {admitted && step === 1 && <Archetype leader={leader} set={set} />}
+        {admitted && step === 2 && archetype && (
           <Loadout leader={leader} set={set} setPick={setPick} archetype={archetype} roster={roster} />
         )}
-        {step === 3 && archetype && (
+        {admitted && step === 3 && archetype && (
           <Record
             leader={leader}
             set={set}
@@ -67,6 +80,7 @@ export default function App() {
           />
         )}
 
+        {admitted && (
         <div className="nav">
           <Button ghost onClick={() => setStep(Math.max(0, step - 1))} disabled={step === 0}>
             Back
@@ -77,6 +91,7 @@ export default function App() {
             </Button>
           )}
         </div>
+        )}
 
         <p className="colophon">
           Portions of the materials used are copyrighted works of Wyrd Miniatures, LLC, in the United

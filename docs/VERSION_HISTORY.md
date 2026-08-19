@@ -550,3 +550,62 @@ UNVERIFIED: session expiry sweeping, Google as a provider, preview sign-in
 (now correctly described as unconfigured rather than untested).
 `/keywords/{slug}` and `migrateLeaderToCampaign` unchanged.
 NEXT: the weekly hire UI.
+
+---
+
+### Session 12 — v0.4.8
+Date: 2026-08-18
+
+**feat: play is gated behind sign-in — `SignInGate` closes the wizard**
+
+Owner decision, taken against the recommendation recorded here, and it reverses
+a founding rule. `CLAUDE.md` §12 and `docs/data-model.md` both said accounts
+were for *sharing*, never for *using*, and that play must never sit behind a
+login. Both are rewritten rather than quietly left to rot — a doc that
+contradicts the code is worse than no doc.
+
+**What was argued and overruled**, kept because the trade is now permanent and
+someone will ask why: nothing was being lost without an account (`storage.js`
+already persists locally and exports to JSON), and gating buys no association
+yet because no Function writes campaigns to D1 — the only D1 writes that exist
+are `users` and `sessions`. The alternative offered was ungated play with a
+claim-on-sign-in step, which reaches the same end state without turning away
+anyone who wants to try before registering.
+
+**The cost is concentrated in one place: an outage now blocks play entirely.**
+Previously any network failure degraded to local storage and game night
+continued. So the gate carries three obligations, all implemented and verified:
+
+1. **Nobody gets stranded.** `SignInGate` reads existing local storage and
+   offers a JSON export from the gate itself. Someone who built a leader before
+   this change can still get it out.
+2. **The disclaimer renders on the gate.** §8 requires it on every page, and
+   the gate is now the first page most people see.
+3. **No dead buttons.** When the backend is unreachable the screen says so and
+   names the cause, rather than offering sign-in that cannot work.
+
+**Local development would otherwise be impossible**, since Vite serves no
+Functions and localhost has no registered redirect URI — so the wizard would be
+permanently closed while developing it. `VITE_ALLOW_UNAUTHENTICATED=true` in
+`.env` opens it, and **only** when the backend is genuinely absent. It cannot
+open a signed-out session in production, where `available` is true, and
+deployed builds never carry the flag because it lives in `.env` and is not
+among `wrangler.toml`'s `[vars]`.
+
+Verified all three states in a browser rather than by reasoning: signed out
+under `wrangler pages dev` shows the gate and no wizard; no backend under
+`npm run dev` shows the unreachable notice; with the flag set the wizard opens
+normally. The step rail is hidden while gated — a progress bar for a wizard you
+cannot enter.
+
+Files: src/App.jsx, src/components/SignInGate.jsx (new),
+       src/components/Masthead.jsx, src/styles/app.css, .env.example,
+       CLAUDE.md, docs/data-model.md, docs/VERSION_HISTORY.md, package.json
+RESOLVED: n/a
+UNVERIFIED: the gate has never been seen by a signed-out visitor on the
+deployed site — only locally. Campaigns are still not written to D1, so the
+gate's stated purpose is not yet delivered; that arrives with the remote
+storage adapter.
+NEXT: the remote storage adapter is now the load-bearing feature rather than
+item 3 — until it lands, players sign in and still store everything locally.
+Preview sign-in (`SETUP_D1_AUTH.md`) becomes worth configuring at the same time.

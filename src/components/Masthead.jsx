@@ -3,7 +3,7 @@ import AccountBadge from './AccountBadge.jsx'
 
 const STEPS = ['Identity', 'Archetype', 'Loadout', 'Record']
 
-export default function Masthead({ step, onJump, fileNumber, auth }) {
+export default function Masthead({ step, onJump, fileNumber, auth, admitted = true }) {
   const { enabled, toggle } = useHank()
 
   return (
@@ -27,6 +27,7 @@ export default function Masthead({ step, onJump, fileNumber, auth }) {
         </div>
       </div>
 
+      {admitted && (
       <nav className="steps" aria-label="Progress">
         {STEPS.map((label, i) => {
           const state = i === step ? 'now' : i < step ? 'done' : 'todo'
@@ -43,6 +44,7 @@ export default function Masthead({ step, onJump, fileNumber, auth }) {
           )
         })}
       </nav>
+      )}
     </header>
   )
 }
