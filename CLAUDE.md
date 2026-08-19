@@ -1,12 +1,15 @@
 # CLAUDE.md — Hodgepodge Hearthside project context
 
-<!-- HH v0.3.0 | Last updated: 2026-08-18 -->
+<!-- HH v0.4.2 | Last updated: 2026-08-18 -->
 
 ---
 
-## Current Version: 0.3.0
+## Current Version: 0.4.2
 
 ## Last Updated: 2026-08-18
+
+**Live at hodgepodgehearthside.com** (Cloudflare Pages, auto-deploys on push to
+`main`). Repo: `ZariasKobold/hodgepodge-hearthside`.
 
 *Filename is `CLAUDE.md` rather than `HH_CONTEXT.md` deliberately — Claude Code
 loads it automatically, so the "read the context doc first" step can't be
@@ -69,7 +72,10 @@ a crash because nobody notices it.
 Feature sessions ship features and miss cross-file drift. Audit whenever any
 of these fire:
 
-- Every 10 versions (next scheduled: **v0.3.10**)
+- Every 10 sessions, counted from the numbered entries in `docs/VERSION_HISTORY.md`
+  (next scheduled: **Session 10**). Sessions are counted rather than version
+  numbers because a minor bump skips a patch series and makes a version-based
+  target unreachable — which is exactly what happened to the old v0.3.10 target.
 - Before any milestone that widens blast radius: first D1 write, first
   non-you user, submitting to Wyrd's Community Creators page
 - After a session touching 8+ files or adding a shared module
@@ -85,18 +91,50 @@ Save to `docs/audits/audit-vX.Y.Z.md`.
 
 ## ⚠️ NEXT SESSION — pending
 
-### Immediate
+### Blocking — do these before writing features
 
-- **Wire the weekly steps.** The `Campaign` object now exists and the wizard
-  runs on it. Next: hire, aftermath, barter, healing, advancement UI. The
-  arithmetic and the narration are both already written and tested.
-- **Every network call is unverified.** The BiggerHat paths come from their
-  OpenAPI spec, not a live response. First real run will show whether
-  `/keywords/{slug}` returns characters with actions attached or thin records
-  needing a second fetch. `useRoster.js` handles both; only one path has ever
-  executed.
-- **The Pages Function has never run.** `functions/api/[[path]].js` is written
-  against Cloudflare's documented behaviour and has not been deployed.
+1. **D1 does not exist yet.** No database created, no schema applied, no
+   dashboard binding. Follow `docs/SETUP_D1_AUTH.md` steps 1-3.
+
+   **`/api/auth/me` is NOT a valid checkpoint for this** — it was listed as one
+   until v0.4.2 and it cannot work. `currentUser` short-circuits on
+   `if (!sessionId || !env.DB) return null`, so with no session cookie it
+   returns before touching the database. An unbound `env.DB` returns exactly
+   the same `{"user":null}` as a correct binding. The only checkpoint that
+   proves the binding is a request that actually queries D1: complete an OAuth
+   round trip, or run
+   `npx wrangler d1 execute hodgepodge-hearthside --remote --command "SELECT name FROM sqlite_master WHERE type='table'"`
+   and confirm the ten tables from `0001_init.sql` come back.
+2. **No OAuth app registered.** Steps 4-5 of the same doc. The redirect URI
+   must match exactly and must be registered for BOTH the custom domain and
+   the `.pages.dev` URL.
+
+### Next feature work, in order
+
+1. **Weekly hire UI.** Highest value: fires eleven times a campaign, and both
+   halves are already written — `hireCost` in `campaign.js` (tested) and 42
+   lines of narration in `hank.js`. Needs the `.gap-note` for the negative-scrip
+   house rule, visible in both Hank modes.
+2. **Aftermath.** Six ordered phases; see `AFTERMATH_PHASES`. Must be ONE
+   stateful flow, not six screens — the fate deck isn't reshuffled between
+   phases.
+3. **Remote storage adapter.** `src/lib/storage.js` still writes only to
+   localStorage. Split into local/remote behind the existing interface; local
+   stays the fallback, never a stepping stone.
+4. **Visual design pass.** Functional but plain. Tokens are in
+   `src/styles/tokens.css`; the records-office direction is deliberate and
+   documented in the file header.
+
+### Never verified
+
+- **Every BiggerHat call.** Paths come from their OpenAPI spec, not a live
+  response. `/keywords/{slug}` may return characters with actions attached, or
+  thin records needing a second fetch — `useRoster.js` handles both, but only
+  one path has ever executed.
+- **The register proxy Function.** Deployed but never exercised. Test directly:
+  `/api/v1/factions` should return JSON.
+- **All auth code.** Nothing has run.
+- **`migrateLeaderToCampaign`.** Tested against a synthetic record only.
 
 ### Written but not wired
 
@@ -116,6 +154,12 @@ in `src/data/hank.js`. Missing piece is UI plus the `Campaign` object.
   directly, or it becomes a second shape to keep in sync.
 - Totem advancements are hardcoded to 0 in `ratingForGame` — totems aren't
   modelled yet.
+- The D1 binding is configured twice — `wrangler.toml` for CLI commands, the
+  Pages dashboard for the deployed site. They must agree. Not elegant; it's how
+  Pages works.
+- Project lives inside OneDrive. Usually fine, but OneDrive syncing
+  `node_modules` mid-install can cause file-lock errors. First suspect for any
+  inexplicable build failure.
 
 **Low:**
 - `HankSays` renders `aria-hidden`, so narration is visual-only. Deliberate —
@@ -123,6 +167,34 @@ in `src/data/hank.js`. Missing piece is UI plus the `Campaign` object.
   but revisit if anyone asks for it announced.
 - Thresholds in `hireGreeting` (flush ≥8 scrip, broke ≤2) and
   `hireReaction` (expensive ≥9) are guesses. Tune after real play.
+
+---
+
+## Repository map
+
+```
+hodgepodge-hearthside/
+├── CLAUDE.md               this file — read first
+├── wrangler.toml           D1 binding for CLI commands (dashboard is separate)
+├── migrations/             D1 schema, append-only
+├── functions/              Cloudflare Pages Functions — edge, never bundled
+│   ├── lib/auth.js         OAuth + sessions; may hold secrets
+│   └── api/
+│       ├── v1/[[path]].js  BiggerHat proxy (scoped to /v1 so it can't eat /auth)
+│       └── auth/           sign-in, callback, me, logout
+├── src/                    the browser app
+│   ├── data/               facts from the book + all of Hank's dialogue
+│   ├── lib/                pure logic, imports nothing from React
+│   ├── hooks/              useCampaign, useRoster, useAuth, useHank
+│   ├── components/         wizard steps and shared UI
+│   └── styles/             tokens.css holds the design direction
+├── docs/
+│   ├── VERSION_HISTORY.md  why things were done this way
+│   ├── data-model.md       campaign shape + D1 schema design
+│   ├── hank-dialogue.md    numbered reading copy of the narration
+│   └── SETUP_D1_AUTH.md    one-time dashboard setup
+└── scripts/seed.mjs        optional bulk register pull
+```
 
 ---
 
@@ -257,6 +329,17 @@ dead-ending. **Do not merge them.**
 returns `station: null` on records that clearly should have one. Masters have
 no cost at all, so the cost check catches them regardless.
 
+**`src/` and `functions/` never import from each other.** Both have a `lib/`
+folder and that's fine — they run in different runtimes. `functions/lib/` runs
+on Cloudflare's edge and may hold secrets; `src/lib/` is bundled and shipped to
+the browser. An import across that line would drag server code into the client
+bundle. If genuinely shared logic appears, create a third top-level `shared/`
+folder — not before.
+
+**Migrations are append-only.** Once `migrations/000N_*.sql` has run against the
+remote database, never edit it. Add `000N+1`. An edited applied migration means
+the file and the real schema disagree with nothing to warn you.
+
 **Everything degrades.** Any network path needs a manual fallback. The register
 is a donation-funded community project that can be down or unreachable, and
 game night doesn't wait.
@@ -326,15 +409,29 @@ every session. `docs/VERSION_HISTORY.md` holds how it got this way.
 ```bash
 npm install
 cp .env.example .env
-npm run dev      # includes the proxy that solves CORS in development
-npm run test     # campaign arithmetic
-npm run build    # production bundle — dev proxy does NOT exist here
-npm run seed     # optional local register file; ask the maintainer first
+npm run dev      # Vite only — NO Functions, NO database. useAuth degrades to signed out.
+npm run test     # 45 tests across campaign.js and campaignShape.js
+npm run build    # production bundle — the dev proxy does NOT exist here
+npm run seed     # optional local register file; ask BiggerHat's maintainer first
+
+# Functions + D1 locally (needs a build first)
+npx wrangler pages dev dist
+
+# D1
+npx wrangler d1 execute hodgepodge-hearthside --local  --file=./migrations/0001_init.sql
+npx wrangler d1 execute hodgepodge-hearthside --remote --file=./migrations/0001_init.sql
 ```
+
+`npm run dev` serves no Functions, so sign-in and any `/api/*` call will fail
+there by design. That is not a bug — `useAuth` and `useRoster` both degrade.
 
 ---
 
 ## 11. Two proxies, not one
+
+**Routing note:** the register proxy is scoped to `/api/v1/`, NOT `/api/`. A
+catch-all at `/api/` would swallow `/api/auth/*`. Keep new API surfaces in
+their own namespace.
 
 `vite.config.js` proxies `/api` in **development only**. In production that job
 belongs to `functions/api/[[path]].js`, a Cloudflare Pages Function that fetches

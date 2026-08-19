@@ -179,3 +179,134 @@ UNVERIFIED: `migrateLeaderToCampaign` is tested against a synthetic record; it
 has never run against a real saved leader from a browser.
 NEXT: wire the weekly steps — hire first, since it fires eleven times a campaign
 and both its arithmetic and its narration are already written.
+
+---
+
+### Session 4 — v0.4.0
+Date: 2026-08-18
+
+**feat: D1 schema and OAuth sign-in**
+
+Deployed to Cloudflare Pages and confirmed live before starting.
+
+**Routing fix, found while adding auth.** The register proxy was a catch-all at
+`functions/api/[[path]].js`, which would have swallowed every `/api/auth/*`
+request and forwarded it to BiggerHat. Moved to `functions/api/v1/[[path]].js`.
+The client already called `/api/v1/...`, so nothing else changed. **Rule: keep
+new API surfaces in their own namespace rather than under a catch-all.**
+
+**Schema** (`migrations/0001_init.sql`) — ten tables, exactly as designed in
+docs/data-model.md. `current_week` is absent by design; it derives from
+`started_at` and the week length. `game_equipment` exists because attachment is
+per-encounter. Injuries carry both `model_id` and `title_group` with the rule
+that exactly one is set, or neither for the leader.
+
+**Auth is OAuth-only and deliberately minimal.** Stored: provider,
+provider_user_id, display_name, avatar URL. **No email, no password, no stored
+token** — the access token reads the profile once and is discarded. Nothing to
+leak, nothing to delete on request, no reset flow to build, no mail to send.
+Discord first because wargaming groups already live there; Google is wired the
+same way behind one config block.
+
+Sessions are a random 32-byte id in an `HttpOnly; Secure; SameSite=Lax` cookie,
+30 days, revocable server-side by deleting the row. Expired sessions are swept
+on read rather than by a cron.
+
+**Signed out is a first-class state.** `useAuth` degrades to signed-out when the
+backend is absent — which is every `npm run dev` session, since Vite serves no
+Functions. Accounts exist for *sharing* a campaign, never for *using* the app.
+A login wall would also make people's data harder to rescue if Wyrd ever
+revokes permission.
+
+Files: wrangler.toml (new), migrations/0001_init.sql (new),
+       functions/lib/auth.js (new), functions/api/auth/[provider].js (new),
+       functions/api/auth/[provider]/callback.js (new),
+       functions/api/auth/me.js (new), functions/api/auth/logout.js (new),
+       functions/api/v1/[[path]].js (moved from functions/api/),
+       src/hooks/useAuth.js (new), docs/SETUP_D1_AUTH.md (new),
+       .gitignore, CLAUDE.md, package.json
+RESOLVED: /api/auth/* would have been swallowed by the register proxy
+UNVERIFIED: **all of it.** No D1 database exists yet, no OAuth app is
+registered, and no auth code has ever executed. See docs/SETUP_D1_AUTH.md.
+NEXT: complete the dashboard setup, then the remote storage adapter — campaigns
+still live only in localStorage.
+
+---
+
+### Session 5 — v0.4.1
+Date: 2026-08-18
+
+**docs: bring CLAUDE.md current for a Claude Code handoff**
+
+No code change. Development moves to Claude Code, where `CLAUDE.md` is loaded
+automatically at the start of every session — so it has to carry everything a
+fresh session needs without anyone remembering to explain it.
+
+Added: live URL and repo name at the top; a repository map with one line per
+folder explaining what it's for; the `src/`↔`functions/` import boundary as an
+explicit rule; migrations-are-append-only; the OneDrive file-lock caveat; and
+the double-configured D1 binding as known debt.
+
+Restructured `⚠️ NEXT SESSION` into **Blocking** (three setup steps that must
+happen before any feature work, with a concrete checkpoint for each),
+**Next feature work** in priority order, and **Never verified** — which is now
+its own heading because four separate things have been written and never
+executed, and a fresh session would otherwise assume they work.
+
+Commands section now states plainly that `npm run dev` serves no Functions and
+no database, so `/api/*` failing there is by design rather than a bug to chase.
+
+Files: CLAUDE.md, package.json, docs/VERSION_HISTORY.md
+RESOLVED: n/a
+NEXT: `docs/SETUP_D1_AUTH.md` steps 1-5, then the weekly hire UI.
+
+---
+
+### Session 6 — v0.4.2
+Date: 2026-08-18
+
+**docs: correct three drifts found on the first Claude Code session**
+
+No code change. First session run from Claude Code rather than Claude.ai; the
+opening read of `CLAUDE.md` was checked against the actual tree, which is what
+surfaced these.
+
+**The D1 checkpoint was wrong, and wrong in the direction that matters.**
+`⚠️ NEXT SESSION` said `/api/auth/me` returning `{"user":null}` proves `env.DB`
+is bound. It proves nothing. `currentUser` opens with
+`if (!sessionId || !env.DB) return null`, so a request with no session cookie
+returns before it ever reaches the database — an unbound binding and a correct
+one produce byte-identical responses. A checkpoint that passes in the failure
+case is worse than no checkpoint, because it converts "unverified" into
+"verified" without anything having been verified. Replaced with a `wrangler d1
+execute` command that lists tables, which cannot pass unless the schema is
+really there.
+
+**Audit cadence retargeted from versions to sessions.** The trigger read
+"every 10 versions (next scheduled: v0.3.10)". Written at v0.3.0, it assumed a
+patch series that never happened — the next bump was v0.4.0, so v0.3.10 became
+unreachable and the audit could never fire. Now counted from the numbered
+session entries in this file, which increment by exactly one regardless of how
+the version moves.
+
+**`package.json` was stranded at 0.4.0** while the docs said 0.4.1. Session 5
+listed `package.json` among its files but the bump never landed. Both are now
+0.4.2.
+
+**Cleared blocking item 3** (delete `functions/api/[[path]].js`) — already
+done, the file is staged as deleted and the proxy lives at
+`functions/api/v1/[[path]].js`.
+
+**Not a drift, but worth recording:** `src/hooks/useAuth.js` briefly appeared
+to be missing — `find` and a project-wide `grep` both returned nothing for a
+file that was on disk. The directory mtime was three minutes *later* than the
+file's. OneDrive had not materialised it at scan time. `CLAUDE.md` already
+warns about OneDrive causing inexplicable build failures; add stale directory
+listings to that warning. Re-check before believing a file is absent.
+
+Files: CLAUDE.md, package.json, docs/VERSION_HISTORY.md
+RESOLVED: false D1 checkpoint; unreachable audit target; version mismatch
+UNVERIFIED: unchanged — all auth code, every BiggerHat call, the register
+proxy, `migrateLeaderToCampaign`. Nothing was executed this session.
+NEXT: `docs/SETUP_D1_AUTH.md` steps 1-5, then the weekly hire UI. `useAuth`
+exists but nothing imports it, so there is still no sign-in UI.
