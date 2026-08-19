@@ -283,3 +283,54 @@ body {
   font: inherit; color: var(--brass); background: none; border: none;
   padding: 0; text-decoration: underline; cursor: pointer;
 }
+
+/* section switch — creation is a one-off, campaign repeats ------------- */
+.views { display: flex; gap: 4px; max-width: 820px; margin: 16px auto 0; }
+.views__item {
+  font-family: var(--data); font-size: 10px; letter-spacing: 2px;
+  text-transform: uppercase; padding: 6px 12px;
+  border: 1px solid var(--line); background: none; color: var(--mute);
+  cursor: pointer;
+}
+.views__item--on {
+  border-color: var(--brass); color: var(--brass); background: var(--brass-bg);
+}
+
+/* the weekly hire ------------------------------------------------------ */
+.hire__ledger {
+  display: flex; gap: 18px; flex-wrap: wrap;
+  font-family: var(--data); font-size: 11px; letter-spacing: 1.5px;
+  text-transform: uppercase; color: var(--mute);
+  border: 1px solid var(--line-soft); padding: 10px 14px; margin: 0 0 18px;
+}
+.hire__ledger strong { color: var(--brass); font-weight: normal; }
+
+.hire__manual { display: flex; gap: 9px; }
+.hire__manual .input:first-child { flex: 1; }
+.hire__manual .input:last-child { width: 88px; }
+
+.hire__quote {
+  border: 1px solid var(--line); border-left: 3px solid var(--brass);
+  padding: 15px 17px; margin: 18px 0 22px; background: var(--panel);
+}
+.hire__breakdown {
+  display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+  font-family: var(--data); font-size: 12px; color: var(--text);
+  margin-bottom: 12px;
+}
+.hire__adj { color: var(--mute); font-size: 11px; }
+.hire__total {
+  margin-left: auto; color: var(--brass); font-size: 15px;
+}
+.hire__check {
+  display: flex; align-items: center; gap: 8px;
+  font-family: var(--body); font-size: 13px; color: var(--mute);
+  margin: 0 0 12px;
+}
+.hire__list { list-style: none; padding: 0; margin: 0; }
+.hire__list li {
+  display: flex; justify-content: space-between;
+  font-family: var(--data); font-size: 12px; color: var(--text);
+  border-bottom: 1px solid var(--line-soft); padding: 7px 0;
+}
+.hire__paid { color: var(--mute); }

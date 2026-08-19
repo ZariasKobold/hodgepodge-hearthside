@@ -1,10 +1,10 @@
 # CLAUDE.md — Hodgepodge Hearthside project context
 
-<!-- HH v0.4.8 | Last updated: 2026-08-18 -->
+<!-- HH v0.4.9 | Last updated: 2026-08-18 -->
 
 ---
 
-## Current Version: 0.4.8
+## Current Version: 0.4.9
 
 ## Last Updated: 2026-08-18
 
@@ -112,10 +112,10 @@ Two facts from that setup worth keeping, because both cost time to learn:
 
 ### Next feature work, in order
 
-1. **Weekly hire UI.** Highest value: fires eleven times a campaign, and both
-   halves are already written — `hireCost` in `campaign.js` (tested) and 42
-   lines of narration in `hank.js`. Needs the `.gap-note` for the negative-scrip
-   house rule, visible in both Hank modes.
+1. ~~**Weekly hire UI.**~~ **Done v0.4.9.** `WeeklyHire.jsx`, reachable from the
+   new Campaign view. Register-or-manual entry, the `.gap-note` for the
+   negative-scrip rule in both Hank modes, and the floor explained inline when
+   it actually bites.
 2. **Aftermath.** Six ordered phases; see `AFTERMATH_PHASES`. Must be ONE
    stateful flow, not six screens — the fate deck isn't reshuffled between
    phases.
@@ -166,6 +166,10 @@ in `src/data/hank.js`. Missing piece is UI plus the `Campaign` object.
 **High:** none currently.
 
 **Medium:**
+- The app now has two top-level views, Creation and Campaign, switched in the
+  masthead. Creation is a one-off and Campaign repeats weekly, so they are not
+  more wizard steps. Aftermath, barter, healing and advancement belong in the
+  Campaign view beside the hire.
 - `hank.js` and `hank-dialogue.md` are kept in sync by hand. A generator script
   in `scripts/` would make the code the single source. Not written.
 - `useCampaign` exposes a flat `leader` adapter so the four wizard steps didn't

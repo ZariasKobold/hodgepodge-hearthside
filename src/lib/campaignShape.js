@@ -205,6 +205,42 @@ export function ratingForGame(arsenal, game) {
   })
 }
 
+/**
+ * House rules are stored under descriptive names; `hireCost` takes short ones.
+ *
+ * This mapping exists because passing `campaign.houseRules` straight into
+ * `hireCost` silently does nothing — it reads `allowNegative`, the campaign
+ * stores `allowNegativeHireCost`, and an unrecognised key just falls back to
+ * the default. A group that switched the rule on would go on being charged the
+ * floored price with no error anywhere. Always go through this.
+ */
+export function hireRules(houseRules = {}) {
+  return {
+    allowNegative: houseRules.allowNegativeHireCost ?? false,
+    surchargeBeforeDiscount: houseRules.surchargeBeforeDiscount ?? true,
+  }
+}
+
+/**
+ * Does this model sit outside both of the arsenal's keywords?
+ *
+ * Versatile models are exempt from the surcharge, but that is `hireCost`'s
+ * business — this answers only the keyword question. Manual entries carry no
+ * keyword list at all, so they are treated as in-keyword rather than guessed
+ * at; the hire screen lets the player say otherwise.
+ */
+export function isOutOfKeyword(model, keywords = []) {
+  const owned = keywords.filter(Boolean)
+  const theirs = model.keywords || []
+  if (!owned.length || !theirs.length) return false
+  return !theirs.some((k) => owned.includes(k))
+}
+
+/** Models added during a given week, in the order they were hired. */
+export function hiresInWeek(arsenal, week) {
+  return arsenal.models.filter((m) => m.addedWeek === week)
+}
+
 /** Every player must add at least one model each week except the first. */
 export function mustHireThisWeek(arsenal, week) {
   if (week <= 1) return false

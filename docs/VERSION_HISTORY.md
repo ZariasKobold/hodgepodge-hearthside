@@ -609,3 +609,58 @@ storage adapter.
 NEXT: the remote storage adapter is now the load-bearing feature rather than
 item 3 — until it lands, players sign in and still store everything locally.
 Preview sign-in (`SETUP_D1_AUTH.md`) becomes worth configuring at the same time.
+
+---
+
+### Session 13 — v0.4.9
+Date: 2026-08-18
+
+**feat: the weekly hire — first of step 2's five screens**
+
+Taken in the build order from `docs/data-model.md` §11, which we had run out of
+sequence: the migration and OAuth were built before any of the weekly UI, and
+the schema has still never been corrected by real play. Step 2 is that
+correction, and the hire is its highest-value piece — it fires eleven times a
+campaign.
+
+**A trap found before building on it.** `hireCost` reads
+`houseRules.allowNegative`; a campaign stores `allowNegativeHireCost`. Passing
+`campaign.houseRules` in raw would have silently ignored the rule — no error,
+just the floored price forever, which is exactly the class of bug the tests
+exist to catch and wouldn't have. Added `hireRules()` to translate, with a test
+that asserts the raw object lacks the key `hireCost` actually reads. Also added
+`isOutOfKeyword` and `hiresInWeek`. Tests 45 → 53.
+
+**Two top-level views now, not more wizard steps.** Creation happens once;
+the campaign repeats for twelve weeks. Folding the hire in as step 5 would have
+implied it was part of building a leader. Aftermath, barter, healing and
+advancement go beside it in the Campaign view.
+
+**The timing rule held.** The greeting knows only the week and the scrip on
+hand, so it speaks to those; the reaction waits for a model, because until one
+is chosen there is no cost to react to. Verified live: with 0 scrip the broke
+variant fires, and Hank's first-hire line stays inside §3 — "that's just how
+the road works", never a discount he granted.
+
+**The rules gap is surfaced twice, deliberately.** A standing `.gap-note`
+explains the floor before it matters, and a second one appears only when it
+actually bites, naming the number the discount would have produced. Both use
+`.gap-note` rather than `<HankSays>`, so switching the narration off does not
+hide them (§5).
+
+Verified by driving the browser rather than by reasoning: a 3-cost first hire
+quotes `3 → −5 → 0` with the floor explained; a second hire the same week loses
+the discount and quotes 4; unaffordable renders the can't-afford line and the
+button is genuinely `disabled`.
+
+Files: src/components/steps/WeeklyHire.jsx (new), src/App.jsx,
+       src/components/Masthead.jsx, src/lib/campaignShape.js,
+       src/lib/campaignShape.test.js, src/styles/app.css, CLAUDE.md,
+       package.json, docs/VERSION_HISTORY.md
+RESOLVED: weekly hire UI; the silent house-rule name mismatch
+UNVERIFIED: the register-backed path — every live test used manual entry, since
+`npm run dev` cannot reach BiggerHat. Versatile detection reads
+`characteristics`, which no register response has ever been observed to carry;
+the checkbox exists so a wrong guess is correctable rather than binding.
+NEXT: aftermath — six ordered phases, ONE stateful flow, not six screens. Then
+barter, healing, advancement.

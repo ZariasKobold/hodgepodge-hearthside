@@ -12,6 +12,7 @@ import Archetype from './components/steps/Archetype.jsx'
 import Loadout from './components/steps/Loadout.jsx'
 import Record from './components/steps/Record.jsx'
 import SignInGate from './components/SignInGate.jsx'
+import WeeklyHire from './components/steps/WeeklyHire.jsx'
 import './styles/app.css'
 
 /** A stable case number, so the same leader always files under the same mark. */
@@ -26,7 +27,14 @@ function fileNumber(leader) {
 
 export default function App() {
   const [step, setStep] = useState(0)
-  const { leader, set, setPick } = useCampaign()
+  // Creation is a one-off; the campaign repeats for twelve weeks. Separate
+  // views rather than more wizard steps, so the weekly work doesn't pretend
+  // to be part of building a leader.
+  const [view, setView] = useState('create')
+  const {
+    leader, set, setPick,
+    campaign, arsenal, week, mustHire, addModel, spendScrip,
+  } = useCampaign()
   const roster = useRoster()
   // Held here rather than inside the badge so there is exactly one /api/auth/me
   // per load, and so the storage adapter has it to hand when it lands.
@@ -60,17 +68,31 @@ export default function App() {
   return (
     <HankProvider>
     <div className="shell">
-      <Masthead step={step} onJump={setStep} fileNumber={fileNumber(leader)} auth={auth} admitted={admitted} />
+      <Masthead step={step} onJump={setStep} fileNumber={fileNumber(leader)} auth={auth} admitted={admitted} view={view} onView={setView} />
 
       <main className="wrap">
         {!admitted && <SignInGate auth={auth} />}
 
-        {admitted && step === 0 && <Identity leader={leader} set={set} />}
-        {admitted && step === 1 && <Archetype leader={leader} set={set} />}
-        {admitted && step === 2 && archetype && (
+        {admitted && view === 'campaign' && (
+          <WeeklyHire
+            arsenal={arsenal}
+            week={week}
+            houseRules={campaign.houseRules}
+            mustHire={mustHire}
+            roster={roster}
+            onHire={(model, cost) => {
+              addModel(model, { scripPaid: cost })
+              spendScrip(cost)
+            }}
+          />
+        )}
+
+        {admitted && view === 'create' && step === 0 && <Identity leader={leader} set={set} />}
+        {admitted && view === 'create' && step === 1 && <Archetype leader={leader} set={set} />}
+        {admitted && view === 'create' && step === 2 && archetype && (
           <Loadout leader={leader} set={set} setPick={setPick} archetype={archetype} roster={roster} />
         )}
-        {admitted && step === 3 && archetype && (
+        {admitted && view === 'create' && step === 3 && archetype && (
           <Record
             leader={leader}
             set={set}
@@ -80,7 +102,7 @@ export default function App() {
           />
         )}
 
-        {admitted && (
+        {admitted && view === 'create' && (
         <div className="nav">
           <Button ghost onClick={() => setStep(Math.max(0, step - 1))} disabled={step === 0}>
             Back

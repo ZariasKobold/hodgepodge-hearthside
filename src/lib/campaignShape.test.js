@@ -6,6 +6,7 @@ import {
   injuriesFor, injuryCountForModel, modelIsAnnihilated, activeInjuryCount,
   ratingForGame, mustHireThisWeek, gamesInWeek,
   migrateLeaderToCampaign, SCHEMA_VERSION, DEFAULT_HOUSE_RULES,
+  hireRules, isOutOfKeyword, hiresInWeek,
 } from './campaignShape.js'
 
 const DAY = 86400000
@@ -183,5 +184,56 @@ describe('migrateLeaderToCampaign', () => {
 
   it('returns null for nothing', () => {
     expect(migrateLeaderToCampaign(null)).toBeNull()
+  })
+})
+
+
+describe('hireRules', () => {
+  it('translates the stored name into the one hireCost reads', () => {
+    expect(hireRules({ allowNegativeHireCost: true }).allowNegative).toBe(true)
+  })
+
+  it('defaults to flooring at zero, matching the documented house rule', () => {
+    expect(hireRules({}).allowNegative).toBe(false)
+    expect(hireRules().surchargeBeforeDiscount).toBe(true)
+  })
+
+  it('is what stops campaign.houseRules being passed in raw and doing nothing', () => {
+    const stored = { allowNegativeHireCost: true, surchargeBeforeDiscount: false }
+    // Raw, the key hireCost actually reads is absent:
+    expect(stored.allowNegative).toBeUndefined()
+    expect(hireRules(stored)).toEqual({ allowNegative: true, surchargeBeforeDiscount: false })
+  })
+})
+
+describe('isOutOfKeyword', () => {
+  const arsenal = ['bandit', 'foundry']
+
+  it('is false when the model shares either keyword', () => {
+    expect(isOutOfKeyword({ keywords: ['bandit'] }, arsenal)).toBe(false)
+    expect(isOutOfKeyword({ keywords: ['foundry', 'wastrel'] }, arsenal)).toBe(false)
+  })
+
+  it('is true when it shares neither', () => {
+    expect(isOutOfKeyword({ keywords: ['wastrel'] }, arsenal)).toBe(true)
+  })
+
+  it('treats a model with no keyword list as in-keyword rather than guessing', () => {
+    expect(isOutOfKeyword({}, arsenal)).toBe(false)
+    expect(isOutOfKeyword({ keywords: [] }, arsenal)).toBe(false)
+  })
+
+  it('ignores empty arsenal keyword slots', () => {
+    expect(isOutOfKeyword({ keywords: ['bandit'] }, ['', ''])).toBe(false)
+  })
+})
+
+describe('hiresInWeek', () => {
+  it('returns only the models added that week', () => {
+    const arsenal = { models: [
+      { id: 'a', addedWeek: 1 }, { id: 'b', addedWeek: 2 }, { id: 'c', addedWeek: 2 },
+    ] }
+    expect(hiresInWeek(arsenal, 2).map((m) => m.id)).toEqual(['b', 'c'])
+    expect(hiresInWeek(arsenal, 3)).toEqual([])
   })
 })
