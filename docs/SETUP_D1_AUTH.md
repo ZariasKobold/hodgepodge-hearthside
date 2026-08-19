@@ -36,15 +36,21 @@ Ten tables — `arsenals`, `arsenal_models`, `campaigns`, `campaign_members`,
 The listing also shows `_cf_KV`, which is Cloudflare's own internal table, so
 the row count reads eleven. That is normal and not something you added.
 
-## 3. Bind the database to Pages
+## 3. Bind the database to Pages — nothing to do
 
-Dashboard → your Pages project → **Settings** → **Bindings** → **Add** →
-**D1 database**.
+**Skip this. `wrangler.toml` already does it.** The `[[d1_databases]]` block
+with `binding = "DB"` is picked up by deployed Pages Functions directly; no
+dashboard binding is needed.
 
-- Variable name: `DB` *(must match — the Functions read `env.DB`)*
-- Database: `hodgepodge-hearthside`
+Verified on 2026-08-18, with no dashboard binding configured at all: a
+deployed Function on a preview build read `context.env.DB` and successfully
+queried the remote database. Confirmed for Preview; Production uses the same
+single `wrangler.toml` block, and is proved end-to-end by the first successful
+sign-in.
 
-Add it for **Production** and **Preview**.
+Do not also add it in the dashboard. One source of truth is the point — two
+would mean editing whichever one is not being read and wondering why nothing
+changed.
 
 ## 4. Create the OAuth app
 

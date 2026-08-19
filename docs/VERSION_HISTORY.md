@@ -310,3 +310,61 @@ UNVERIFIED: unchanged — all auth code, every BiggerHat call, the register
 proxy, `migrateLeaderToCampaign`. Nothing was executed this session.
 NEXT: `docs/SETUP_D1_AUTH.md` steps 1-5, then the weekly hire UI. `useAuth`
 exists but nothing imports it, so there is still no sign-in UI.
+
+---
+
+### Session 7 — v0.4.3
+Date: 2026-08-18
+
+**chore: D1 live, register proxy verified, dashboard binding proved unnecessary**
+
+First session where deployed infrastructure actually ran. Three things that had
+been written and never executed now have real results behind them.
+
+**D1 exists.** Database created, `0001_init.sql` applied to both the local
+sqlite copy and the remote database, ten tables verified remotely. The verify
+listing also returns `_cf_KV`, which is Cloudflare's own internal table — the
+count reads eleven and that is normal.
+
+**The register proxy works.** `/api/v1/factions` returns real faction JSON from
+BiggerHat in production. This is the first BiggerHat call in the project's
+history to actually execute; every path before this was taken from their
+OpenAPI spec on faith. The `/keywords/{slug}` shape is still unproven.
+
+**The `/api/auth/*` routing fix is confirmed good.** Immediately after the push,
+`/api/auth/me` on the custom domain returned the register proxy's
+"Register returned 404." — the exact swallowing failure the v1 move was meant
+to prevent. It was propagation: the domain was still serving the previous
+deployment for a few seconds. The deployment-specific URL was correct the whole
+time, and all three URLs now return `{"user":null}`. Worth recording because
+the symptom is indistinguishable from the real bug, and the instinct is to go
+rewrite routing that was never broken. **Check the deployment-specific URL
+before believing a routing regression.**
+
+**The D1 binding is NOT configured twice.** This was recorded as known debt —
+`wrangler.toml` for the CLI, Pages dashboard for the deployed site, both must
+agree. It is wrong. Tested by deploying a temporary diagnostic Function on a
+throwaway branch that reported `Boolean(env.DB)` and a table count, at a moment
+when *no dashboard binding existed at all*. It returned
+`{"bound":true,"tables":11}`. `wrangler.toml` alone supplies the binding to
+deployed Functions. The dashboard step is removed from SETUP_D1_AUTH.md and the
+debt note is deleted from CLAUDE.md. Confirmed for Preview; Production uses the
+same single block and will be proved end-to-end by the first sign-in.
+
+The diagnostic Function and its branch were deleted after the result. It was
+never merged to `main`.
+
+**wrangler pinned as a devDependency.** `npm install -D wrangler` reports five
+advisories including one critical; `npm audit --omit=dev` reports zero. All of
+them are dev toolchain and none reach the browser bundle, so `audit fix --force`
+would bump majors to silence something that does not ship.
+
+Files: CLAUDE.md, package.json, package-lock.json, wrangler.toml,
+       docs/SETUP_D1_AUTH.md, docs/VERSION_HISTORY.md
+RESOLVED: D1 setup (blocking item 1); register proxy unverified; false
+"configured twice" debt; false /api/auth/me binding checkpoint in the setup doc
+UNVERIFIED: all auth code — the Functions deploy and route correctly and D1 is
+reachable, but no OAuth round trip has run. `useAuth` is still imported nowhere,
+so there is no sign-in UI. `/keywords/{slug}` still unproven.
+NEXT: OAuth app registration (SETUP_D1_AUTH.md steps 4-5), then the weekly hire
+UI.

@@ -1,10 +1,10 @@
 # CLAUDE.md — Hodgepodge Hearthside project context
 
-<!-- HH v0.4.2 | Last updated: 2026-08-18 -->
+<!-- HH v0.4.3 | Last updated: 2026-08-18 -->
 
 ---
 
-## Current Version: 0.4.2
+## Current Version: 0.4.3
 
 ## Last Updated: 2026-08-18
 
@@ -93,18 +93,19 @@ Save to `docs/audits/audit-vX.Y.Z.md`.
 
 ### Blocking — do these before writing features
 
-1. **D1 does not exist yet.** No database created, no schema applied, no
-   dashboard binding. Follow `docs/SETUP_D1_AUTH.md` steps 1-3.
+1. ~~**D1 does not exist yet.**~~ **Done 2026-08-18.** Database
+   `1d11431a-0507-4ab3-90c2-f2213fb2f831` created, `0001_init.sql` applied
+   local and remote, ten tables verified, binding confirmed live from
+   `wrangler.toml` with no dashboard config. Nothing to do here.
 
-   **`/api/auth/me` is NOT a valid checkpoint for this** — it was listed as one
-   until v0.4.2 and it cannot work. `currentUser` short-circuits on
-   `if (!sessionId || !env.DB) return null`, so with no session cookie it
-   returns before touching the database. An unbound `env.DB` returns exactly
-   the same `{"user":null}` as a correct binding. The only checkpoint that
-   proves the binding is a request that actually queries D1: complete an OAuth
-   round trip, or run
+   **Kept as a warning: `/api/auth/me` is NOT a valid checkpoint for the
+   binding** — it was listed as one until v0.4.2 and it cannot work.
+   `currentUser` short-circuits on `if (!sessionId || !env.DB) return null`,
+   so with no session cookie it returns before touching the database. An
+   unbound `env.DB` returns exactly the same `{"user":null}` as a correct
+   binding. What proves the binding is a request that actually queries D1:
    `npx wrangler d1 execute hodgepodge-hearthside --remote --command "SELECT name FROM sqlite_master WHERE type='table'"`
-   and confirm the ten tables from `0001_init.sql` come back.
+   (ten tables, plus Cloudflare's internal `_cf_KV`), or a real sign-in.
 2. **No OAuth app registered.** Steps 4-5 of the same doc. The redirect URI
    must match exactly and must be registered for BOTH the custom domain and
    the `.pages.dev` URL.
@@ -131,9 +132,16 @@ Save to `docs/audits/audit-vX.Y.Z.md`.
   response. `/keywords/{slug}` may return characters with actions attached, or
   thin records needing a second fetch — `useRoster.js` handles both, but only
   one path has ever executed.
-- **The register proxy Function.** Deployed but never exercised. Test directly:
-  `/api/v1/factions` should return JSON.
-- **All auth code.** Nothing has run.
+- ~~**The register proxy Function.**~~ **Verified 2026-08-18** —
+  `/api/v1/factions` returns real faction JSON from BiggerHat in production.
+  First BiggerHat call ever to actually execute. The other endpoints are still
+  unproven; see the bullet above.
+- **All auth code.** Still nothing has run. The Functions deploy and route
+  correctly (`/api/auth/me` returns `{"user":null}` and is no longer swallowed
+  by the register proxy), and D1 is reachable from a deployed Function — but no
+  OAuth round trip has happened, so `beginOAuth`, the callback, session
+  creation, and `useAuth`'s signed-in path are all untested. `useAuth` is also
+  not imported anywhere yet, so there is no sign-in UI.
 - **`migrateLeaderToCampaign`.** Tested against a synthetic record only.
 
 ### Written but not wired
@@ -154,9 +162,6 @@ in `src/data/hank.js`. Missing piece is UI plus the `Campaign` object.
   directly, or it becomes a second shape to keep in sync.
 - Totem advancements are hardcoded to 0 in `ratingForGame` — totems aren't
   modelled yet.
-- The D1 binding is configured twice — `wrangler.toml` for CLI commands, the
-  Pages dashboard for the deployed site. They must agree. Not elegant; it's how
-  Pages works.
 - Project lives inside OneDrive. Usually fine, but OneDrive syncing
   `node_modules` mid-install can cause file-lock errors. First suspect for any
   inexplicable build failure.
@@ -175,7 +180,7 @@ in `src/data/hank.js`. Missing piece is UI plus the `Campaign` object.
 ```
 hodgepodge-hearthside/
 ├── CLAUDE.md               this file — read first
-├── wrangler.toml           D1 binding for CLI commands (dashboard is separate)
+├── wrangler.toml           D1 binding — for the CLI *and* the deployed site
 ├── migrations/             D1 schema, append-only
 ├── functions/              Cloudflare Pages Functions — edge, never bundled
 │   ├── lib/auth.js         OAuth + sessions; may hold secrets
