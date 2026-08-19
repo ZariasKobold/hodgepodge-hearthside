@@ -216,6 +216,27 @@ body {
 }
 .hank-toggle[aria-pressed="true"] { border-color: var(--ember); color: var(--ember); }
 
+/* account chrome — same weight as the Hank toggle, deliberately.
+   Signing in is not an achievement the interface should celebrate; it is a
+   filing clerk noting who is at the counter. */
+.account { display: inline-flex; align-items: center; gap: 7px; }
+.account__avatar {
+  width: 18px; height: 18px; border-radius: 50%;
+  border: 1px solid var(--line); display: block;
+}
+.account__name {
+  font-family: var(--data); font-size: 10px; letter-spacing: 1.5px;
+  text-transform: uppercase; color: var(--text);
+  max-width: 16ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.account__btn {
+  font-family: var(--data); font-size: 10px; letter-spacing: 1.5px;
+  text-transform: uppercase; padding: 4px 9px;
+  border: 1px solid var(--line); background: none; color: var(--mute);
+  cursor: pointer;
+}
+.account__btn:hover { border-color: var(--brass); color: var(--brass); }
+
 /* rules-gap notes — visible in both modes, never Hank's voice ---------- */
 .gap-note {
   font-family: var(--body);

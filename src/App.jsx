@@ -3,6 +3,7 @@ import { getArchetype } from './data/archetypes.js'
 import { checkStructure } from './lib/validation.js'
 import { useCampaign } from './hooks/useCampaign.js'
 import { useRoster } from './hooks/useRoster.js'
+import { useAuth } from './hooks/useAuth.js'
 import { HankProvider } from './hooks/useHank.jsx'
 import Masthead from './components/Masthead.jsx'
 import { Button } from './components/ui.jsx'
@@ -26,6 +27,9 @@ export default function App() {
   const [step, setStep] = useState(0)
   const { leader, set, setPick } = useCampaign()
   const roster = useRoster()
+  // Held here rather than inside the badge so there is exactly one /api/auth/me
+  // per load, and so the storage adapter has it to hand when it lands.
+  const auth = useAuth()
 
   const archetype = getArchetype(leader.archetype)
 
@@ -45,7 +49,7 @@ export default function App() {
   return (
     <HankProvider>
     <div className="shell">
-      <Masthead step={step} onJump={setStep} fileNumber={fileNumber(leader)} />
+      <Masthead step={step} onJump={setStep} fileNumber={fileNumber(leader)} auth={auth} />
 
       <main className="wrap">
         {step === 0 && <Identity leader={leader} set={set} />}

@@ -368,3 +368,56 @@ reachable, but no OAuth round trip has run. `useAuth` is still imported nowhere,
 so there is no sign-in UI. `/keywords/{slug}` still unproven.
 NEXT: OAuth app registration (SETUP_D1_AUTH.md steps 4-5), then the weekly hire
 UI.
+
+---
+
+### Session 8 — v0.4.4
+Date: 2026-08-18
+
+**feat: sign-in control — `useAuth` wired through App to a badge in the masthead**
+
+`useAuth` existed but nothing imported it, so there was no way to reach the
+OAuth flow from the interface and no way to test it once registered. This adds
+the smallest control that closes that gap.
+
+**The hook is called once, in `App.jsx`, and passed down.** Calling it inside
+the badge would have been less plumbing, but every component that called it
+would fire its own `/api/auth/me`. The storage adapter will need the same user
+shortly, and `App` already owns `leader` and `roster` and hands them down — so
+one call at the top matches how the rest of the app is wired.
+
+**`AccountBadge` renders nothing when the backend is absent.** Not a disabled
+button, not an error — nothing. `npm run dev` serves no Functions, so a sign-in
+control there is a control that cannot work, and a dead button invites clicking.
+It also renders nothing while the first `/api/auth/me` is in flight, because a
+control that says "Sign in" and flips to a username a moment later reads as a
+glitch. Verified both ways: under `wrangler pages dev` the button appears,
+under `npm run dev` the masthead goes straight from the Hank toggle to the file
+number and the wizard is fully usable.
+
+**Styled at exactly the weight of the Hank toggle.** Same `--data` font, same
+border, same size. Signing in is not an achievement the interface should
+celebrate — it is a clerk noting who is at the counter. Accounts are for
+sharing, never for using, and chrome that shouts undercuts that.
+
+**Found while testing:** `beginOAuth` returns a clean
+`501 {"message":"discord is not configured on this deployment."}` rather than a
+stack trace when the secrets are missing. Good, but `signIn` navigates the whole
+window, so the user lands on raw JSON with no way back. Filed as a low known
+issue — it is also what someone sees if Discord itself is unreachable.
+
+`.claude/launch.json` added so future sessions can start either server without
+rediscovering that Functions need `wrangler pages dev dist` and a build first.
+
+Files: src/App.jsx, src/components/Masthead.jsx,
+       src/components/AccountBadge.jsx (new), src/styles/app.css,
+       .claude/launch.json (new), CLAUDE.md, package.json,
+       docs/VERSION_HISTORY.md
+RESOLVED: useAuth imported nowhere; no sign-in UI to exercise OAuth
+UNVERIFIED: the OAuth redirect and everything after it — callback, token
+exchange, upsertUser, session creation, useAuth's signed-in branch. No account
+has ever existed. The signed-in layout of the badge has therefore never
+rendered with real data.
+NEXT: register the Discord app (SETUP_D1_AUTH.md steps 4-5) and sign in once —
+that single round trip verifies the callback, D1 writes, sessions, and the
+badge's signed-in state together. Then the weekly hire UI.

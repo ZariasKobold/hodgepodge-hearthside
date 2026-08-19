@@ -1,10 +1,10 @@
 # CLAUDE.md — Hodgepodge Hearthside project context
 
-<!-- HH v0.4.3 | Last updated: 2026-08-18 -->
+<!-- HH v0.4.4 | Last updated: 2026-08-18 -->
 
 ---
 
-## Current Version: 0.4.3
+## Current Version: 0.4.4
 
 ## Last Updated: 2026-08-18
 
@@ -136,12 +136,12 @@ Save to `docs/audits/audit-vX.Y.Z.md`.
   `/api/v1/factions` returns real faction JSON from BiggerHat in production.
   First BiggerHat call ever to actually execute. The other endpoints are still
   unproven; see the bullet above.
-- **All auth code.** Still nothing has run. The Functions deploy and route
-  correctly (`/api/auth/me` returns `{"user":null}` and is no longer swallowed
-  by the register proxy), and D1 is reachable from a deployed Function — but no
-  OAuth round trip has happened, so `beginOAuth`, the callback, session
-  creation, and `useAuth`'s signed-in path are all untested. `useAuth` is also
-  not imported anywhere yet, so there is no sign-in UI.
+- **The OAuth round trip.** Everything up to the redirect is now exercised:
+  the Functions deploy and route, `/api/auth/me` returns `{"user":null}`,
+  `useAuth` drives a real sign-in control, and `beginOAuth` returns a clean 501
+  when a provider is unconfigured. What has never run is the redirect itself
+  and everything after it — the callback, token exchange, `upsertUser`, session
+  creation, and `useAuth`'s signed-in branch. No account has ever existed.
 - **`migrateLeaderToCampaign`.** Tested against a synthetic record only.
 
 ### Written but not wired
@@ -167,6 +167,13 @@ in `src/data/hank.js`. Missing piece is UI plus the `Campaign` object.
   inexplicable build failure.
 
 **Low:**
+- Clicking **Sign in** when the provider is unconfigured navigates the whole
+  window to raw JSON (`{"message":"discord is not configured..."}`, HTTP 501)
+  with no way back but the browser's back button. Correct behaviour, ugly
+  delivery. Only reachable if the Pages secrets are missing, so it disappears
+  once step 5 of `SETUP_D1_AUTH.md` is done — but the same page is what a user
+  sees if Discord itself is unreachable. An HTML error page in
+  `functions/api/auth/[provider].js` would fix it.
 - `HankSays` renders `aria-hidden`, so narration is visual-only. Deliberate —
   a screen reader user shouldn't wade through 200 words to reach a form field —
   but revisit if anyone asks for it announced.

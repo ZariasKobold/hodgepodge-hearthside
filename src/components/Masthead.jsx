@@ -1,8 +1,9 @@
 import { useHank } from '../hooks/useHank.jsx'
+import AccountBadge from './AccountBadge.jsx'
 
 const STEPS = ['Identity', 'Archetype', 'Loadout', 'Record']
 
-export default function Masthead({ step, onJump, fileNumber }) {
+export default function Masthead({ step, onJump, fileNumber, auth }) {
   const { enabled, toggle } = useHank()
 
   return (
@@ -21,6 +22,7 @@ export default function Masthead({ step, onJump, fileNumber }) {
           >
             Hank: {enabled ? 'on' : 'off'}
           </button>
+          <AccountBadge auth={auth} />
           <span className="masthead__file">{fileNumber}</span>
         </div>
       </div>
