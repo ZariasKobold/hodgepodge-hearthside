@@ -1,10 +1,10 @@
 # CLAUDE.md — Hodgepodge Hearthside project context
 
-<!-- HH v0.4.4 | Last updated: 2026-08-18 -->
+<!-- HH v0.4.5 | Last updated: 2026-08-18 -->
 
 ---
 
-## Current Version: 0.4.4
+## Current Version: 0.4.5
 
 ## Last Updated: 2026-08-18
 

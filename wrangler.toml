@@ -9,3 +9,18 @@ pages_build_output_dir = "dist"
 binding = "DB"
 database_name = "hodgepodge-hearthside"
 database_id = "1d11431a-0507-4ab3-90c2-f2213fb2f831"
+
+# Plaintext environment variables MUST live here, not in the dashboard. Once a
+# Pages project has a wrangler.toml, Cloudflare manages vars from it and the
+# dashboard refuses them — it will only accept encrypted Secrets.
+#
+# A Discord client id is public by design; it travels in the authorize URL that
+# every signing-in browser can read. Safe to commit.
+#
+# DISCORD_CLIENT_SECRET is NOT here and must never be. It goes in the dashboard
+# as type Secret, where it is encrypted and unreadable after saving.
+#
+# No VITE_ prefix on either: that prefix tells Vite to bake a value into the
+# browser bundle. These are read server-side from env by the Functions.
+[vars]
+DISCORD_CLIENT_ID = "1539452068488683671"

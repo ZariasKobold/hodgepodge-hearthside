@@ -421,3 +421,47 @@ rendered with real data.
 NEXT: register the Discord app (SETUP_D1_AUTH.md steps 4-5) and sign in once —
 that single round trip verifies the callback, D1 writes, sessions, and the
 badge's signed-in state together. Then the weekly hire UI.
+
+---
+
+### Session 9 — v0.4.5
+Date: 2026-08-18
+
+**chore: Discord client id into wrangler.toml, where Cloudflare now requires it**
+
+Setting up the OAuth app surfaced the other half of session 7's finding.
+`wrangler.toml` does not merely *also* work for configuration — for a Pages
+project that has one, it is the **only** place plaintext variables can live.
+The dashboard says so when you try: *"Environment variables for this project
+are being managed through wrangler.toml. Only Secrets (encrypted variables) can
+be managed via the Dashboard."*
+
+So the two OAuth credentials go to different places, which is easy to get
+wrong because they arrive together on the same Discord screen:
+
+- `DISCORD_CLIENT_ID` → `wrangler.toml` under `[vars]`. Public by design; it
+  travels in the authorize URL every signing-in browser can read. Committed.
+- `DISCORD_CLIENT_SECRET` → dashboard, type **Secret**. Encrypted, unreadable
+  after saving, never in a committed file.
+
+`docs/SETUP_D1_AUTH.md` step 5 previously said to put both in the dashboard,
+which would simply have failed for the id.
+
+**Expectation for preview deployments:** the `[vars]` block is top-level, and
+top-level config is known to reach preview builds here — session 7's diagnostic
+ran on a *preview* deployment and had `env.DB` bound from the top-level
+`[[d1_databases]]`. So the client id should reach preview too. Not directly
+tested; the sign-in attempt will show it.
+
+**Redirect URIs, recorded before it wastes an hour:** Discord matches exactly.
+The registered `hodgepodge-hearthside.pages.dev` alias works; a per-deployment
+subdomain like `c16b3590.hodgepodge-hearthside.pages.dev` does not and cannot
+be registered, since it changes every build. Test sign-in from the branch alias
+or the custom domain, never from a deployment URL.
+
+Files: wrangler.toml, docs/SETUP_D1_AUTH.md, docs/VERSION_HISTORY.md,
+       CLAUDE.md, package.json
+RESOLVED: setup doc told you to put the client id somewhere that rejects it
+UNVERIFIED: the OAuth round trip, still. Everything is now in place for it
+except the secret, which only the user can enter.
+NEXT: enter the secret in the dashboard, redeploy, then sign in once.

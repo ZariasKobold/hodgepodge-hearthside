@@ -68,23 +68,39 @@ This is the single most common thing to get wrong.
 **Google** (optional, same shape) — https://console.cloud.google.com/apis/credentials,
 OAuth client ID, type Web application, same two redirect URIs with `/google/`.
 
-## 5. Add the secrets to Pages
+## 5. Add the credentials — the two halves go to different places
 
-Dashboard → **Settings** → **Environment variables** → Production:
+Because this project has a `wrangler.toml`, Cloudflare manages plaintext
+variables from that file and the dashboard will not accept them. The dialog
+says so directly: *"Environment variables for this project are being managed
+through wrangler.toml. Only Secrets (encrypted variables) can be managed via
+the Dashboard."*
 
-| Name | Type | Value |
+| Value | Where it goes | Why |
 |---|---|---|
-| `DISCORD_CLIENT_ID` | Plaintext | from step 4 |
-| `DISCORD_CLIENT_SECRET` | **Secret** | from step 4 |
+| `DISCORD_CLIENT_ID` | `wrangler.toml`, under `[vars]` | plaintext var — the dashboard refuses it. Public anyway; it rides in the authorize URL |
+| `DISCORD_CLIENT_SECRET` | Dashboard → **Variables and secrets**, type **Secret** | encrypted at rest, unreadable after saving, and must never enter a committed file |
 
-Set the secret as **Encrypt**, not plaintext.
+The dashboard section is named **Variables and secrets** now, not
+"Environment variables".
+
+If you lose the secret, reset it in Discord — it cannot be read back out of
+Cloudflare once saved.
 
 **No `VITE_` prefix on these.** That prefix is what Vite uses to decide what to
 bake into the browser bundle. A client secret in the bundle is readable by
 anyone with devtools. These are read server-side by the Function, from `env`,
 and never reach the browser.
 
-Redeploy after adding them — variables are picked up at build.
+Redeploy after adding them — variables are picked up at deploy time, so the
+already-live build cannot see them. Pushing any commit does it.
+
+Add the secret to **Preview** as well as Production if you want sign-in to work
+on branch deployments. Note that Discord matches redirect URIs exactly, so
+sign-in works from the branch alias
+(`hodgepodge-hearthside.pages.dev`) but not from a per-deployment subdomain
+(`c16b3590.hodgepodge-hearthside.pages.dev`), which is not registered and
+cannot be.
 
 ## 6. Test
 
