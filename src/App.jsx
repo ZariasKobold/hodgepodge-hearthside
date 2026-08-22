@@ -16,6 +16,7 @@ import Record from './components/steps/Record.jsx'
 import SignInGate from './components/SignInGate.jsx'
 import ArsenalLibrary from './components/ArsenalLibrary.jsx'
 import WeeklyHire from './components/steps/WeeklyHire.jsx'
+import Arsenal from './components/steps/Arsenal.jsx'
 import './styles/app.css'
 
 /** A stable case number, so the same leader always files under the same mark. */
@@ -92,7 +93,7 @@ export default function App() {
   const openCampaign = (id) => {
     open(id)
     setStep(3)
-    setView('campaign')
+    setView('arsenal')
   }
 
   const buildNew = () => {
@@ -101,10 +102,13 @@ export default function App() {
     setView('create')
   }
 
-  const toLibrary = () => {
-    close()
-    setView('library')
-  }
+  /**
+   * The shelf is a view, not an exit. Closing the campaign here made Creation
+   * and Campaign vanish from the masthead the moment you glanced at your other
+   * leaders, which reads as losing your place rather than changing screen.
+   * Opening a different leader replaces the open one; that is the only close.
+   */
+  const toLibrary = () => setView('library')
 
   const inCampaign = Boolean(openId && leader)
 
@@ -131,9 +135,34 @@ export default function App() {
             shelf={shelf}
             onOpen={openCampaign}
             onNew={buildNew}
-            onImport={(data) => { adopt(data); setStep(3); setView('campaign') }}
+            onImport={(data) => { adopt(data); setStep(3); setView('arsenal') }}
             onDiscard={discard}
           />
+        )}
+
+        {admitted && inCampaign && view === 'arsenal' && archetype && (
+          <Arsenal
+            arsenal={arsenal}
+            leader={leader}
+            archetype={archetype}
+            week={week}
+            rules={rules}
+            fileNumber={fileNumber(leader)}
+            onEditLeader={() => { setStep(0); setView('create') }}
+            onHire={() => setView('campaign')}
+          />
+        )}
+
+        {/* A campaign whose leader has no archetype yet cannot render an
+            arsenal, so send them back to finish building instead of showing a
+            blank screen. */}
+        {admitted && inCampaign && view === 'arsenal' && !archetype && (
+          <div className="empty">
+            This leader isn't finished yet — no archetype chosen.{' '}
+            <button className="gate__link" onClick={() => { setStep(0); setView('create') }}>
+              Carry on building them
+            </button>.
+          </div>
         )}
 
         {admitted && inCampaign && view === 'campaign' && (
@@ -163,7 +192,7 @@ export default function App() {
             roster={roster}
             rules={rules}
             fileNumber={fileNumber(leader)}
-            onDone={toLibrary}
+            onDone={() => setView('arsenal')}
           />
         )}
 

@@ -1077,3 +1077,56 @@ UNVERIFIED: printing the corrected PDF. The three print fixes are CSS and
 The owner's next export is the proof.
 NEXT: aftermath. Ten low audit findings remain open, and the dialogue-count
 script is still unwritten.
+
+---
+
+### Session 19 — v0.6.1
+Date: 2026-08-22
+
+**fix: Leaders is a view, not an exit — and "View arsenal" now opens an arsenal**
+
+Two reports from the owner, both fair, both mine.
+
+**Clicking Leaders emptied the masthead.** `onLibrary` called `close()`, which
+nulled the open campaign, which unmounted Creation and Campaign. Glancing at
+your other leaders threw away your place. The shelf is a view now; opening a
+different leader is the only thing that closes one.
+
+**"View arsenal" went to the weekly hire.** There was no arsenal view to go to —
+I had wired the button to the nearest existing screen and called it done. The
+button was right and the screen was missing.
+
+`steps/Arsenal.jsx` is that screen: the leader's record, a ledger (week, scrip,
+soulstones, models, injuries when there are any), the roster **grouped by when
+each model arrived**, annihilated models listed separately, and the crew cards.
+It is deliberately read-only about the roster — models arrive through the
+starting arsenal or the weekly hire and leave by annihilation, so a delete
+button here would imply a fourth route the rules do not have.
+
+**The record is now shared, not copied.** `LeaderRecord.jsx` is lifted out of
+the creation wizard's last step so both views render the same document. Two
+copies of that markup would have drifted within a session or two — the trigger
+bug in v0.5.2 was exactly that kind of divergence between the screen and the
+exporter.
+
+Grouping the roster by `addedWeek` also made the v0.6.0 week-0 fix visible
+rather than merely tested: the arsenal reads "Starting arsenal — 20ss" and
+"Week 1 — 3ss" as separate groups, and a first hire in week one still quotes
+`3 → −5 → 0`. Had the starting arsenal stayed at week 1, that hire would have
+cost 3 and nothing on screen would have explained why.
+
+Verified live: four tabs surviving a trip to the shelf and back; View arsenal
+landing on the record rather than the hire screen; the roster gaining a "Week 1"
+group after a hire; the discount still applying.
+
+Tests unchanged at 107 — this is routing and presentation, and the arithmetic it
+exercises was already covered.
+
+Files: src/components/LeaderRecord.jsx (new),
+       src/components/steps/Arsenal.jsx (new), src/App.jsx,
+       src/components/Masthead.jsx, src/components/steps/Record.jsx,
+       CLAUDE.md, package.json, docs/VERSION_HISTORY.md
+RESOLVED: Leaders closing the campaign; View arsenal opening the wrong screen;
+the record markup existing twice
+NEXT: aftermath. Ten low audit findings open; the dialogue-count script is still
+unwritten; the corrected PDF is still unproven.

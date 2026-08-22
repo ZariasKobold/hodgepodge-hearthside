@@ -1,15 +1,14 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { SLOTS, slotLabel } from '../../data/archetypes.js'
 import { getEffect } from '../../data/crewCards.js'
 import { factionLabel } from '../../data/factions.js'
 import { arsenalTotal, startingScrip, STARTING_SOULSTONES } from '../../lib/campaign.js'
 import { createModel, STARTING_ARSENAL_WEEK } from '../../lib/campaignShape.js'
 import { exportJSON } from '../../lib/storage.js'
-import { sourceSlug, findEntry, findTrigger } from '../../lib/rules.js'
 import { isVersatile } from '../../lib/indexing.js'
 import { buildSheet, sheetToPNG, printSheet } from '../../lib/recordImage.js'
-import { Label, Button, Select, PrintLegal } from '../ui.jsx'
-import { RulesState, TriggerBody } from '../RulesText.jsx'
+import { Label, Button, Select } from '../ui.jsx'
+import LeaderRecord from '../LeaderRecord.jsx'
 import CrewCards from '../CrewCards.jsx'
 import HankSays from '../HankSays.jsx'
 import { CREATION, sendOff } from '../../data/hank.js'
@@ -17,6 +16,13 @@ import { CREATION, sendOff } from '../../data/hank.js'
 /** Cheapest first, so the picker reads as a shopping list. */
 const byCost = (models) => [...models].sort((a, b) => a.cost - b.cost)
 
+/**
+ * The last step of creation: read the finished record, then spend the 25
+ * soulstones on a starting arsenal.
+ *
+ * The record itself is `LeaderRecord`, shared with the standing arsenal view so
+ * the two cannot drift into different documents.
+ */
 export default function Record({ leader, set, archetype, roster, rules, fileNumber, onDone }) {
   const spent = arsenalTotal(leader.arsenal)
   const scrip = startingScrip(spent)
@@ -24,64 +30,19 @@ export default function Record({ leader, set, archetype, roster, rules, fileNumb
   const effect = getEffect(leader.crewCard.effect)
   const [imaging, setImaging] = useState(null)
 
-  /**
-   * The selections come from at most a handful of models, so their text is
-   * fetched without being asked for — unlike the arsenal, which grows all
-   * campaign and stays behind a button.
-   */
-  const pickSlugs = useMemo(() => {
-    const out = new Set()
-    for (const slot of SLOTS) {
-      for (const pick of leader.picks[slot] || []) {
-        const slug = sourceSlug(pick)
-        if (slug) out.add(slug)
-      }
-    }
-    return [...out]
-  }, [leader.picks])
-
   // Versatile models are hirable without sharing a keyword, so the picker
   // separates them. `isVersatile` is derived, never stored — the register owns
   // that fact and may change it.
-  const versatileModels = useMemo(
-    () => roster.models.filter(isVersatile),
-    [roster.models]
-  )
-  const keywordModels = useMemo(
-    () => roster.models.filter((m) => !isVersatile(m)),
-    [roster.models]
-  )
+  const versatileModels = useMemo(() => roster.models.filter(isVersatile), [roster.models])
+  const keywordModels = useMemo(() => roster.models.filter((m) => !isVersatile(m)), [roster.models])
 
-  const fingerprint = pickSlugs.join('|')
-  useEffect(() => {
-    pickSlugs.forEach((slug) => rules.ensure(slug))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fingerprint, rules.ensure])
-
-  /**
-   * The single trigger a Heavy Hitter keeps, resolved back to its text.
-   *
-   * Deliberately not memoised: the card arrives asynchronously and `rules.card`
-   * reads through a module-level map, so any dependency list would go stale the
-   * moment the fetch landed.
-   */
-  const attackPick = leader.picks.attack?.[0] || null
-  const keptTrigger = (() => {
-    if (!leader.trigger || !attackPick) return null
-    const slug = sourceSlug(attackPick)
-    const card = slug ? rules.card(slug) : null
-    const action = card ? findEntry(card, 'attack', attackPick.name) : null
-    return findTrigger(action, leader.trigger)
-  })()
-
-  const anyText = pickSlugs.some((slug) => rules.card(slug))
   const stem = (leader.name || 'leader').toLowerCase().replace(/\s+/g, '-')
 
   /**
    * Goes through `createModel` like every other hire. Writing a bare
    * `{slug,name,cost}` here left starting models without an `id`, and injuries,
-   * annihilation and removal all key off `id` — so the models most likely to be
-   * hurt in week one were the ones that could not carry an injury (audit M1).
+   * annihilation and removal all key off `id` (audit M1). Week 0 keeps the
+   * starting arsenal out of `hiresInWeek`, so it is never mistaken for hires.
    */
   const addModel = (slug) => {
     const model = roster.models.find((m) => m.slug === slug)
@@ -106,17 +67,19 @@ export default function Record({ leader, set, archetype, roster, rules, fileNumb
   const saveImage = async () => {
     setImaging('working')
     try {
-      const sheet = buildSheet({
-        leader,
-        archetype,
-        factionLabel: factionLabel(leader.faction),
-        fileNumber,
-        slots: SLOTS,
-        slotLabel,
-        effect,
-        cardFor: rules.card,
-      })
-      await sheetToPNG(sheet, `${stem}.png`)
+      await sheetToPNG(
+        buildSheet({
+          leader,
+          archetype,
+          factionLabel: factionLabel(leader.faction),
+          fileNumber,
+          slots: SLOTS,
+          slotLabel,
+          effect,
+          cardFor: rules.card,
+        }),
+        `${stem}.png`
+      )
       setImaging(null)
     } catch (err) {
       setImaging(String(err.message || err))
@@ -125,95 +88,7 @@ export default function Record({ leader, set, archetype, roster, rules, fileNumb
 
   return (
     <>
-      <article className="record">
-        <div className="record__head">
-          <span className="record__eyebrow">
-            {factionLabel(leader.faction)} · {archetype.name}
-          </span>
-          <span className="record__file">{fileNumber}</span>
-        </div>
-
-        <h2 className="record__name">{leader.name}</h2>
-        <div className="record__line">
-          {leader.keywords.filter(Boolean).join(' / ')} · {leader.advancementPath} · Sz {leader.size} ·{' '}
-          {leader.base}mm{leader.characteristics.length ? ` · ${leader.characteristics.join(', ')}` : ''} · master
-        </div>
-
-        <div className="record__stats">
-          {[['Df', archetype.stats.df], ['Wp', archetype.stats.wp], ['Sp', archetype.stats.sp], ['Health', archetype.stats.health]].map(
-            ([k, v]) => (
-              <div key={k}>
-                <div className="record__stat-k">{k}</div>
-                <div className="record__stat-v">{v}</div>
-              </div>
-            )
-          )}
-        </div>
-
-        {SLOTS.map((slot) =>
-          leader.picks[slot].length > 0 ? (
-            <section className="record__section" key={slot}>
-              <div className="record__section-k">{slotLabel(slot)}</div>
-              {leader.picks[slot].map((p) => (
-                <div className="record__written" key={p.key}>
-                  <div className="record__entry">
-                    {p.name} <span>— from {p.model}, {p.cost}ss</span>
-                  </div>
-                  {/* showTriggers off: the leader took the action, not the
-                      source model's triggers. See §the trigger rule below. */}
-                  <RulesState
-                    rules={rules}
-                    slug={sourceSlug(p)}
-                    slot={slot}
-                    name={p.name}
-                    quiet
-                    showTriggers={false}
-                  />
-                </div>
-              ))}
-            </section>
-          ) : null
-        )}
-
-        {leader.trigger && (
-          <section className="record__section">
-            <div className="record__section-k">Trigger</div>
-            <div className="record__written">
-              <div className="record__entry">
-                {leader.trigger}
-                {attackPick && <span> — on {attackPick.name}</span>}
-              </div>
-              <TriggerBody trigger={keptTrigger} />
-            </div>
-          </section>
-        )}
-
-        {effect && (
-          <section className="record__section">
-            <div className="record__section-k">Crew card</div>
-            <div className="record__entry">
-              {effect.name}
-              <span> — {leader.crewCard.choice ? `${leader.crewCard.choice}, ` : ''}p.{effect.page}</span>
-            </div>
-          </section>
-        )}
-
-        {archetype.freeEquipment && (
-          <section className="record__section">
-            <div className="record__section-k">Equipment</div>
-            <div className="record__entry">
-              One free upgrade by uncheatable flip <span>— returned to the arsenal if annihilated</span>
-            </div>
-          </section>
-        )}
-
-        <div className="record__foot">
-          {anyText
-            ? 'Action and ability text is read live from BiggerHat and is not stored by this app. Triggers on a source model are not carried over — a leader has only the trigger it was granted or has earned. Your cards remain the authority.'
-            : 'Rules text lives on your cards. This record holds names and costs only.'}
-          <PrintLegal />
-        </div>
-      </article>
+      <LeaderRecord leader={leader} archetype={archetype} fileNumber={fileNumber} rules={rules} />
 
       <div className="export noprint">
         <Button ghost onClick={() => exportJSON(leader, `${stem}.json`)}>Export JSON</Button>
@@ -237,7 +112,11 @@ export default function Record({ leader, set, archetype, roster, rules, fileNumb
         </div>
 
         {leader.arsenal.map((m, i) => (
-          <div className="pick" key={m.id || `${m.slug}-${i}`} style={{ borderColor: 'var(--line)', background: 'var(--panel)' }}>
+          <div
+            className="pick"
+            key={m.id || `${m.slug}-${i}`}
+            style={{ borderColor: 'var(--line)', background: 'var(--panel)' }}
+          >
             <span className="pick__meta" style={{ fontSize: 13, color: 'var(--text)' }}>{m.name}</span>
             <span style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
               <span className="pick__meta">{m.cost}ss</span>
@@ -284,12 +163,10 @@ export default function Record({ leader, set, archetype, roster, rules, fileNumb
       <HankSays>{sendOff({})}</HankSays>
 
       {/* Everything already autosaves, so this does not "save" so much as
-          declare you are done and put the leader back on the shelf. Without it
-          the only way out of the wizard is the masthead, which reads as
-          abandoning the work rather than finishing it. */}
+          declare you are finished and hand over the standing view. */}
       {onDone && (
         <div className="export noprint">
-          <Button onClick={onDone}>Save and return to my leaders</Button>
+          <Button onClick={onDone}>Done — view the arsenal</Button>
           <span className="label" style={{ margin: 0 }}>
             Saved to this browser as you go. Export the JSON to keep a copy elsewhere.
           </span>

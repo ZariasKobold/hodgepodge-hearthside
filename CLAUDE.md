@@ -1,10 +1,10 @@
 # CLAUDE.md — Hodgepodge Hearthside project context
 
-<!-- HH v0.6.0 | Last updated: 2026-08-22 -->
+<!-- HH v0.6.1 | Last updated: 2026-08-22 -->
 
 ---
 
-## Current Version: 0.6.0
+## Current Version: 0.6.1
 
 ## Last Updated: 2026-08-22
 
@@ -251,7 +251,9 @@ hodgepodge-hearthside/
 │   ├── lib/                pure logic, imports nothing from React
 │   ├── hooks/              useCampaign, useRoster, useAuth, useHank
 │   ├── components/         wizard steps and shared UI
-│   │   └── ArsenalLibrary.jsx  the shelf — one card per leader
+│   │   ├── ArsenalLibrary.jsx  the shelf — one card per leader
+│   │   ├── LeaderRecord.jsx    the filed record, shared by two views
+│   │   └── steps/Arsenal.jsx   the standing view of one campaign
 │   └── styles/             tokens.css holds the design direction
 ├── docs/
 │   ├── VERSION_HISTORY.md  why things were done this way
@@ -580,6 +582,12 @@ Two rules it establishes that are easy to violate:
   `[vars]`.
 - **Never loop a query per arsenal or per model.** D1's free plan caps a Worker
   invocation at 50 queries. Fetch sets.
+
+**Four views, and Leaders is not an exit.** `library` (the shelf), `arsenal`
+(the standing view of one campaign — leader record, roster by week, crew cards),
+`create` (the wizard) and `campaign` (the weekly hire). Switching to the shelf
+must not close the open campaign: doing so made the other three tabs vanish,
+which reads as losing your place. Opening a different leader is the only close.
 
 **Campaigns live on a shelf, one per leader.** Since v0.6.0 storage holds
 `campaigns:index` (ids only), `campaign:<id>` per campaign, and

@@ -44,6 +44,13 @@ export default function Masthead({ step, onJump, fileNumber, auth, admitted = tr
         {inCampaign && (
           <>
             <button
+              className={`views__item${view === 'arsenal' ? ' views__item--on' : ''}`}
+              onClick={() => onView('arsenal')}
+              aria-current={view === 'arsenal' ? 'page' : undefined}
+            >
+              Arsenal
+            </button>
+            <button
               className={`views__item${view === 'create' ? ' views__item--on' : ''}`}
               onClick={() => onView('create')}
               aria-current={view === 'create' ? 'page' : undefined}
