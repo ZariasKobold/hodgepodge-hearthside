@@ -1,10 +1,10 @@
 # CLAUDE.md — Hodgepodge Hearthside project context
 
-<!-- HH v0.5.1 | Last updated: 2026-08-22 -->
+<!-- HH v0.5.2 | Last updated: 2026-08-22 -->
 
 ---
 
-## Current Version: 0.5.1
+## Current Version: 0.5.2
 
 ## Last Updated: 2026-08-22
 
@@ -377,6 +377,15 @@ An export the player explicitly asks for is a page they already have on screen,
 so the PNG and the print sheet carry the text. The JSON export does not, because
 that file is the durable one (§8).
 
+**Showing text is not the same as showing everything the register returns.** A
+register action arrives with its triggers attached; a leader that took that
+action from an ally does **not** get them. Triggers are earned in campaign play
+or granted at creation, and only the Heavy Hitter is granted one. So
+`EntryBody` takes `showTriggers`, off on the leader's record and on every slot
+where no trigger is up for grabs, on for crew cards, which describe the actual
+hired model. Getting this wrong prints rules the leader does not have, and the
+mistake is invisible — which is why `rules.test.js` asserts the absence.
+
 ---
 
 ## 5. The Hank toggle
@@ -493,7 +502,7 @@ every session. `docs/VERSION_HISTORY.md` holds how it got this way.
 npm install
 cp .env.example .env
 npm run dev      # Vite only — NO Functions, NO database. useAuth degrades to signed out.
-npm run test     # 90 tests across campaign.js, campaignShape.js, rules.js and indexing.js
+npm run test     # 98 tests across campaign.js, campaignShape.js, rules.js and indexing.js
 npm run build    # production bundle — the dev proxy does NOT exist here
 npm run seed     # optional local register file; ask BiggerHat's maintainer first
 

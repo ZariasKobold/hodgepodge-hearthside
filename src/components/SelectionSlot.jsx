@@ -15,6 +15,12 @@ export default function SelectionSlot({ slot, archetype, leader, roster, rules, 
   const [preview, setPreview] = useState(null)
   if (config.n === 0) return null
 
+  // Triggers are worth reading only where one is actually up for grabs: the
+  // attack action of the one archetype that keeps a trigger. Everywhere else
+  // they belong to the source model and showing them implies a leader gets
+  // them, which it does not.
+  const showTriggers = Boolean(archetype.keepsTrigger) && slot === 'attack'
+
   const chosen = leader.picks[slot] || []
   const complete = chosen.length === config.n
   const candidates = candidatesFor(slot, roster, archetype.id, leader.keywords)
@@ -49,7 +55,13 @@ export default function SelectionSlot({ slot, archetype, leader, roster, rules, 
 
       {chosen.map((pick, i) => (
         <div key={pick.key}>
-          <RulesTip rules={rules} slug={sourceSlug(pick)} slot={slot} name={pick.name}>
+          <RulesTip
+            rules={rules}
+            slug={sourceSlug(pick)}
+            slot={slot}
+            name={pick.name}
+            showTriggers={showTriggers}
+          >
             <div className="pick">
               <div>
                 <div className="pick__name">{pick.name}</div>
@@ -97,6 +109,7 @@ export default function SelectionSlot({ slot, archetype, leader, roster, rules, 
                   slot={slot}
                   name={preview.name}
                   quiet
+                  showTriggers={showTriggers}
                 />
               </div>
             )}

@@ -861,3 +861,67 @@ The faction index does; the keyword index does not.
 UNVERIFIED: only Neverborn and Ten Thunders faction pulls have run. The other
 six use the same code path and the slug map is tested, but no live call.
 NEXT: the audit is still due, then aftermath.
+
+---
+
+### Session 16 — v0.5.2
+Date: 2026-08-22
+
+**fix: a leader does not inherit the source model's triggers**
+
+Spotted on an exported record: the leader's actions were printing the *source
+model's* triggers. Taking an ally's action does not bring its triggers with it
+— those are earned in campaign play or granted at creation, and only the Heavy
+Hitter is granted one. The record was showing a Schemer four triggers it did
+not have.
+
+This is a v0.5.0 bug, and specifically a bug of the kind that showing rules text
+invites: the register hands back an action with its triggers attached, and
+rendering "what came back" is not the same as rendering "what this leader has".
+The names-and-costs record could not have had this bug, because it never showed
+enough to be wrong.
+
+**`showTriggers`, defaulting to on, switched off where the reader is a leader.**
+
+| Where | Triggers | Why |
+|---|---|---|
+| Leader record + PNG/PDF | off | the leader does not have them |
+| Loadout, attack slot, Heavy Hitter | on | one is about to be chosen from them |
+| Loadout, everywhere else | off | none is up for grabs |
+| Crew cards | on | that *is* the hired model's own card |
+
+**The kept trigger gained its text.** Previously the Trigger section printed a
+bare name. Now it resolves back through the attack pick's source card and prints
+the suit and rules text — "Free Loot — on Sword / Tome / Remove a Scheme marker
+within 2" of this model." That trigger the leader genuinely holds, so writing it
+out is the same call §4 already made for actions.
+
+**A test asserted the bug.** v0.5.0's `buildSheet` test checked
+`attack.triggers[0].title === 'Ram — Critical Strike'`, encoding the wrong rule
+as intended behaviour. Corrected, with a comment saying so, plus a dedicated
+block covering: no triggers on pick entries, no Trigger section when none was
+granted, the kept trigger with text and its parent action, the register-down
+fallback to a bare name, and a hand-entered attack pick not throwing.
+
+Resolution is deliberately **not** memoised in `Record.jsx`: the card arrives
+asynchronously and `rules.card` reads through a module-level map, so any
+dependency list would go stale the moment the fetch landed.
+
+Verified live on both paths. Schemer: zero trigger lists on the record, action
+text intact, no mention of Sinkhole, Friendly Waters, Typhoon or Troll the
+Surface. Heavy Hitter: triggers visible when hovering an *attack* candidate and
+absent on a *tactical* one, and the finished record carrying "TRIGGER / Free
+Loot — on Sword / Tome / Remove a Scheme marker within 2" of this model." with
+no trigger lists inside the actions. PNG still exports.
+
+Tests 90 → 98.
+
+Files: src/lib/rules.js, src/lib/rules.test.js, src/lib/recordImage.js,
+       src/components/RulesText.jsx, src/components/SelectionSlot.jsx,
+       src/components/steps/Record.jsx, CLAUDE.md, package.json,
+       docs/VERSION_HISTORY.md
+RESOLVED: source triggers printed on the leader's record; the bare-name Trigger
+section; a test that asserted the wrong rule
+NEXT: the audit is still due, then aftermath. Campaign-earned triggers are not
+modelled at all — when advancement lands, `leader.trigger` will need to become
+a list rather than a single string.

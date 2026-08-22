@@ -11,7 +11,7 @@
  *
  * Imports nothing from React (§6).
  */
-import { plainText, statLine, findEntry } from './rules.js'
+import { plainText, statLine, findEntry, findTrigger } from './rules.js'
 import { downloadBlob } from './storage.js'
 
 export const LEGAL =
@@ -47,17 +47,33 @@ export function buildSheet({ leader, archetype, factionLabel, fileNumber, slots,
           meta: `— from ${pick.model}, ${pick.cost}ss`,
           stat: entry && slot !== 'ability' ? statLine(entry).join(' · ') : '',
           body: entry ? plainText(entry.description) : '',
-          triggers: (entry?.triggers || []).map((t) => ({
-            title: t.suits ? `${t.suits} — ${t.name}` : t.name,
-            body: plainText(t.description),
-          })),
+          // Empty on purpose. The source model's triggers do not come with the
+          // action; a leader holds only the trigger it was granted or earned,
+          // and that one is written into its own section below.
+          triggers: [],
         }
       }),
     })
   }
 
   if (leader.trigger) {
-    sections.push({ heading: 'Trigger', entries: [{ title: leader.trigger, meta: '', body: '', triggers: [] }] })
+    // Resolve the kept trigger back to its text, via the attack action it
+    // came from. Absent text just prints the name, as before.
+    const attackPick = leader.picks.attack?.[0] || null
+    const head = String(attackPick?.key || '').split('::')[0]
+    const slug = !attackPick || attackPick.manual || head === 'manual' ? null : head
+    const card = slug ? cardFor(slug) : null
+    const kept = findTrigger(card ? findEntry(card, 'attack', attackPick.name) : null, leader.trigger)
+
+    sections.push({
+      heading: 'Trigger',
+      entries: [{
+        title: leader.trigger,
+        meta: attackPick ? `— on ${attackPick.name}${kept?.suits ? `, ${kept.suits}` : ''}` : '',
+        body: kept ? plainText(kept.description) : '',
+        triggers: [],
+      }],
+    })
   }
 
   if (effect) {

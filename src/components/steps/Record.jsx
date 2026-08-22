@@ -4,11 +4,11 @@ import { getEffect } from '../../data/crewCards.js'
 import { factionLabel } from '../../data/factions.js'
 import { arsenalTotal, startingScrip, STARTING_SOULSTONES } from '../../lib/campaign.js'
 import { exportJSON } from '../../lib/storage.js'
-import { sourceSlug } from '../../lib/rules.js'
+import { sourceSlug, findEntry, findTrigger } from '../../lib/rules.js'
 import { isVersatile } from '../../lib/indexing.js'
 import { buildSheet, sheetToPNG, printSheet } from '../../lib/recordImage.js'
 import { Label, Button, Select, PrintLegal } from '../ui.jsx'
-import { RulesState } from '../RulesText.jsx'
+import { RulesState, TriggerBody } from '../RulesText.jsx'
 import CrewCards from '../CrewCards.jsx'
 import HankSays from '../HankSays.jsx'
 import { CREATION, sendOff } from '../../data/hank.js'
@@ -56,6 +56,22 @@ export default function Record({ leader, set, archetype, roster, rules, fileNumb
     pickSlugs.forEach((slug) => rules.ensure(slug))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fingerprint, rules.ensure])
+
+  /**
+   * The single trigger a Heavy Hitter keeps, resolved back to its text.
+   *
+   * Deliberately not memoised: the card arrives asynchronously and `rules.card`
+   * reads through a module-level map, so any dependency list would go stale the
+   * moment the fetch landed.
+   */
+  const attackPick = leader.picks.attack?.[0] || null
+  const keptTrigger = (() => {
+    if (!leader.trigger || !attackPick) return null
+    const slug = sourceSlug(attackPick)
+    const card = slug ? rules.card(slug) : null
+    const action = card ? findEntry(card, 'attack', attackPick.name) : null
+    return findTrigger(action, leader.trigger)
+  })()
 
   const anyText = pickSlugs.some((slug) => rules.card(slug))
   const stem = (leader.name || 'leader').toLowerCase().replace(/\s+/g, '-')
@@ -126,7 +142,16 @@ export default function Record({ leader, set, archetype, roster, rules, fileNumb
                   <div className="record__entry">
                     {p.name} <span>— from {p.model}, {p.cost}ss</span>
                   </div>
-                  <RulesState rules={rules} slug={sourceSlug(p)} slot={slot} name={p.name} quiet />
+                  {/* showTriggers off: the leader took the action, not the
+                      source model's triggers. See §the trigger rule below. */}
+                  <RulesState
+                    rules={rules}
+                    slug={sourceSlug(p)}
+                    slot={slot}
+                    name={p.name}
+                    quiet
+                    showTriggers={false}
+                  />
                 </div>
               ))}
             </section>
@@ -136,7 +161,13 @@ export default function Record({ leader, set, archetype, roster, rules, fileNumb
         {leader.trigger && (
           <section className="record__section">
             <div className="record__section-k">Trigger</div>
-            <div className="record__entry">{leader.trigger}</div>
+            <div className="record__written">
+              <div className="record__entry">
+                {leader.trigger}
+                {attackPick && <span> — on {attackPick.name}</span>}
+              </div>
+              <TriggerBody trigger={keptTrigger} />
+            </div>
           </section>
         )}
 
@@ -161,7 +192,7 @@ export default function Record({ leader, set, archetype, roster, rules, fileNumb
 
         <div className="record__foot">
           {anyText
-            ? 'Action and ability text is read live from BiggerHat and is not stored by this app. Your cards remain the authority.'
+            ? 'Action and ability text is read live from BiggerHat and is not stored by this app. Triggers on a source model are not carried over — a leader has only the trigger it was granted or has earned. Your cards remain the authority.'
             : 'Rules text lives on your cards. This record holds names and costs only.'}
           <PrintLegal />
         </div>

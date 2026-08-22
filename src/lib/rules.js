@@ -183,6 +183,19 @@ export function findEntry(card, slot, name) {
 }
 
 /**
+ * One trigger on one action, by name.
+ *
+ * Used for the single trigger a Heavy Hitter keeps. Taking an action from an
+ * ally does **not** bring that action's triggers with it — they are earned in
+ * campaign play or granted at creation — so this is a deliberate lookup of the
+ * one the leader actually holds, never a way to list the rest.
+ */
+export function findTrigger(action, name) {
+  if (!action) return null
+  return (action.triggers || []).find((t) => norm(t.name) === norm(name)) || null
+}
+
+/**
  * The source model's slug, recovered from a selection key.
  *
  * `candidatesFor` builds keys as `slug::slot::name`; `ManualPick` builds them

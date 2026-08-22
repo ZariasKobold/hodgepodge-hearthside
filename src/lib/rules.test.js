@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   iconSegments, plainText, toCard, findAction, findAbility, findEntry,
-  sourceSlug, statLine,
+  findTrigger, sourceSlug, statLine,
 } from './rules.js'
 import { buildSheet, LEGAL } from './recordImage.js'
 
@@ -210,7 +210,9 @@ describe('buildSheet', () => {
     expect(attack.stat).toBe('Rg * · Stat 6 · vs Df · Dmg 3')
     expect(attack.body).toContain('Melee 1"')
     expect(attack.body).not.toContain('{{')
-    expect(attack.triggers[0].title).toBe('Ram — Critical Strike')
+    // Corrected in v0.5.2: this asserted the source model's triggers came with
+    // the action. They do not — see the dedicated describe block below.
+    expect(attack.triggers).toEqual([])
   })
 
   it('leaves a hand-entered pick as a name, with no invented text', () => {
@@ -249,5 +251,106 @@ describe('buildSheet', () => {
     expect(sheet.eyebrow).toBe('Neverborn · Schemer')
     expect(sheet.line).toBe('angler / banished · strategist · Sz 3 · 50mm · Living · master')
     expect(sheet.stats).toEqual([['Df', 6], ['Wp', 5], ['Sp', 7], ['Health', 13]])
+  })
+})
+
+describe('findTrigger', () => {
+  const action = findAction(toCard(RECORD), 'Ol’ Thunder')
+
+  it('finds a trigger by name on an action', () => {
+    expect(findTrigger(action, 'Critical Strike')?.suits).toBe('Ram')
+  })
+
+  it('is null for a trigger the action does not have', () => {
+    expect(findTrigger(action, 'Gut Feeling')).toBeNull()
+  })
+
+  it('is null rather than throwing when the action never loaded', () => {
+    expect(findTrigger(null, 'Critical Strike')).toBeNull()
+  })
+})
+
+describe('a leader does not inherit the source model’s triggers', () => {
+  /* Taking an ally's action does not bring its triggers along — those are
+     earned in campaign play or granted at creation. The register hands us the
+     full action including its triggers, so the omission is ours to make, and
+     an omission is invisible if it regresses. Hence these. */
+  const archetype = {
+    id: 'schemer',
+    name: 'Schemer',
+    stats: { df: 6, wp: 5, sp: 7, health: 13 },
+    freeEquipment: false,
+  }
+  const base = {
+    name: 'Cletus and Duke Carcinus',
+    keywords: ['angler'],
+    advancementPath: 'strategist',
+    size: 3,
+    base: 50,
+    characteristics: [],
+    crewCard: { effect: '', choice: '' },
+    picks: {
+      attack: [{ key: 'aunty-mel::attack::Ol’ Thunder', name: 'Ol’ Thunder', model: 'Aunty Mel', cost: 8 }],
+      tactical: [],
+      ability: [],
+    },
+  }
+  const args = {
+    archetype,
+    factionLabel: 'Neverborn',
+    fileNumber: 'HH-NE-7017',
+    slots: ['attack', 'tactical', 'ability'],
+    slotLabel: (s) => ({ attack: 'Attack actions', tactical: 'Tactical actions', ability: 'Abilities' }[s]),
+    effect: null,
+    cardFor: (slug) => (slug === 'aunty-mel' ? toCard(RECORD) : null),
+  }
+
+  it('prints the action text without the source model’s triggers', () => {
+    const sheet = buildSheet({ ...args, leader: { ...base, trigger: '' } })
+    const entry = sheet.sections.find((s) => s.heading === 'Attack actions').entries[0]
+    expect(entry.body).toContain('Choose')
+    expect(entry.triggers).toEqual([])
+  })
+
+  it('writes no Trigger section when none was granted', () => {
+    const sheet = buildSheet({ ...args, leader: { ...base, trigger: '' } })
+    expect(sheet.sections.map((s) => s.heading)).not.toContain('Trigger')
+  })
+
+  it('writes the one kept trigger, with its text and the action it sits on', () => {
+    const sheet = buildSheet({ ...args, leader: { ...base, trigger: 'Critical Strike' } })
+    const trigger = sheet.sections.find((s) => s.heading === 'Trigger').entries[0]
+    expect(trigger.title).toBe('Critical Strike')
+    expect(trigger.meta).toBe('— on Ol’ Thunder, Ram')
+    expect(trigger.body).toBe('Deals +1 damage.')
+  })
+
+  it('still names the kept trigger when the register never answered', () => {
+    const sheet = buildSheet({
+      ...args,
+      cardFor: () => null,
+      leader: { ...base, trigger: 'Critical Strike' },
+    })
+    const trigger = sheet.sections.find((s) => s.heading === 'Trigger').entries[0]
+    expect(trigger.title).toBe('Critical Strike')
+    expect(trigger.body).toBe('')
+  })
+
+  it('does not fall over when the attack pick was entered by hand', () => {
+    const sheet = buildSheet({
+      ...args,
+      leader: {
+        ...base,
+        trigger: 'Something Written Down',
+        picks: {
+          attack: [{ key: 'manual::Hand Model::Swing', name: 'Swing', model: 'Hand Model', cost: 4, manual: true }],
+          tactical: [],
+          ability: [],
+        },
+      },
+    })
+    const trigger = sheet.sections.find((s) => s.heading === 'Trigger').entries[0]
+    expect(trigger.title).toBe('Something Written Down')
+    expect(trigger.body).toBe('')
   })
 })

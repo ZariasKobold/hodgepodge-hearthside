@@ -24,8 +24,16 @@ export function IconText({ text }) {
   )
 }
 
-/** One action or ability, written out. */
-export function EntryBody({ entry, slot }) {
+/**
+ * One action or ability, written out.
+ *
+ * `showTriggers` is off wherever the reader is a leader rather than the source
+ * model. Taking an ally's action does not bring its triggers along — those are
+ * earned in campaign play or granted at creation — so printing them on a
+ * leader's record would be inventing rules the leader does not have. Crew
+ * cards, which describe the actual hired model, pass it on.
+ */
+export function EntryBody({ entry, slot, showTriggers = true }) {
   if (!entry) return null
   const stats = slot === 'ability' ? [] : statLine(entry)
   const extras = []
@@ -41,7 +49,7 @@ export function EntryBody({ entry, slot }) {
       {entry.description && (
         <p className="rules__body"><IconText text={entry.description} /></p>
       )}
-      {(entry.triggers || []).length > 0 && (
+      {showTriggers && (entry.triggers || []).length > 0 && (
         <ul className="rules__triggers">
           {entry.triggers.map((t) => (
             <li key={t.slug || t.name}>
@@ -62,7 +70,7 @@ export function EntryBody({ entry, slot }) {
  * the record, the hover tip and the crew cards all need the same four answers
  * and it would be easy for them to drift into three different vocabularies.
  */
-export function RulesState({ rules, slug, slot, name, quiet }) {
+export function RulesState({ rules, slug, slot, name, quiet, showTriggers = true }) {
   if (!slug) {
     return quiet ? null : <div className="rules rules--absent">Entered by hand — no register record to read.</div>
   }
@@ -79,7 +87,7 @@ export function RulesState({ rules, slug, slot, name, quiet }) {
   if (!entry) {
     return <div className="rules rules--absent">Not on {card.name}'s record — the register may have renamed it.</div>
   }
-  return <EntryBody entry={entry} slot={slot} />
+  return <EntryBody entry={entry} slot={slot} showTriggers={showTriggers} />
 }
 
 /**
@@ -89,7 +97,7 @@ export function RulesState({ rules, slug, slot, name, quiet }) {
  * It is supplementary throughout — every fact it shows is also on the finished
  * record — so nothing is lost if it never opens.
  */
-export function RulesTip({ rules, slug, slot, name, children }) {
+export function RulesTip({ rules, slug, slot, name, children, showTriggers = true }) {
   const [open, setOpen] = useState(false)
   const id = useId()
 
@@ -107,8 +115,26 @@ export function RulesTip({ rules, slug, slot, name, children }) {
       <div aria-describedby={open ? id : undefined}>{children}</div>
       {open && (
         <div className="tip" id={id} role="tooltip">
-          <RulesState rules={rules} slug={slug} slot={slot} name={name} />
+          <RulesState rules={rules} slug={slug} slot={slot} name={name} showTriggers={showTriggers} />
         </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * The one trigger a leader actually keeps, written out.
+ *
+ * Separate from `EntryBody` on purpose: this renders a trigger the leader
+ * holds, whereas the list inside an action describes the source model's.
+ */
+export function TriggerBody({ trigger }) {
+  if (!trigger) return null
+  return (
+    <div className="rules">
+      {trigger.suits && <div className="rules__stat">{trigger.suits}</div>}
+      {trigger.description && (
+        <p className="rules__body"><IconText text={trigger.description} /></p>
       )}
     </div>
   )
