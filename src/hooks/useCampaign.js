@@ -1,62 +1,159 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
-import { save, load } from '../lib/storage.js'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import {
+  saveCampaign, loadCampaign, campaignIds, removeCampaign,
+  activeCampaignId, setActiveCampaignId, adoptLegacyCampaign,
+  load,
+} from '../lib/storage.js'
 import {
   createCampaign, createModel, migrate, migrateLeaderToCampaign,
   myArsenal as selectMyArsenal, currentWeek, totalFor, mustHireThisWeek,
 } from '../lib/campaignShape.js'
 
-const KEY = 'campaign:current'
-const LEGACY_KEY = 'leader:current'
+const LEGACY_LEADER_KEY = 'leader:current'
 
 /**
- * Campaign state, persisted locally.
+ * A shelf of campaigns, one of which may be open.
  *
- * Exposes a `leader` / `setLeader` pair that behaves like the old useLeader
- * API on purpose. The creation wizard edits one leader inside one arsenal, so
- * keeping that seam means the four step components didn't need rewriting when
- * the underlying shape changed.
+ * Each campaign holds one leader and that leader's arsenal, so switching
+ * leaders means opening a different campaign rather than editing a list inside
+ * one. The `arsenals` array inside a campaign is for *other players* — max
+ * encounter size compares both arsenals — so a second leader of your own could
+ * never have lived there.
+ *
+ * `campaign` is null when nothing is open, and every derived value degrades to
+ * a safe empty rather than throwing. App renders the shelf in that state; the
+ * wizard steps are only mounted once something is open.
  *
  * Local-first is not a stepping stone to remote — it's the fallback that has to
  * keep working. Permission from Wyrd is revocable, so a campaign must survive
  * this app disappearing.
  */
 export function useCampaign() {
-  const [campaign, setCampaign] = useState(() => {
-    const saved = load(KEY)
-    if (saved) return migrate(saved)
-
-    // One-time lift from the v0.1 single-leader record.
-    const legacy = load(LEGACY_KEY)
-    if (legacy) return migrateLeaderToCampaign(legacy)
-
-    return createCampaign()
+  const [ids, setIds] = useState(() => {
+    // One-time lifts, oldest first: the v0.1 single leader, then the
+    // single-campaign key everything before the shelf wrote to.
+    const legacyLeader = load(LEGACY_LEADER_KEY)
+    if (campaignIds().length === 0 && legacyLeader && !load('campaign:current')) {
+      const lifted = migrateLeaderToCampaign(legacyLeader)
+      if (lifted) {
+        saveCampaign(lifted)
+        setActiveCampaignId(lifted.id)
+      }
+    }
+    adoptLegacyCampaign()
+    return campaignIds()
   })
 
+  const [openId, setOpenId] = useState(() => {
+    const active = activeCampaignId()
+    return active && campaignIds().includes(active) ? active : null
+  })
+
+  const [campaign, setCampaign] = useState(() => {
+    const active = activeCampaignId()
+    return active ? migrate(loadCampaign(active)) : null
+  })
+
+  // Every campaign on the shelf, for rendering it. Re-read whenever the shelf
+  // or the open campaign changes, so a rename shows immediately.
+  const shelf = useMemo(
+    () => ids.map((id) => (id === openId && campaign ? campaign : migrate(loadCampaign(id)))).filter(Boolean),
+    [ids, openId, campaign]
+  )
+
+  // Skip the write on the render that merely opened a campaign — it would be
+  // writing back exactly what it just read.
+  const lastWritten = useRef(null)
   useEffect(() => {
-    save(KEY, campaign)
+    if (!campaign) return
+    if (lastWritten.current === campaign) return
+    lastWritten.current = campaign
+    saveCampaign(campaign)
   }, [campaign])
 
-  const arsenal = useMemo(() => selectMyArsenal(campaign), [campaign])
-  const week = useMemo(() => currentWeek(campaign), [campaign])
+  /* ── the shelf ────────────────────────────────────────────────── */
 
-  /** Applies a patch to whichever arsenal belongs to this device. */
+  const open = useCallback((id) => {
+    const found = migrate(loadCampaign(id))
+    if (!found) return
+    setCampaign(found)
+    setOpenId(id)
+    setActiveCampaignId(id)
+  }, [])
+
+  const close = useCallback(() => {
+    setCampaign(null)
+    setOpenId(null)
+    setActiveCampaignId(null)
+  }, [])
+
+  const startNew = useCallback(() => {
+    const fresh = createCampaign()
+    saveCampaign(fresh)
+    setIds(campaignIds())
+    setCampaign(fresh)
+    setOpenId(fresh.id)
+    setActiveCampaignId(fresh.id)
+    return fresh.id
+  }, [])
+
+  const discard = useCallback((id) => {
+    removeCampaign(id)
+    setIds(campaignIds())
+    setOpenId((prev) => (prev === id ? null : prev))
+    setCampaign((prev) => (prev?.id === id ? null : prev))
+  }, [])
+
+  /**
+   * Files an imported campaign as a new entry rather than replacing anything.
+   *
+   * A fresh id is minted even when the file carries one, so importing the same
+   * export twice gives two campaigns instead of silently overwriting the first.
+   * Nothing already on the shelf can be lost by importing.
+   */
+  const adopt = useCallback((data) => {
+    const incoming = migrate(data)
+    if (!incoming?.arsenals?.length) {
+      throw new Error('That file does not look like a campaign — no arsenals in it.')
+    }
+    // `createCampaign` spreads its patch last, so passing `id: undefined`
+    // overwrites the id it just minted and the save silently no-ops. Strip the
+    // key instead of blanking it.
+    const { id: _discarded, ...rest } = incoming
+    const filed = createCampaign(rest)
+    saveCampaign(filed)
+    setIds(campaignIds())
+    setCampaign(filed)
+    setOpenId(filed.id)
+    setActiveCampaignId(filed.id)
+    return filed.id
+  }, [])
+
+  /* ── the open campaign ────────────────────────────────────────── */
+
+  const arsenal = useMemo(() => (campaign ? selectMyArsenal(campaign) : null), [campaign])
+  const week = useMemo(() => (campaign ? currentWeek(campaign) : 1), [campaign])
+
   const updateArsenal = useCallback((patch) => {
-    setCampaign((prev) => ({
-      ...prev,
-      arsenals: prev.arsenals.map((a) =>
-        a.id === prev.localArsenalId
-          ? { ...a, ...(typeof patch === 'function' ? patch(a) : patch) }
-          : a
-      ),
-    }))
+    setCampaign((prev) => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        arsenals: prev.arsenals.map((a) =>
+          a.id === prev.localArsenalId
+            ? { ...a, ...(typeof patch === 'function' ? patch(a) : patch) }
+            : a
+        ),
+      }
+    })
   }, [])
 
   const setCampaignField = useCallback((patch) => {
-    setCampaign((prev) => ({ ...prev, ...(typeof patch === 'function' ? patch(prev) : patch) }))
+    setCampaign((prev) => (prev ? { ...prev, ...(typeof patch === 'function' ? patch(prev) : patch) } : prev))
   }, [])
 
   const setHouseRules = useCallback((patch) => {
-    setCampaign((prev) => ({ ...prev, houseRules: { ...prev.houseRules, ...patch } }))
+    setCampaign((prev) => (prev ? { ...prev, houseRules: { ...prev.houseRules, ...patch } } : prev))
   }, [])
 
   /* ── wizard-facing adapter ────────────────────────────────────── */
@@ -65,13 +162,16 @@ export function useCampaign() {
    * A flat view of the leader plus the arsenal fields the wizard edits, in the
    * shape the step components already expect.
    */
-  const leader = useMemo(() => ({
-    ...arsenal.leader,
-    faction: arsenal.faction,
-    keywords: arsenal.keywords,
-    crewCard: arsenal.crewCard,
-    arsenal: arsenal.models,
-  }), [arsenal])
+  const leader = useMemo(() => {
+    if (!arsenal) return null
+    return {
+      ...arsenal.leader,
+      faction: arsenal.faction,
+      keywords: arsenal.keywords,
+      crewCard: arsenal.crewCard,
+      arsenal: arsenal.models,
+    }
+  }, [arsenal])
 
   const ARSENAL_FIELDS = new Set(['faction', 'keywords', 'crewCard'])
 
@@ -118,15 +218,16 @@ export function useCampaign() {
     updateArsenal((a) => ({ scrip: a.scrip + amount }))
   }, [updateArsenal])
 
-  const reset = useCallback(() => setCampaign(createCampaign()), [])
-
   return {
-    campaign, setCampaignField, setHouseRules, reset,
+    // the shelf
+    shelf, openId, open, close, startNew, discard, adopt,
+    // the open campaign
+    campaign, setCampaignField, setHouseRules,
     arsenal, updateArsenal,
     week,
-    totalCost: totalFor(arsenal),
-    mustHire: mustHireThisWeek(arsenal, week),
-    // wizard adapter — same surface the old useLeader exposed
+    totalCost: arsenal ? totalFor(arsenal) : 0,
+    mustHire: arsenal ? mustHireThisWeek(arsenal, week) : false,
+    // wizard adapter — same surface the step components already expect
     leader, set: setLeader, setPick,
     addModel, removeModel, spendScrip, earnScrip,
   }

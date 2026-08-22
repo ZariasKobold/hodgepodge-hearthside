@@ -11,7 +11,27 @@ code**. One addition to the ritual this time: an exported PDF from a real
 session was available, and reading it found three defects that no amount of
 code reading would have.
 
-**Nothing in this document has been fixed.** Findings only.
+**Written as findings only.** Status added afterwards — see below.
+
+## Status — resolved in v0.6.0
+
+| Finding | Outcome |
+|---|---|
+| H1 import | **Fixed.** Built, not reworded. The shelf has *Import from JSON*; a file is filed as a new leader and cannot overwrite anything. |
+| M1 arsenal shape | **Fixed.** `Record.jsx` goes through `createModel`; `migrate` repairs stored campaigns at schemaVersion 2. |
+| M2 stale error | **Fixed.** `useRules` clears a recorded failure once the card arrives. |
+| M3 duplicate cards | **Fixed.** Grouped by slug, `×N` on the card. |
+| M4 print chrome | **Fixed.** Heading, tally and button are `.noprint`. |
+| M5 foot split | **Fixed.** `break-inside: avoid` on `.record__foot`. |
+| M6 dialogue drift | **RETRACTED — no defect.** See below. |
+| M7 stale headers | **Fixed.** Both corrected, with the reversal named. |
+| L8 record break | **Fixed** in passing, while doing M5. |
+| L1–L7, L9, L10 | Open. |
+
+One regression was introduced and caught during the fix: filing the starting
+arsenal under week 1 made it look like five weekly hires, which would have eaten
+the first-of-week discount. It is week 0 now (`STARTING_ARSENAL_WEEK`), and
+tested.
 
 ---
 
@@ -20,8 +40,9 @@ code reading would have.
 | Priority | Count | Theme |
 |---|---|---|
 | High | 1 | a promise the UI makes and cannot keep |
-| Medium | 8 | one shape bug, one state bug, three print bugs, three drifts |
+| Medium | 7 | one shape bug, one state bug, three print bugs, two drifts |
 | Low | 10 | dead code, stale comments, cosmetic inconsistency |
+| Retracted | 1 | M6 — a measurement error, not a defect. See below. |
 
 The high finding and M1 are both about **data outliving the app**, which §8
 calls a requirement rather than a nice-to-have. Those are the two worth fixing
@@ -163,33 +184,33 @@ is the one element that now has two children and sits at a page boundary.
 
 `src/styles/app.css` print block
 
-### M6 — `hank.js` and `hank-dialogue.md` have drifted
+### ~~M6 — `hank.js` and `hank-dialogue.md` have drifted~~ — RETRACTED
 
-The check CLAUDE.md §5 calls out by name, and it has drifted.
+**Withdrawn. There is no drift.** `hank.js` holds 241 dialogue strings and
+`hank-dialogue.md` contains 241 numbered entries, with no duplicates. They
+agree exactly.
 
-- Code holds **241** dialogue strings.
-- The doc's own **Counts** line says **241** — the arithmetic is right.
-- The doc body numbers only **230**.
+The finding was a measurement error. The first count used
+`^\*\*([A-Z]{1,4}[0-9]?-[0-9]{2})` — which assumes every code looks like
+`S-04`. The doc actually uses **three** code formats, and the naive pattern
+silently dropped fourteen real entries:
 
-Eleven lines exist in the code and in the doc's totals but have no numbered
-entry anywhere in the doc. Three whole groups:
+| Format | Example | Count | Matched by the bad regex |
+|---|---|---|---|
+| `XX-NN` | `S-04` | 221 | yes |
+| `XX-WORD` | `SO-LUCKY`, `SO-FALLBACK-01` | 14 | no |
+| `XX-FNN` | `AD-F01` | 3 | no |
+| `XX-NN · Label` | `C-01 · Identity` | 3 | no (suffix inside the bold) |
 
-| Code export | Lines | Doc prefix |
-|---|---|---|
-| `SELECT_OPEN_BY_ARCHETYPE` | 5 | *(none)* |
-| `SELECT_TRIGGER` | 3 | *(none)* |
-| `ADVANCE_FIRST` | 3 | *(none — "AD-F" is referenced in the Selection order section but never defined)* |
+Recorded rather than deleted for two reasons. A future audit running the
+obvious regex will reach the same wrong answer, and should find this note
+first. And the retraction is itself the lesson: the §5 dialogue check needs a
+counter that knows the doc's real conventions, not a pattern invented on the
+spot. **That script does not exist** — writing it (or the `scripts/` generator
+that would make the code the single source) is the durable fix, and remains
+unwritten.
 
-Every other group matches exactly, which is the good news: this is three
-omissions, not general rot. But it is precisely the failure §1 predicts — "the
-doc quietly starts lying" — and the doc is what a human reads when deciding
-what to write next. `SELECT_TRIGGER` in particular is unreferenceable in
-conversation right now.
-
-The standing fix (a generator in `scripts/` making the code the single source)
-is still unwritten and would prevent recurrence.
-
-`src/data/hank.js`, `docs/hank-dialogue.md`
+Nothing to fix in either file.
 
 ### M7 — Two file headers still assert a rule that was reversed in v0.4.8
 
@@ -279,7 +300,7 @@ Recorded so a future audit does not re-litigate them.
 3. **M4, M5, M3** — the print defects. Small, isolated, and the PDF is now a
    deliverable people will actually hand round a table.
 4. **M2** — small fix, real user-visible wrongness.
-5. **M7, M6** — documentation truth. Cheap, and both mislead a future session.
+5. **M7** — documentation truth. Cheap, and it misleads a future session.
 6. **M8** — decide whether totems should be excluded; if yes, `totemSlugs` is
    already written.
 7. Lows as they are passed.

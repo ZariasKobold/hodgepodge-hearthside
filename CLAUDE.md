@@ -1,10 +1,10 @@
 # CLAUDE.md — Hodgepodge Hearthside project context
 
-<!-- HH v0.5.2 | Last updated: 2026-08-22 -->
+<!-- HH v0.6.0 | Last updated: 2026-08-22 -->
 
 ---
 
-## Current Version: 0.5.2
+## Current Version: 0.6.0
 
 ## Last Updated: 2026-08-22
 
@@ -91,21 +91,23 @@ Save to `docs/audits/audit-vX.Y.Z.md`.
 
 ## ⚠️ NEXT SESSION — pending
 
-### Audit run at v0.5.2 — see `docs/audits/audit-v0.5.2.md`
+### Audit v0.5.2 — high and all mediums fixed in v0.6.0
 
-19 findings: 1 high, 8 medium, 10 low. **None fixed yet.** The two worth doing
-before Aftermath:
+`docs/audits/audit-v0.5.2.md` holds the catalogue and now carries a status
+block. **H1, M1, M2, M3, M4, M5, M7 and L8 are done.** M6 was **retracted** —
+it was a measurement error, not drift; `hank.js` and `hank-dialogue.md` agree
+exactly at 241 lines. The ten lows are still open.
 
-- **H1** — `SignInGate` tells a locked-out user they can import their exported
-  JSON once signed in. There is no import; `importJSON` is referenced nowhere.
-- **M1** — the starting arsenal is written straight into `arsenal.models` by
-  `Record.jsx`, bypassing `createModel`, so those models have no `id`. Injuries
-  and annihilation key off `model.id`, so **a starting model cannot be injured**.
-  Aftermath phase 6 walks straight into this.
+Two things from that work worth keeping:
 
-Three medium findings (M3–M5) came from reading an exported PDF rather than the
-source, and were invisible from the code. Next audit: export the artefacts and
-read them.
+- **The dialogue check needs a real counter.** M6's false positive came from a
+  regex that assumed every code looks like `S-04`. The doc uses three formats
+  (`XX-NN`, `XX-WORD`, `XX-FNN`) plus descriptive suffixes on `C-01 · Identity`.
+  A naive pattern silently drops fourteen entries and "finds" drift that is not
+  there. The counter script is still unwritten.
+- **`createCampaign` spreads its patch last.** Passing `id: undefined` to blank
+  a field overwrites the value it just generated, and `saveCampaign` then
+  no-ops on the missing id. Strip keys, do not blank them.
 
 ### Blocking — none. Setup is complete as of 2026-08-18.
 
@@ -249,6 +251,7 @@ hodgepodge-hearthside/
 │   ├── lib/                pure logic, imports nothing from React
 │   ├── hooks/              useCampaign, useRoster, useAuth, useHank
 │   ├── components/         wizard steps and shared UI
+│   │   └── ArsenalLibrary.jsx  the shelf — one card per leader
 │   └── styles/             tokens.css holds the design direction
 ├── docs/
 │   ├── VERSION_HISTORY.md  why things were done this way
@@ -511,7 +514,7 @@ every session. `docs/VERSION_HISTORY.md` holds how it got this way.
 npm install
 cp .env.example .env
 npm run dev      # Vite only — NO Functions, NO database. useAuth degrades to signed out.
-npm run test     # 98 tests across campaign.js, campaignShape.js, rules.js and indexing.js
+npm run test     # 107 tests across campaign.js, campaignShape.js, rules.js and indexing.js
 npm run build    # production bundle — the dev proxy does NOT exist here
 npm run seed     # optional local register file; ask BiggerHat's maintainer first
 
@@ -577,6 +580,22 @@ Two rules it establishes that are easy to violate:
   `[vars]`.
 - **Never loop a query per arsenal or per model.** D1's free plan caps a Worker
   invocation at 50 queries. Fetch sets.
+
+**Campaigns live on a shelf, one per leader.** Since v0.6.0 storage holds
+`campaigns:index` (ids only), `campaign:<id>` per campaign, and
+`campaigns:active`. The index deliberately stores no leader name or faction —
+those are derived and would go stale on a rename, so the shelf reads each
+campaign to draw its card.
+
+A campaign's `arsenals` array is for **other players**, not your other leaders:
+max encounter size is min(both arsenals) + 6, so opponents have to live there.
+Your second leader is a second campaign. Do not add leaders to that array.
+
+`schemaVersion` is **2**. v1 let the creation wizard write bare
+`{slug,name,cost}` into `arsenal.models`; `migrate` backfills what `createModel`
+provides, and files those models under `STARTING_ARSENAL_WEEK` (0) so the
+starting arsenal is not mistaken for week-1 hires — which would eat the
+first-of-week discount.
 
 Build order matters: get the `Campaign` shape right locally and play a few real
 weeks *before* writing a migration. Schema built on guesses is expensive to fix

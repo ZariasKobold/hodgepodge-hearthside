@@ -3,6 +3,7 @@ import { SLOTS, slotLabel } from '../../data/archetypes.js'
 import { getEffect } from '../../data/crewCards.js'
 import { factionLabel } from '../../data/factions.js'
 import { arsenalTotal, startingScrip, STARTING_SOULSTONES } from '../../lib/campaign.js'
+import { createModel, STARTING_ARSENAL_WEEK } from '../../lib/campaignShape.js'
 import { exportJSON } from '../../lib/storage.js'
 import { sourceSlug, findEntry, findTrigger } from '../../lib/rules.js'
 import { isVersatile } from '../../lib/indexing.js'
@@ -16,7 +17,7 @@ import { CREATION, sendOff } from '../../data/hank.js'
 /** Cheapest first, so the picker reads as a shopping list. */
 const byCost = (models) => [...models].sort((a, b) => a.cost - b.cost)
 
-export default function Record({ leader, set, archetype, roster, rules, fileNumber }) {
+export default function Record({ leader, set, archetype, roster, rules, fileNumber, onDone }) {
   const spent = arsenalTotal(leader.arsenal)
   const scrip = startingScrip(spent)
   const over = spent > STARTING_SOULSTONES
@@ -76,10 +77,26 @@ export default function Record({ leader, set, archetype, roster, rules, fileNumb
   const anyText = pickSlugs.some((slug) => rules.card(slug))
   const stem = (leader.name || 'leader').toLowerCase().replace(/\s+/g, '-')
 
+  /**
+   * Goes through `createModel` like every other hire. Writing a bare
+   * `{slug,name,cost}` here left starting models without an `id`, and injuries,
+   * annihilation and removal all key off `id` — so the models most likely to be
+   * hurt in week one were the ones that could not carry an injury (audit M1).
+   */
   const addModel = (slug) => {
     const model = roster.models.find((m) => m.slug === slug)
     if (!model) return
-    set({ arsenal: [...leader.arsenal, { slug: model.slug, name: model.name, cost: model.cost }] })
+    set({
+      arsenal: [
+        ...leader.arsenal,
+        createModel({
+          slug: model.slug,
+          name: model.name,
+          cost: model.cost,
+          addedWeek: STARTING_ARSENAL_WEEK,
+        }),
+      ],
+    })
   }
 
   const dropModel = (index) =>
@@ -220,7 +237,7 @@ export default function Record({ leader, set, archetype, roster, rules, fileNumb
         </div>
 
         {leader.arsenal.map((m, i) => (
-          <div className="pick" key={`${m.slug}-${i}`} style={{ borderColor: 'var(--line)', background: 'var(--panel)' }}>
+          <div className="pick" key={m.id || `${m.slug}-${i}`} style={{ borderColor: 'var(--line)', background: 'var(--panel)' }}>
             <span className="pick__meta" style={{ fontSize: 13, color: 'var(--text)' }}>{m.name}</span>
             <span style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
               <span className="pick__meta">{m.cost}ss</span>
@@ -265,6 +282,19 @@ export default function Record({ leader, set, archetype, roster, rules, fileNumb
       {leader.arsenal.length > 0 && <CrewCards models={leader.arsenal} rules={rules} />}
 
       <HankSays>{sendOff({})}</HankSays>
+
+      {/* Everything already autosaves, so this does not "save" so much as
+          declare you are done and put the leader back on the shelf. Without it
+          the only way out of the wizard is the masthead, which reads as
+          abandoning the work rather than finishing it. */}
+      {onDone && (
+        <div className="export noprint">
+          <Button onClick={onDone}>Save and return to my leaders</Button>
+          <span className="label" style={{ margin: 0 }}>
+            Saved to this browser as you go. Export the JSON to keep a copy elsewhere.
+          </span>
+        </div>
+      )}
     </>
   )
 }

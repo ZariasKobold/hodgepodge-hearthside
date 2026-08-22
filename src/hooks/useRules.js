@@ -34,6 +34,20 @@ export function useRules() {
     return () => { alive.current = false }
   }, [])
 
+  /**
+   * Forgets a recorded failure. `RulesState` consults the error before the
+   * card, so an error left behind by an earlier blip would go on hiding text
+   * that has since loaded perfectly well (audit M2).
+   */
+  const clearError = useCallback((slug) => {
+    setErrors((prev) => {
+      if (!(slug in prev)) return prev
+      const next = { ...prev }
+      delete next[slug]
+      return next
+    })
+  }, [])
+
   const track = useCallback((slug, on) => {
     setPending((prev) => {
       if (on === prev.has(slug)) return prev
@@ -53,6 +67,7 @@ export function useRules() {
       .then(() => {
         if (!alive.current) return
         track(slug, false)
+        clearError(slug)
         bump((n) => n + 1)
       })
       .catch((err) => {
@@ -65,7 +80,7 @@ export function useRules() {
           [slug]: err instanceof RegistryError ? err.message : String(err.message || err),
         }))
       })
-  }, [track])
+  }, [track, clearError])
 
   const ensureAll = useCallback(async (slugs) => {
     const wanted = [...new Set(slugs.filter(Boolean))].filter((s) => !cachedCard(s))
@@ -84,6 +99,7 @@ export function useRules() {
     for (const slug of wanted) {
       try {
         await fetchCard(slug)
+        clearError(slug)
       } catch (err) {
         failure = err instanceof RegistryError ? err.message : String(err.message || err)
         setErrors((prev) => ({ ...prev, [slug]: failure }))
@@ -97,7 +113,7 @@ export function useRules() {
 
     if (!alive.current) return
     setBatch({ loading: false, done, total: wanted.length, error: failure })
-  }, [])
+  }, [clearError])
 
   const forget = useCallback(() => {
     forgetCards()

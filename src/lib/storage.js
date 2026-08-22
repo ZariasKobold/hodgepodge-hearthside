@@ -90,3 +90,69 @@ export function importJSON(file) {
     reader.readAsText(file)
   })
 }
+
+/* ── the campaign library ────────────────────────────────────────────
+   One key per campaign plus an index of ids, rather than one blob holding
+   everything. A twelve-week campaign is the unit people think in, and each one
+   belongs to a different leader — so switching leaders is opening a different
+   file, not editing a list inside one.
+
+   The index stores ids and nothing else. Leader name, faction and keywords all
+   live in the campaign, and a copy in the index is a copy that goes stale the
+   moment someone renames their leader (campaignShape.js: nothing derived is
+   stored). Rendering the shelf reads each campaign; there are a handful, and
+   they are already in localStorage. */
+
+const INDEX_KEY = 'campaigns:index'
+const ACTIVE_KEY = 'campaigns:active'
+const LEGACY_SINGLE = 'campaign:current'
+
+const campaignKey = (id) => `campaign:${id}`
+
+export function campaignIds() {
+  const ids = load(INDEX_KEY, [])
+  return Array.isArray(ids) ? ids.filter((id) => typeof id === 'string') : []
+}
+
+export function loadCampaign(id) {
+  return id ? load(campaignKey(id)) : null
+}
+
+/** Writes the campaign and makes sure its id is on the shelf. */
+export function saveCampaign(campaign) {
+  if (!campaign?.id) return
+  save(campaignKey(campaign.id), campaign)
+  const ids = campaignIds()
+  if (!ids.includes(campaign.id)) save(INDEX_KEY, [...ids, campaign.id])
+}
+
+export function removeCampaign(id) {
+  remove(campaignKey(id))
+  save(INDEX_KEY, campaignIds().filter((x) => x !== id))
+  if (activeCampaignId() === id) setActiveCampaignId(null)
+}
+
+export function activeCampaignId() {
+  return load(ACTIVE_KEY, null)
+}
+
+export function setActiveCampaignId(id) {
+  if (id) save(ACTIVE_KEY, id)
+  else remove(ACTIVE_KEY)
+}
+
+/**
+ * Lifts the single stored campaign onto the shelf.
+ *
+ * Everything before this shipped one campaign under one fixed key. Runs once,
+ * leaves the old key alone rather than deleting it — if this goes wrong, the
+ * only copy of somebody's twelve weeks should still be where it was.
+ */
+export function adoptLegacyCampaign() {
+  if (campaignIds().length > 0) return null
+  const legacy = load(LEGACY_SINGLE)
+  if (!legacy?.id) return null
+  saveCampaign(legacy)
+  setActiveCampaignId(legacy.id)
+  return legacy.id
+}

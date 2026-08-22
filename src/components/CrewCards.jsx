@@ -33,7 +33,9 @@ function StatCard({ card, hired }) {
         <span className="record__eyebrow">
           {[card.factionLabel, card.secondFactionLabel].filter(Boolean).join(' / ')}
         </span>
-        <span className="record__file">{hired?.cost ?? card.cost}ss</span>
+        <span className="record__file">
+          {hired?.count > 1 ? `×${hired.count} · ` : ''}{hired?.cost ?? card.cost}ss
+        </span>
       </div>
 
       <h3 className="crewcard__name">{card.name}</h3>
@@ -79,21 +81,38 @@ function StatCard({ card, hired }) {
 }
 
 export default function CrewCards({ models, rules }) {
-  const withSlug = models.filter((m) => m.slug)
-  const byHand = models.length - withSlug.length
+  /**
+   * Grouped by slug, because the arsenal holds one entry per hired model and
+   * two Swashbucklers share one card. Ungrouped, the printed dossier repeated
+   * the same page verbatim and the tally counted copies rather than cards
+   * (audit M3).
+   */
+  const distinct = []
+  const seen = new Map()
+  for (const m of models) {
+    if (!m.slug) continue
+    const already = seen.get(m.slug)
+    if (already) { already.count += 1; continue }
+    const entry = { ...m, count: 1 }
+    seen.set(m.slug, entry)
+    distinct.push(entry)
+  }
+
+  const byHand = models.filter((m) => !m.slug).length
   const { loading, done, total, error } = rules.batch
-  const loaded = withSlug.filter((m) => rules.card(m.slug))
+  const loaded = distinct.filter((m) => rules.card(m.slug))
+  const withSlug = distinct
 
   return (
     <section className="crew">
-      <div className="slot__head">
+      <div className="slot__head noprint">
         <Label>Crew cards</Label>
         {loaded.length > 0 && (
           <span className="tally">{loaded.length} of {withSlug.length} read</span>
         )}
       </div>
 
-      <div className="crew__bar">
+      <div className="crew__bar noprint">
         <Button
           onClick={() => rules.ensureAll(withSlug.map((m) => m.slug))}
           disabled={loading || withSlug.length === 0}
@@ -114,14 +133,14 @@ export default function CrewCards({ models, rules }) {
         )}
       </div>
 
-      {error && <p className="note note--warn">{error}</p>}
+      {error && <p className="note note--warn noprint">{error}</p>}
 
       {withSlug.length === 0 && models.length === 0 && (
-        <div className="empty">Hire something first and its card can be read here.</div>
+        <div className="empty noprint">Hire something first and its card can be read here.</div>
       )}
 
       {loaded.map((m) => (
-        <StatCard key={`${m.slug}-${m.id || m.name}`} card={rules.card(m.slug)} hired={m} />
+        <StatCard key={m.slug} card={rules.card(m.slug)} hired={m} />
       ))}
     </section>
   )

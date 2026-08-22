@@ -3,10 +3,18 @@ import { useState, useEffect, useCallback } from 'react'
 /**
  * Who's signed in, if anyone.
  *
- * Signed out is a normal state, not an error — accounts exist for SHARING a
- * campaign, not for using the app. The whole wizard works against local
- * storage with nobody signed in, and that has to stay true: Wyrd's permission
- * is revocable, and a login wall makes people's data harder to rescue.
+ * Signed out is a normal *state* — this hook reports it rather than treating it
+ * as an error — but it is no longer a usable one. **Play is gated behind an
+ * account** (v0.4.8, CLAUDE.md §12); `SignInGate` closes the wizard to anyone
+ * not signed in. This header claimed the reverse until the v0.5.2 audit (M7).
+ *
+ * The concern that motivated the old rule is still live and is met elsewhere:
+ * Wyrd's permission is revocable, so the gate keeps the JSON export reachable
+ * from behind it, and the shelf can import one back.
+ *
+ * `available: false` means the accounts backend is unreachable, which is every
+ * `npm run dev` session. That is distinct from being signed out, and the gate
+ * says so rather than offering a button that cannot work.
  */
 export function useAuth() {
   const [user, setUser] = useState(null)

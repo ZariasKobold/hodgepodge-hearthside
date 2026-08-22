@@ -469,6 +469,16 @@ body {
   .crewcard { break-before: page; page-break-before: always; }
   .record__section, .crewcard__entry { break-inside: avoid; page-break-inside: avoid; }
 
+  /* The foot carries the "not stored" line AND the disclaimer. Left splittable
+     it broke across the boundary and produced a page holding nothing but the
+     legal notice (audit M5). */
+  .record__foot { break-inside: avoid; page-break-inside: avoid; }
+
+  /* A record longer than a page cannot honour break-inside and would push a
+     blank page ahead of itself, so only ask it of the crew cards, which are
+     reliably short (audit L8). */
+  .record { break-inside: auto; page-break-inside: auto; }
+
   .legal-print {
     display: block; margin: 10px 0 0;
     font-family: var(--data); font-size: 7pt; line-height: 1.5; color: #555;
@@ -477,3 +487,37 @@ body {
 }
 
 @page { margin: 14mm; }
+
+
+/* the shelf — one card per leader ------------------------------------
+   Lighter than .record on purpose: a record is the finished document, this is
+   a drawer label. Same palette, less ceremony. */
+.leafcard {
+  border: 1px solid var(--line); background: var(--panel);
+  padding: 16px 18px; margin-bottom: 10px;
+}
+.leafcard:hover { border-color: var(--brass); }
+.leafcard__head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: 10px; flex-wrap: wrap; margin-bottom: 8px;
+}
+.leafcard__head .record__eyebrow { color: var(--brass); }
+.leafcard__head .record__file { color: var(--mute); }
+.leafcard__name {
+  font-family: var(--display); font-size: 24px; font-weight: 700;
+  margin: 0; line-height: 1.1; color: var(--text);
+}
+.leafcard__name--blank { color: var(--faint); font-style: italic; }
+.leafcard__line {
+  font-family: var(--data); font-size: 12px; color: var(--mute); margin-top: 6px;
+}
+.leafcard__tally {
+  display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px;
+  font-family: var(--data); font-size: 11px; letter-spacing: 1.5px;
+  text-transform: uppercase; color: var(--faint);
+}
+.leafcard__actions {
+  display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+  margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line-soft);
+}
+.leafcard__drop { color: var(--oxide); }

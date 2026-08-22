@@ -3,7 +3,7 @@ import AccountBadge from './AccountBadge.jsx'
 
 const STEPS = ['Identity', 'Archetype', 'Loadout', 'Record']
 
-export default function Masthead({ step, onJump, fileNumber, auth, admitted = true, view = 'create', onView }) {
+export default function Masthead({ step, onJump, fileNumber, auth, admitted = true, view = 'library', onView, inCampaign = false, onLibrary }) {
   const { enabled, toggle } = useHank()
 
   return (
@@ -23,30 +23,46 @@ export default function Masthead({ step, onJump, fileNumber, auth, admitted = tr
             Hank: {enabled ? 'on' : 'off'}
           </button>
           <AccountBadge auth={auth} />
-          <span className="masthead__file">{fileNumber}</span>
+          {/* Only meaningful with a campaign open; on the shelf it would be a
+              case number for nobody. */}
+          {inCampaign && <span className="masthead__file">{fileNumber}</span>}
         </div>
       </div>
 
       {admitted && (
       <nav className="views" aria-label="Section">
         <button
-          className={`views__item${view === 'create' ? ' views__item--on' : ''}`}
-          onClick={() => onView('create')}
-          aria-current={view === 'create' ? 'page' : undefined}
+          className={`views__item${view === 'library' ? ' views__item--on' : ''}`}
+          onClick={onLibrary}
+          aria-current={view === 'library' ? 'page' : undefined}
         >
-          Creation
+          Leaders
         </button>
-        <button
-          className={`views__item${view === 'campaign' ? ' views__item--on' : ''}`}
-          onClick={() => onView('campaign')}
-          aria-current={view === 'campaign' ? 'page' : undefined}
-        >
-          Campaign
-        </button>
+        {/* Creation and Campaign both edit one campaign, so they only exist
+            while one is open. Showing them on the shelf would be offering to
+            edit nobody. */}
+        {inCampaign && (
+          <>
+            <button
+              className={`views__item${view === 'create' ? ' views__item--on' : ''}`}
+              onClick={() => onView('create')}
+              aria-current={view === 'create' ? 'page' : undefined}
+            >
+              Creation
+            </button>
+            <button
+              className={`views__item${view === 'campaign' ? ' views__item--on' : ''}`}
+              onClick={() => onView('campaign')}
+              aria-current={view === 'campaign' ? 'page' : undefined}
+            >
+              Campaign
+            </button>
+          </>
+        )}
       </nav>
       )}
 
-      {admitted && view === 'create' && (
+      {admitted && inCampaign && view === 'create' && (
       <nav className="steps" aria-label="Progress">
         {STEPS.map((label, i) => {
           const state = i === step ? 'now' : i < step ? 'done' : 'todo'

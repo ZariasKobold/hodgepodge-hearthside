@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { getArchetype } from './data/archetypes.js'
 import { checkStructure } from './lib/validation.js'
 import { useCampaign } from './hooks/useCampaign.js'
@@ -14,14 +14,15 @@ import Archetype from './components/steps/Archetype.jsx'
 import Loadout from './components/steps/Loadout.jsx'
 import Record from './components/steps/Record.jsx'
 import SignInGate from './components/SignInGate.jsx'
+import ArsenalLibrary from './components/ArsenalLibrary.jsx'
 import WeeklyHire from './components/steps/WeeklyHire.jsx'
 import './styles/app.css'
 
 /** A stable case number, so the same leader always files under the same mark. */
 function fileNumber(leader) {
-  const prefix = (leader.faction || '____').slice(0, 2).toUpperCase()
+  const prefix = (leader?.faction || '____').slice(0, 2).toUpperCase()
   let hash = 0
-  for (const ch of leader.name + leader.archetype) {
+  for (const ch of (leader?.name || '') + (leader?.archetype || '')) {
     hash = (hash * 31 + ch.charCodeAt(0)) % 9000
   }
   return `HH-${prefix}-${1000 + hash}`
@@ -29,11 +30,11 @@ function fileNumber(leader) {
 
 export default function App() {
   const [step, setStep] = useState(0)
-  // Creation is a one-off; the campaign repeats for twelve weeks. Separate
-  // views rather than more wizard steps, so the weekly work doesn't pretend
-  // to be part of building a leader.
-  const [view, setView] = useState('create')
+  // Three views now. `library` is the shelf of leaders; the other two are only
+  // reachable with a campaign open, because they edit one.
+  const [view, setView] = useState('library')
   const {
+    shelf, openId, open, close, startNew, discard, adopt,
     leader, set, setPick,
     campaign, arsenal, week, mustHire, addModel, spendScrip,
   } = useCampaign()
@@ -56,9 +57,26 @@ export default function App() {
     import.meta.env.VITE_ALLOW_UNAUTHENTICATED === 'true' && !auth.available
   const admitted = Boolean(auth.user) || devBypass
 
-  const archetype = getArchetype(leader.archetype)
+  /**
+   * An empty shelf has nothing to choose between, so the first visit drops
+   * straight into building someone. Once anything is saved, the shelf is where
+   * you land — after week one the question is which campaign, not whether.
+   */
+  useEffect(() => {
+    if (!admitted) return
+    if (openId) return
+    if (shelf.length === 0 && view !== 'create') {
+      startNew()
+      setStep(0)
+      setView('create')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [admitted, openId, shelf.length])
+
+  const archetype = leader ? getArchetype(leader.archetype) : null
 
   const canAdvance = useMemo(() => {
+    if (!leader) return false
     if (step === 0) {
       const [a, b] = leader.keywords
       return Boolean(leader.name.trim() && leader.faction && a && b && a !== b)
@@ -71,15 +89,54 @@ export default function App() {
     return true
   }, [step, leader])
 
+  const openCampaign = (id) => {
+    open(id)
+    setStep(3)
+    setView('campaign')
+  }
+
+  const buildNew = () => {
+    startNew()
+    setStep(0)
+    setView('create')
+  }
+
+  const toLibrary = () => {
+    close()
+    setView('library')
+  }
+
+  const inCampaign = Boolean(openId && leader)
+
   return (
     <HankProvider>
     <div className="shell">
-      <Masthead step={step} onJump={setStep} fileNumber={fileNumber(leader)} auth={auth} admitted={admitted} view={view} onView={setView} />
+      <Masthead
+        step={step}
+        onJump={setStep}
+        fileNumber={fileNumber(leader)}
+        auth={auth}
+        admitted={admitted}
+        view={view}
+        onView={setView}
+        inCampaign={inCampaign}
+        onLibrary={toLibrary}
+      />
 
       <main className="wrap">
         {!admitted && <SignInGate auth={auth} />}
 
-        {admitted && view === 'campaign' && (
+        {admitted && view === 'library' && (
+          <ArsenalLibrary
+            shelf={shelf}
+            onOpen={openCampaign}
+            onNew={buildNew}
+            onImport={(data) => { adopt(data); setStep(3); setView('campaign') }}
+            onDiscard={discard}
+          />
+        )}
+
+        {admitted && inCampaign && view === 'campaign' && (
           <WeeklyHire
             arsenal={arsenal}
             week={week}
@@ -93,12 +150,12 @@ export default function App() {
           />
         )}
 
-        {admitted && view === 'create' && step === 0 && <Identity leader={leader} set={set} />}
-        {admitted && view === 'create' && step === 1 && <Archetype leader={leader} set={set} />}
-        {admitted && view === 'create' && step === 2 && archetype && (
+        {admitted && inCampaign && view === 'create' && step === 0 && <Identity leader={leader} set={set} />}
+        {admitted && inCampaign && view === 'create' && step === 1 && <Archetype leader={leader} set={set} />}
+        {admitted && inCampaign && view === 'create' && step === 2 && archetype && (
           <Loadout leader={leader} set={set} setPick={setPick} archetype={archetype} roster={roster} rules={rules} />
         )}
-        {admitted && view === 'create' && step === 3 && archetype && (
+        {admitted && inCampaign && view === 'create' && step === 3 && archetype && (
           <Record
             leader={leader}
             set={set}
@@ -106,10 +163,11 @@ export default function App() {
             roster={roster}
             rules={rules}
             fileNumber={fileNumber(leader)}
+            onDone={toLibrary}
           />
         )}
 
-        {admitted && view === 'create' && (
+        {admitted && inCampaign && view === 'create' && (
         <div className="nav">
           <Button ghost onClick={() => setStep(Math.max(0, step - 1))} disabled={step === 0}>
             Back

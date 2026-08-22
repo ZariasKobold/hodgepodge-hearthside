@@ -988,3 +988,92 @@ priority **before** writing fix code")
 NEXT: owner picks what to fix. Suggested order is in the audit. H1 and M1 before
 Aftermath; the three print defects are small and the PDF is now a deliverable
 people hand round a table.
+
+---
+
+### Session 18 — v0.6.0
+Date: 2026-08-22
+
+**feat: a shelf of leaders, JSON import, and the audit's high + medium findings**
+
+Two things at once: the owner asked for multiple leaders, and the v0.5.2 audit
+findings were cleared. They belong in one session because H1 and M1 both live in
+the storage layer the shelf rebuilt.
+
+**A campaign per leader, not leaders per campaign.** The obvious shape — an
+array of leaders — is wrong here, because a campaign's `arsenals` array is
+already spoken for: it holds *other players*, since max encounter size is
+min(both arsenals) + 6 and the soulstone bonus compares ratings. A second leader
+of your own could never have lived there. So storage became a shelf:
+`campaigns:index` (ids only), `campaign:<id>`, `campaigns:active`.
+
+The index stores **no** leader name or faction. Those are derived, a copy goes
+stale on a rename, and campaignShape's standing rule is that nothing derived is
+stored. Drawing the shelf reads each campaign instead; there are a handful and
+they are already local.
+
+**Landing screen depends on whether there is anything to choose between.** Empty
+shelf drops straight into creation, as before. Once anything is saved, the shelf
+is the landing screen — after week one the question is which campaign, not
+whether. Creation and Campaign only appear in the masthead while one is open;
+offering them on the shelf would be offering to edit nobody.
+
+**The legacy key is left where it is.** `adoptLegacyCampaign` copies the old
+single `campaign:current` onto the shelf and does not delete it. If the lift
+goes wrong, the only copy of somebody's twelve weeks is still where it was. That
+paid off within the hour: a bad first migration was undone by clearing the shelf
+keys and reloading.
+
+**H1, built rather than reworded.** The gate had been telling locked-out users
+they could import their export once signed in, and there was no import. There is
+now, on the shelf. An import is filed as a **new** leader with a fresh id, so
+importing the same file twice gives two campaigns and nothing on the shelf can be
+lost by importing.
+
+**M1, plus a regression it caused.** `Record.jsx` now goes through `createModel`,
+and `migrate` repairs stored campaigns at schemaVersion 2. The first cut filed
+the starting arsenal under week 1 — which made five starting models look like
+five weekly hires, and `isFirstOfWeek` false, quietly eating the 5-scrip
+first-of-week discount for a genuine week-1 hire. Caught in the browser, not in
+review. It is `STARTING_ARSENAL_WEEK` (0) now, and the migration identifies
+starting models by the absence of `addedWeek` — weekly hires always went through
+`createModel` and carried one, so only the wizard's bare writes lack it.
+
+**M6 was withdrawn.** The audit claimed `hank-dialogue.md` numbered only 230 of
+241 lines. It does not; it numbers all 241. The finding came from a counting
+regex that assumed every code looks like `S-04`, and the doc uses three formats
+plus descriptive suffixes on the creation entries. Fourteen real entries were
+silently dropped by the pattern. The retraction is kept in the audit rather than
+deleted, because the next person to run the obvious regex will get the same
+wrong answer and should find the note first.
+
+**One more trap worth writing down.** `createCampaign` spreads its patch last,
+so `createCampaign({ ...incoming, id: undefined })` overwrites the id it just
+minted, and `saveCampaign` then no-ops on the missing id — silently, with no
+error. Import appeared to do nothing. Strip the key rather than blanking it.
+
+Verified live end to end: the legacy campaign adopted onto the shelf with its
+old key intact; the card showing faction, archetype, week, keywords, model
+count, cost and scrip; *View arsenal* opening it; *Build a new leader* creating
+a second; import producing a distinct second entry with its models intact;
+discard confirming by name before removing; and the hire ledger reading "no hire
+required" rather than "5 hired this week".
+
+Tests 98 → 107.
+
+Files: src/components/ArsenalLibrary.jsx (new), src/hooks/useCampaign.js,
+       src/lib/storage.js, src/lib/campaignShape.js,
+       src/lib/campaignShape.test.js, src/App.jsx, src/components/Masthead.jsx,
+       src/components/SignInGate.jsx, src/components/AccountBadge.jsx,
+       src/hooks/useAuth.js, src/hooks/useRules.js,
+       src/components/CrewCards.jsx, src/components/steps/Record.jsx,
+       src/styles/app.css, docs/audits/audit-v0.5.2.md, CLAUDE.md,
+       package.json, docs/VERSION_HISTORY.md
+RESOLVED: audit H1, M1, M2, M3, M4, M5, M7, L8; the starting-arsenal week
+regression; the createCampaign id-blanking trap
+RETRACTED: audit M6 — hank.js and hank-dialogue.md agree exactly
+UNVERIFIED: printing the corrected PDF. The three print fixes are CSS and
+`.noprint` classes verified in the DOM, but no dialogue has been opened here.
+The owner's next export is the proof.
+NEXT: aftermath. Ten low audit findings remain open, and the dialogue-count
+script is still unwritten.

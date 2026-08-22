@@ -5,7 +5,7 @@ import {
   myArsenal, totalFor, liveModels,
   injuriesFor, injuryCountForModel, modelIsAnnihilated, activeInjuryCount,
   ratingForGame, mustHireThisWeek, gamesInWeek,
-  migrateLeaderToCampaign, SCHEMA_VERSION, DEFAULT_HOUSE_RULES,
+  migrateLeaderToCampaign, migrate, SCHEMA_VERSION, DEFAULT_HOUSE_RULES,
   hireRules, isOutOfKeyword, hiresInWeek,
 } from './campaignShape.js'
 
@@ -235,5 +235,73 @@ describe('hiresInWeek', () => {
     ] }
     expect(hiresInWeek(arsenal, 2).map((m) => m.id)).toEqual(['b', 'c'])
     expect(hiresInWeek(arsenal, 3)).toEqual([])
+  })
+})
+
+describe('migrate — v1 to v2 model repair (audit M1)', () => {
+  /* v1 let the creation wizard write bare {slug,name,cost} into
+     arsenal.models. Injuries, annihilation and removal all key off `id`, so a
+     starting model could not be hurt. These lock the repair down. */
+  const v1 = {
+    schemaVersion: 1,
+    id: 'cmp_old',
+    arsenals: [{
+      id: 'ars_1',
+      models: [
+        { slug: 'swashbuckler', name: 'Swashbuckler', cost: 4 },
+        { slug: 'skulker-skin', name: 'Skulker Skin', cost: 5 },
+      ],
+    }],
+    localArsenalId: 'ars_1',
+  }
+
+  it('gives every model an id', () => {
+    const models = migrate(v1).arsenals[0].models
+    expect(models.every((m) => typeof m.id === 'string' && m.id.length > 0)).toBe(true)
+    expect(new Set(models.map((m) => m.id)).size).toBe(2)
+  })
+
+  it('keeps what was already there', () => {
+    const [first] = migrate(v1).arsenals[0].models
+    expect(first).toMatchObject({ slug: 'swashbuckler', name: 'Swashbuckler', cost: 4 })
+  })
+
+  it('files them in week zero, so they are not counted as weekly hires', () => {
+    // Week 1 would make the starting arsenal look like five hires and eat the
+    // first-of-week discount for a genuine week-1 hire.
+    expect(migrate(v1).arsenals[0].models.every((m) => m.addedWeek === 0)).toBe(true)
+    expect(hiresInWeek(migrate(v1).arsenals[0], 1)).toEqual([])
+  })
+
+  it('backfills the fields injuries and annihilation depend on', () => {
+    const [first] = migrate(v1).arsenals[0].models
+    expect(first.annihilated).toBe(false)
+    expect(first.scripPaid).toBe(0)
+    expect(first).toHaveProperty('titleGroup')
+  })
+
+  it('stamps the current schema version', () => {
+    expect(migrate(v1).schemaVersion).toBe(SCHEMA_VERSION)
+  })
+
+  it('leaves an already-repaired model alone', () => {
+    const good = createModel({ slug: 'x', name: 'X', cost: 3, addedWeek: 4 })
+    const out = migrate({ ...v1, arsenals: [{ id: 'ars_1', models: [good] }] })
+    expect(out.arsenals[0].models[0]).toBe(good)
+  })
+
+  it('is safe to run twice', () => {
+    const once = migrate(v1)
+    const twice = migrate(once)
+    expect(twice.arsenals[0].models.map((m) => m.id)).toEqual(once.arsenals[0].models.map((m) => m.id))
+  })
+
+  it('survives a campaign with no arsenals or no models', () => {
+    expect(migrate({ id: 'c', arsenals: [] }).arsenals).toEqual([])
+    expect(migrate({ id: 'c', arsenals: [{ id: 'a' }] }).arsenals[0].models).toEqual([])
+  })
+
+  it('still returns null for nothing', () => {
+    expect(migrate(null)).toBeNull()
   })
 })

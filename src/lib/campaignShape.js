@@ -15,7 +15,15 @@ import { arsenalTotal, campaignRating, isAnnihilated, ANNIHILATION_THRESHOLD } f
  * stale the moment an injury lands.
  */
 
-export const SCHEMA_VERSION = 1
+export const SCHEMA_VERSION = 2
+
+/**
+ * The starting arsenal is bought with soulstones at creation, not hired with
+ * scrip, so it belongs to no week. Week 0 keeps it out of `hiresInWeek` — which
+ * matters, because `isFirstOfWeek` drives the 5-scrip discount and a starting
+ * arsenal counted as week-1 hires would quietly eat it.
+ */
+export const STARTING_ARSENAL_WEEK = 0
 
 export const DEFAULT_HOUSE_RULES = {
   /** The book leaves a 3-cost first hire computing to −2 and never resolves it. */
@@ -289,9 +297,52 @@ export function migrateLeaderToCampaign(old) {
   return createCampaign({ arsenals: [arsenal], localArsenalId: arsenal.id })
 }
 
-/** Future schema bumps chain here rather than scattering version checks. */
+/**
+ * Backfills the fields `createModel` would have given a model.
+ *
+ * v1 let the creation wizard write `{slug, name, cost}` straight into
+ * `arsenal.models`, so starting models had no `id` — and injuries, annihilation
+ * and removal all key off `id`. A starting model could not be hurt. This
+ * repairs stored campaigns rather than leaving two shapes in circulation.
+ *
+ * `addedWeek` defaults to 1 because anything without one predates the weekly
+ * hire; that is where the starting arsenal belongs.
+ */
+function repairModel(model) {
+  if (model && model.id) return model
+  // An absent `addedWeek` identifies itself: weekly hires always went through
+  // `createModel` and carried one, so only the creation wizard's bare writes
+  // are missing it. Those are the starting arsenal.
+  return createModel({
+    ...model,
+    addedWeek: model?.addedWeek ?? STARTING_ARSENAL_WEEK,
+  })
+}
+
+/**
+ * Future schema bumps chain here rather than scattering version checks.
+ *
+ * Each step is written to be safe to run on already-correct data, so a
+ * campaign that arrives by import rather than from localStorage can be passed
+ * through the same door.
+ */
 export function migrate(campaign) {
   if (!campaign) return null
-  if (!campaign.schemaVersion) return { ...campaign, schemaVersion: SCHEMA_VERSION }
-  return campaign
+
+  let next = campaign
+
+  // v1 → v2: every model gains the fields createModel provides.
+  if ((next.schemaVersion || 1) < 2 || !next.schemaVersion) {
+    next = {
+      ...next,
+      arsenals: (next.arsenals || []).map((a) => ({
+        ...a,
+        models: (a.models || []).map(repairModel),
+      })),
+    }
+  }
+
+  return next.schemaVersion === SCHEMA_VERSION
+    ? next
+    : { ...next, schemaVersion: SCHEMA_VERSION }
 }

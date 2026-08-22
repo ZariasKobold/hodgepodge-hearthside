@@ -1,10 +1,15 @@
 /**
  * The sign-in control, and nothing else.
  *
- * Signed out is a first-class state, never an error to recover from. The whole
- * app works against local storage with nobody signed in and that has to stay
- * true — accounts exist so a campaign can be SHARED, not so it can be used
- * (docs/data-model.md §3). Nothing here gates anything.
+ * **Play is gated behind an account** (v0.4.8, CLAUDE.md §12). This header used
+ * to say the opposite — that accounts were for sharing and nothing gated
+ * anything — and went on saying it for eight versions after the rule changed,
+ * citing a section of data-model.md that had already been marked superseded.
+ * Corrected in the v0.5.2 audit (M7).
+ *
+ * The gating itself lives in `SignInGate`, not here; this is still only a
+ * control. But it is no longer true that the app works signed out, and a future
+ * session should not read this file and conclude otherwise.
  *
  * Renders nothing at all when the backend is absent, which is every
  * `npm run dev` session, since Vite serves no Functions. A sign-in button

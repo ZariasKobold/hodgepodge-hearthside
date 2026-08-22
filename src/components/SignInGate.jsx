@@ -29,7 +29,8 @@ export default function SignInGate({ auth }) {
       >
         Export it to JSON
       </button>{' '}
-      — you can import it once you're signed in.
+      — once you're signed in, <strong>Import from JSON</strong> on the leaders
+      screen files it back.
     </p>
   )
 
