@@ -925,3 +925,66 @@ section; a test that asserted the wrong rule
 NEXT: the audit is still due, then aftermath. Campaign-earned triggers are not
 modelled at all — when advancement lands, `leader.trigger` will need to become
 a list rather than a single string.
+
+---
+
+### Session 17 — audit of v0.5.2
+Date: 2026-08-22
+
+**audit: first full pass, 19 findings, none fixed**
+
+No version bump and no code changed. The version stays at 0.5.2 deliberately —
+the audit is *of* v0.5.2 and `docs/audits/audit-v0.5.2.md` encodes that in its
+filename; bumping would make the document's name lie about what it examined.
+Numbered here anyway, because §5's cadence counts entries in this file and a
+skipped number would drift the next scheduled audit.
+
+Full catalogue in `docs/audits/audit-v0.5.2.md`. Summary: **1 high, 8 medium,
+10 low.**
+
+**The method change worth keeping.** An exported PDF from a real session was
+available this time, and reading it found three defects (M3–M5) that were
+invisible in the source: a "Refresh crew cards" button printed into the PDF, a
+page containing nothing but the legal disclaimer where `.record__foot` split at
+a page boundary, and the same Swashbuckler printed twice because `CrewCards`
+maps arsenal entries rather than distinct models. Next audit: **export the
+artefacts and read them**, not just the code.
+
+**The two that block Aftermath:**
+
+- **H1** — `SignInGate` tells a locked-out user "you can import it once you're
+  signed in". There is no import. `importJSON` exists in `storage.js` and is
+  referenced by nothing; there is no file input anywhere in `src/components/`.
+  The sentence sits next to the export button on the one screen shown to people
+  who cannot get into the app.
+- **M1** — `Record.jsx` writes `{slug, name, cost}` straight into
+  `arsenal.models`, bypassing `createModel`. So the starting arsenal and the
+  weekly hires are different shapes with the same name, and starting models have
+  no `id`. Injuries key off `model.id`, so a starting model cannot be injured or
+  annihilated — and phase 6 of Aftermath is injuries.
+
+**On the cadence itself.** The §5 trigger fired at v0.5.0 and three feature
+sessions ran before the audit did. Two of the mediums found here (M2, M3) were
+introduced during that window. The trigger worked; the response to it didn't.
+Recorded in the audit as: treat "audit due" as blocking the next feature rather
+than as a note in the queue.
+
+**What held.** `src/lib/` still imports nothing from React across all nine
+modules including the three added since v0.5.0. `src/` and `functions/` still
+do not import from each other. Nothing persists rules text — `rules.js` reaches
+`storage.js` only for `downloadBlob`, and no `save()` call anywhere touches a
+description. Migrations remain append-only.
+
+**What drifted.** `hank.js` holds 241 dialogue strings and the doc's Counts line
+agrees, but the doc body numbers only 230 — `SELECT_OPEN_BY_ARCHETYPE` (5),
+`SELECT_TRIGGER` (3) and `ADVANCE_FIRST` (3) have no numbered entries at all.
+And `AccountBadge.jsx` and `useAuth.js` still assert the pre-v0.4.8 rule that
+nothing gates play, with `AccountBadge` citing `data-model.md §3` as authority
+for a claim that document now marks superseded.
+
+Files: docs/audits/audit-v0.5.2.md (new), CLAUDE.md, docs/VERSION_HISTORY.md
+RESOLVED: nothing — this is a catalogue, per §5 ("catalogue findings by
+priority **before** writing fix code")
+NEXT: owner picks what to fix. Suggested order is in the audit. H1 and M1 before
+Aftermath; the three print defects are small and the PDF is now a deliverable
+people hand round a table.

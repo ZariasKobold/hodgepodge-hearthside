@@ -91,12 +91,21 @@ Save to `docs/audits/audit-vX.Y.Z.md`.
 
 ## ⚠️ NEXT SESSION — pending
 
-### ⚠️ An audit is due before the next feature.
+### Audit run at v0.5.2 — see `docs/audits/audit-v0.5.2.md`
 
-v0.5.0 touched 18 files and added a shared module (`src/lib/rules.js`), which
-fires the "8+ files or a shared module" trigger in §5 above. It also changed a
-standing rule (§4), which is exactly the kind of thing that drifts silently.
-Run the audit ritual before starting Aftermath.
+19 findings: 1 high, 8 medium, 10 low. **None fixed yet.** The two worth doing
+before Aftermath:
+
+- **H1** — `SignInGate` tells a locked-out user they can import their exported
+  JSON once signed in. There is no import; `importJSON` is referenced nowhere.
+- **M1** — the starting arsenal is written straight into `arsenal.models` by
+  `Record.jsx`, bypassing `createModel`, so those models have no `id`. Injuries
+  and annihilation key off `model.id`, so **a starting model cannot be injured**.
+  Aftermath phase 6 walks straight into this.
+
+Three medium findings (M3–M5) came from reading an exported PDF rather than the
+source, and were invisible from the code. Next audit: export the artefacts and
+read them.
 
 ### Blocking — none. Setup is complete as of 2026-08-18.
 
