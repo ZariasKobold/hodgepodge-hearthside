@@ -44,14 +44,36 @@ export function remove(key) {
   else memory.delete(key)
 }
 
-export function exportJSON(data, filename) {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+/**
+ * Hands a blob to the browser as a download.
+ *
+ * The anchor goes into the document and the object URL is revoked on a later
+ * turn of the event loop rather than on the next line. Revoking immediately
+ * races the download the click just started: the browser may not have read the
+ * blob yet, and the file lands as a half-written `.crdownload` that never
+ * finishes. Data portability is a requirement here (§8), so this path is worth
+ * the extra four lines.
+ */
+export function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = url
   anchor.download = filename
+  anchor.rel = 'noopener'
+  anchor.style.display = 'none'
+  document.body.appendChild(anchor)
   anchor.click()
-  URL.revokeObjectURL(url)
+  setTimeout(() => {
+    anchor.remove()
+    URL.revokeObjectURL(url)
+  }, 30_000)
+}
+
+export function exportJSON(data, filename) {
+  downloadBlob(
+    new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }),
+    filename
+  )
 }
 
 export function importJSON(file) {

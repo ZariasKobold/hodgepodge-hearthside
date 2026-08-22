@@ -3,10 +3,12 @@ import { getArchetype } from './data/archetypes.js'
 import { checkStructure } from './lib/validation.js'
 import { useCampaign } from './hooks/useCampaign.js'
 import { useRoster } from './hooks/useRoster.js'
+import { useRules } from './hooks/useRules.js'
 import { useAuth } from './hooks/useAuth.js'
 import { HankProvider } from './hooks/useHank.jsx'
 import Masthead from './components/Masthead.jsx'
 import { Button } from './components/ui.jsx'
+import { LEGAL } from './lib/recordImage.js'
 import Identity from './components/steps/Identity.jsx'
 import Archetype from './components/steps/Archetype.jsx'
 import Loadout from './components/steps/Loadout.jsx'
@@ -36,6 +38,10 @@ export default function App() {
     campaign, arsenal, week, mustHire, addModel, spendScrip,
   } = useCampaign()
   const roster = useRoster()
+  // Rules text is fetched live and held only in memory (§4). One instance for
+  // the whole tree so the loadout's hover lookups and the record's writeout
+  // share the same in-flight requests instead of racing each other.
+  const rules = useRules()
   // Held here rather than inside the badge so there is exactly one /api/auth/me
   // per load, and so the storage adapter has it to hand when it lands.
   const auth = useAuth()
@@ -90,7 +96,7 @@ export default function App() {
         {admitted && view === 'create' && step === 0 && <Identity leader={leader} set={set} />}
         {admitted && view === 'create' && step === 1 && <Archetype leader={leader} set={set} />}
         {admitted && view === 'create' && step === 2 && archetype && (
-          <Loadout leader={leader} set={set} setPick={setPick} archetype={archetype} roster={roster} />
+          <Loadout leader={leader} set={set} setPick={setPick} archetype={archetype} roster={roster} rules={rules} />
         )}
         {admitted && view === 'create' && step === 3 && archetype && (
           <Record
@@ -98,6 +104,7 @@ export default function App() {
             set={set}
             archetype={archetype}
             roster={roster}
+            rules={rules}
             fileNumber={fileNumber(leader)}
           />
         )}
@@ -115,11 +122,7 @@ export default function App() {
         </div>
         )}
 
-        <p className="colophon">
-          Portions of the materials used are copyrighted works of Wyrd Miniatures, LLC, in the United
-          States of America and elsewhere. All rights reserved, Wyrd Miniatures, LLC. This material is
-          not official and is not endorsed by Wyrd Miniatures, LLC. Model data from BiggerHat.
-        </p>
+        <p className="colophon">{LEGAL}</p>
       </main>
     </div>
     </HankProvider>

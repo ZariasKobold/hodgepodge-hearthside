@@ -1,37 +1,35 @@
-import { useState, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import { FACTIONS } from '../../data/factions.js'
 import { registry } from '../../lib/api.js'
 import { Label, Field, Input, Chip } from '../ui.jsx'
+import Combobox from '../Combobox.jsx'
 import HankSays from '../HankSays.jsx'
 import { CREATION } from '../../data/hank.js'
 
+/**
+ * Only the slug is stored — the roster fetch keys off it, and a display name
+ * is the register's to change. Names picked from search are remembered for
+ * this visit so the boxes read "Bayou Bushwhacker" rather than
+ * "bayou-bushwhacker"; on a reload the slug is titled up instead, which is
+ * right often enough and never wrong in a way that misleads.
+ */
+const titleize = (slug) =>
+  String(slug || '')
+    .split('-')
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ')
+
 export default function Identity({ leader, set }) {
-  const [query, setQuery] = useState('')
-  const [results, setResults] = useState([])
-  const [slot, setSlot] = useState(0)
-  const [searchFailed, setSearchFailed] = useState(false)
+  const [names, setNames] = useState({})
 
-  useEffect(() => {
-    if (query.trim().length < 2) { setResults([]); return }
-    const controller = new AbortController()
-    const timer = setTimeout(async () => {
-      try {
-        const found = await registry.searchKeywords(query.trim(), { signal: controller.signal })
-        setResults(found.slice(0, 8))
-        setSearchFailed(false)
-      } catch {
-        setResults([])
-        setSearchFailed(true)
-      }
-    }, 350)
-    return () => { controller.abort(); clearTimeout(timer) }
-  }, [query])
+  const search = useCallback((term, opts) => registry.searchKeywords(term, opts), [])
 
-  const pickKeyword = (kwSlug) => {
+  const pick = (index) => (slug, option) => {
+    if (option && !option.raw) setNames((prev) => ({ ...prev, [option.slug]: option.name }))
     const next = [...leader.keywords]
-    next[slot] = kwSlug
+    next[index] = slug
     set({ keywords: next })
-    setQuery(''); setResults([])
   }
 
   const duplicate = leader.keywords[0] && leader.keywords[0] === leader.keywords[1]
@@ -62,62 +60,20 @@ export default function Identity({ leader, set }) {
 
       <Field>
         <Label>Two keywords — at least one holding a model of your faction</Label>
-        <div className="pair" style={{ marginBottom: 8 }}>
+        <div className="pair">
           {[0, 1].map((i) => (
-            <button
+            <Combobox
               key={i}
-              className="chip"
-              onClick={() => { setSlot(i); setQuery('') }}
-              style={{
-                borderColor: slot === i ? 'var(--oxide)' : 'var(--line)',
-                color: leader.keywords[i] ? 'var(--text)' : 'var(--mute)',
-                padding: '9px 11px', fontSize: 13, textAlign: 'left',
-              }}
-            >
-              {leader.keywords[i] || `keyword ${i + 1}`}
-            </button>
+              label={`Keyword ${i + 1}`}
+              value={leader.keywords[i] || ''}
+              display={names[leader.keywords[i]] || titleize(leader.keywords[i])}
+              onChange={pick(i)}
+              search={search}
+              placeholder={`Search keyword ${i + 1}…`}
+              rawHint="use this slug"
+            />
           ))}
         </div>
-
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={`Search for keyword ${slot + 1}…`}
-        />
-
-        {results.length > 0 && (
-          <div style={{ border: '1px solid var(--line)', borderTop: 'none' }}>
-            {results.map((k) => (
-              <button className="row" key={k.slug} onClick={() => pickKeyword(k.slug)}>
-                <span>{k.name}</span>
-                <span className="row__meta">{k.slug}</span>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {searchFailed && (
-          <>
-            <p className="note note--warn">
-              Search didn't reach the register. Type the keyword slugs straight in — the loadout
-              step falls back to entry by hand.
-            </p>
-            <div className="pair" style={{ marginTop: 8 }}>
-              {[0, 1].map((i) => (
-                <Input
-                  key={i}
-                  placeholder={`keyword ${i + 1} slug`}
-                  value={leader.keywords[i]}
-                  onChange={(e) => {
-                    const next = [...leader.keywords]
-                    next[i] = e.target.value.trim()
-                    set({ keywords: next })
-                  }}
-                />
-              ))}
-            </div>
-          </>
-        )}
 
         {duplicate && <p className="note note--warn">Pick two different keywords.</p>}
       </Field>

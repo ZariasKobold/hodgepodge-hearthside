@@ -664,3 +664,116 @@ UNVERIFIED: the register-backed path — every live test used manual entry, sinc
 the checkbox exists so a wrong guess is correctable rather than binding.
 NEXT: aftermath — six ordered phases, ONE stateful flow, not six screens. Then
 barter, healing, advancement.
+
+---
+
+### Session 14 — v0.5.0
+Date: 2026-08-22
+
+**feat: rules text shown live, searchable keywords, image/PDF export, crew cards**
+
+Five changes, one of which required breaking a standing rule and so was put to
+the owner before any code was written.
+
+**§4 was amended, not overridden.** The rule read "never add a field that
+carries rules text". BiggerHat does serve it — `description` on every action,
+trigger and ability, plus range/stat/damage — so the feature was possible; the
+question was whether it should be. §4 gave two reasons and they came apart
+cleanly under inspection:
+
+- *Errata would make us the maintainer.* Fully preserved. `src/lib/rules.js`
+  holds text in a module-level Map that dies with the tab. Nothing reaches
+  localStorage, the JSON export, or D1. An errata takes effect on the next page
+  load because there is nothing to go stale.
+- *It competes with the funnel that sells cards.* Not a technical question, so
+  it was the owner's to answer. Answered yes-with-limits, noting BiggerHat
+  already republishes the same text publicly under the same fan policy.
+
+The boundary now in §4: **fetch and display, never persist.** `toIndexedModel`
+and `toCard` are near-identical on purpose — one lossy, one not — and everything
+that persists still travels the lossy path. They must not be merged.
+
+**Bounded auto-load, unbounded behind a button.** The record's selections come
+from at most four models, so their text is fetched without being asked for. An
+arsenal grows for twelve weeks, so crew cards wait for a click. Same register,
+different blast radius; the button is also the honest signal that this needs
+BiggerHat to be up.
+
+**Keyword entry is two comboboxes now.** The old arrangement was one shared
+search box plus a slot selector, which made the player track which slot the box
+was pointed at. Each slot owns its input. Real listbox semantics, so arrow keys
+and Enter work; falls back to typed slug entry when search fails, because the
+register is allowed to be down (§6).
+
+**Hover text, two different mechanisms, for one concrete reason.** Chosen picks
+get a floating popover. Candidate rows get a panel *below* the scroller instead
+— an absolutely-positioned tip inside an `overflow-y: auto` list is clipped by
+its own container. The panel also holds still while you keep browsing. Both
+trigger on focus as well as hover.
+
+**PNG is drawn on a canvas, not screenshotted.** No rasteriser dependency added
+to a project that ships React and nothing else, and the sheet is laid out for
+paper rather than inheriting the window width. Measuring and painting are one
+pass, so the two cannot disagree about where a line broke. PDF goes through the
+print dialogue — every browser has a competent PDF writer behind "Save as PDF",
+and the print stylesheet had to exist for paper anyway.
+
+**Wyrd's disclaimer follows the exports.** §8 requires it on every page and an
+exported file is a page that outlives this app. It is drawn into the PNG and
+rendered print-only inside `.record` and every `.crewcard` (each starts its own
+printed page). `LEGAL` is now one constant; the colophon uses it too.
+
+**Two bugs found by driving the browser, not by reading:**
+
+- `useRules` guarded its async results with an `alive` ref cleared on unmount.
+  StrictMode mounts, tears down and remounts in development, so the flag stayed
+  false after the second pass and *every* response was silently discarded — the
+  panel sat on "Reading the register…" forever. The flag is now set on the way
+  in as well as cleared on the way out.
+- `exportJSON` revoked its object URL on the line after `anchor.click()`, which
+  races the download the click just started. Downloads folder had a stalled
+  `cletus-and-duke-carcinus.json.crdownload` from the owner's own session as
+  evidence. Now a shared `downloadBlob` helper attaches the anchor and revokes
+  on a timer. The image export uses the same path.
+
+**The `{{icon}}` vocabulary is small, closed, and typo-ridden.** Sampled ~1000
+actions/abilities/triggers: 21 distinct tokens, of which `{{missle}}`,
+`{{{pulse}}`, `{{saction}}` and `{{stone-}}` are upstream typos. The parser is
+deliberately forgiving and renders an unknown token as a word rather than
+leaking braces. Icons are rendered as spans, never `dangerouslySetInnerHTML` —
+the text is someone else's and arrives over the network.
+
+On the card a glyph touches its measurement (`{{pulse}}2"`); spelled out as a
+word that reads as "Pulse2", so a space is reinserted for multi-character
+labels and withheld for `+` and `−`.
+
+**Verified live against BiggerHat, not reasoned about.** Keyword search by mouse
+and by keyboard; a full leader built; hover text on both mechanisms; the record
+writing out four selections with stat lines and triggers; three crew cards
+loaded; the PNG exported and its ink profile measured (margins land at exactly
+54px both sides, ink spans every band, nothing overflows). Then `fetch` was
+stubbed to fail: the record falls back to names and costs, the footer reverts to
+"Rules text lives on your cards", each entry shows the register error, and all
+three export buttons still work.
+
+Tests 53 → 78.
+
+Files: src/lib/rules.js (new), src/lib/rules.test.js (new),
+       src/lib/recordImage.js (new), src/hooks/useRules.js (new),
+       src/components/Combobox.jsx (new), src/components/RulesText.jsx (new),
+       src/components/CrewCards.jsx (new), src/components/SelectionSlot.jsx,
+       src/components/ui.jsx, src/components/steps/Identity.jsx,
+       src/components/steps/Loadout.jsx, src/components/steps/Record.jsx,
+       src/lib/storage.js, src/App.jsx, src/styles/app.css,
+       CLAUDE.md, package.json, docs/VERSION_HISTORY.md
+RESOLVED: the BiggerHat "never verified" bullet — the thin-record second-fetch
+path in useRoster.js was the unproven branch and it is the one that runs;
+the StrictMode discard bug; the stalled-download bug (also fixes JSON export)
+CORRECTED: v0.4.9 claimed `npm run dev` cannot reach BiggerHat. It can — that
+is what the Vite proxy in `vite.config.js` is for. Only Functions and D1 are
+absent locally.
+UNVERIFIED: printing to actual PDF (the preview browser cannot open a print
+dialogue, and it does not complete downloads to disk either — the PNG blob was
+validated in-page instead). `/strategies` and `/schemes` still never called.
+NEXT: an audit is due (18 files, a new shared module, and a changed rule), then
+aftermath — six ordered phases, ONE stateful flow, not six screens.

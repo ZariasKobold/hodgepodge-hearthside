@@ -1,3 +1,5 @@
+import { LEGAL } from '../lib/recordImage.js'
+
 export function Label({ children }) {
   return <div className="label">{children}</div>
 }
@@ -40,4 +42,15 @@ export function Select({ children, ...rest }) {
       {children}
     </select>
   )
+}
+
+/**
+ * Wyrd's disclaimer, repeated onto anything that leaves the screen.
+ *
+ * §8 requires it on every page. The colophon covers the app; this covers the
+ * printed record and each crew card, so a sheet that gets separated from the
+ * others still carries it.
+ */
+export function PrintLegal() {
+  return <p className="legal-print">{LEGAL}</p>
 }

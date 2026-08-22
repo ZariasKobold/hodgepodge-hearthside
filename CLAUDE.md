@@ -1,12 +1,12 @@
 # CLAUDE.md — Hodgepodge Hearthside project context
 
-<!-- HH v0.4.9 | Last updated: 2026-08-18 -->
+<!-- HH v0.5.0 | Last updated: 2026-08-22 -->
 
 ---
 
-## Current Version: 0.4.9
+## Current Version: 0.5.0
 
-## Last Updated: 2026-08-18
+## Last Updated: 2026-08-22
 
 **Live at hodgepodgehearthside.com** (Cloudflare Pages, auto-deploys on push to
 `main`). Repo: `ZariasKobold/hodgepodge-hearthside`.
@@ -73,7 +73,7 @@ Feature sessions ship features and miss cross-file drift. Audit whenever any
 of these fire:
 
 - Every 10 sessions, counted from the numbered entries in `docs/VERSION_HISTORY.md`
-  (next scheduled: **Session 10**). Sessions are counted rather than version
+  (next scheduled: **Session 20**). Sessions are counted rather than version
   numbers because a minor bump skips a patch series and makes a version-based
   target unreachable — which is exactly what happened to the old v0.3.10 target.
 - Before any milestone that widens blast radius: first D1 write, first
@@ -90,6 +90,13 @@ Save to `docs/audits/audit-vX.Y.Z.md`.
 ---
 
 ## ⚠️ NEXT SESSION — pending
+
+### ⚠️ An audit is due before the next feature.
+
+v0.5.0 touched 18 files and added a shared module (`src/lib/rules.js`), which
+fires the "8+ files or a shared module" trigger in §5 above. It also changed a
+standing rule (§4), which is exactly the kind of thing that drifts silently.
+Run the audit ritual before starting Aftermath.
 
 ### Blocking — none. Setup is complete as of 2026-08-18.
 
@@ -112,26 +119,30 @@ Two facts from that setup worth keeping, because both cost time to learn:
 
 ### Next feature work, in order
 
-1. ~~**Weekly hire UI.**~~ **Done v0.4.9.** `WeeklyHire.jsx`, reachable from the
-   new Campaign view. Register-or-manual entry, the `.gap-note` for the
-   negative-scrip rule in both Hank modes, and the floor explained inline when
-   it actually bites.
-2. **Aftermath.** Six ordered phases; see `AFTERMATH_PHASES`. Must be ONE
+1. **Aftermath.** Six ordered phases; see `AFTERMATH_PHASES`. Must be ONE
    stateful flow, not six screens — the fate deck isn't reshuffled between
    phases.
-3. **Remote storage adapter.** `src/lib/storage.js` still writes only to
+2. **Remote storage adapter.** `src/lib/storage.js` still writes only to
    localStorage. Split into local/remote behind the existing interface; local
    stays the fallback, never a stepping stone.
-4. **Visual design pass.** Functional but plain. Tokens are in
+3. **Visual design pass.** Functional but plain. Tokens are in
    `src/styles/tokens.css`; the records-office direction is deliberate and
    documented in the file header.
 
 ### Never verified
 
-- **Every BiggerHat call.** Paths come from their OpenAPI spec, not a live
-  response. `/keywords/{slug}` may return characters with actions attached, or
-  thin records needing a second fetch — `useRoster.js` handles both, but only
-  one path has ever executed.
+- ~~**Every BiggerHat call.**~~ **Verified 2026-08-22.** `/keywords/{slug}`,
+  `/characters/{slug}`, `/keywords?search=` and `/factions` all executed against
+  the live register. `/keywords/{slug}` returns **thin** records with no actions,
+  so `useRoster.js`'s second-fetch path is the one that runs — it was the
+  unproven branch and it works. Still unexercised: `/strategies`, `/schemes`.
+
+  Their OpenAPI spec is at `https://biggerhat.net/docs/api.json` (not
+  `/openapi.json`). **There is no crew-card endpoint** — the Malifaux namespace
+  has characters, actions, abilities, upgrades, triggers, keywords, factions,
+  markers and tokens; `/crews/{shareCode}` is a user-built crew list, not the
+  starting crew card effects, which are book content and live in
+  `src/data/crewCards.js`.
 - ~~**The register proxy Function.**~~ **Verified 2026-08-18** —
   `/api/v1/factions` returns real faction JSON from BiggerHat in production.
   First BiggerHat call ever to actually execute. The other endpoints are still
@@ -157,7 +168,7 @@ Two facts from that setup worth keeping, because both cost time to learn:
 
 ### Written but not wired
 
-Aftermath, barter, weekly hire, healing, advancement, annihilation, campaign
+Aftermath, barter, healing, advancement, annihilation, campaign
 end. Both halves exist — arithmetic in `src/lib/campaign.js` (tested), narration
 in `src/data/hank.js`. Missing piece is UI plus the `Campaign` object.
 
@@ -318,8 +329,38 @@ Two reasons, and the second is the durable one:
 2. Card text changes with errata. Names and costs change far less. Storing text
    would make you its permanent maintainer.
 
-**Never add a field that carries rules text.** If a feature seems to need it,
-the feature is wrong.
+**Never add a field that carries rules text to anything that persists.** Not to
+the indexed model, not to a localStorage key, not to the JSON export, not to
+D1. If a feature seems to need that, the feature is wrong.
+
+### The display-only exception — added v0.5.0 by owner decision
+
+Rules text **may be shown**, provided it is fetched live and never kept.
+`src/lib/rules.js` is the only module allowed to hold it, in a module-level Map
+that dies with the tab. It imports nothing from `storage.js` except the
+download helper, and nothing writes it back.
+
+This splits the two reasons above rather than overriding them. Reason 2 is
+fully preserved: nothing is cached across sessions, so a Wyrd errata takes
+effect on the next page load and this app never becomes the text's maintainer.
+Reason 1 was the owner's call to make, and was made — with the note that
+BiggerHat already republishes the same text publicly under the same fan policy.
+
+The line to hold:
+
+| Allowed | Not allowed |
+|---|---|
+| Fetching `description` for display | Persisting it anywhere |
+| The record, hover tips, crew cards | Putting it in the JSON export |
+| Drawing it into a PNG/PDF the player asked for | Caching it in localStorage or D1 |
+
+`toIndexedModel` and `toCard` are near-identical normalisers on purpose — one
+is deliberately lossy and the other deliberately is not. **Do not merge them.**
+Everything that persists travels the lossy path.
+
+An export the player explicitly asks for is a page they already have on screen,
+so the PNG and the print sheet carry the text. The JSON export does not, because
+that file is the durable one (§8).
 
 ---
 
@@ -437,7 +478,7 @@ every session. `docs/VERSION_HISTORY.md` holds how it got this way.
 npm install
 cp .env.example .env
 npm run dev      # Vite only — NO Functions, NO database. useAuth degrades to signed out.
-npm run test     # 45 tests across campaign.js and campaignShape.js
+npm run test     # 78 tests across campaign.js, campaignShape.js and rules.js
 npm run build    # production bundle — the dev proxy does NOT exist here
 npm run seed     # optional local register file; ask BiggerHat's maintainer first
 

@@ -6,7 +6,7 @@ import HankSays from '../HankSays.jsx'
 import { CREATION, selectGreeting, selectOffline, selectTrigger, selectDone } from '../../data/hank.js'
 import SelectionSlot from '../SelectionSlot.jsx'
 
-export default function Loadout({ leader, set, setPick, archetype, roster }) {
+export default function Loadout({ leader, set, setPick, archetype, roster, rules }) {
   const { models, loading, progress, error, loadKeywords } = roster
   const triggers = availableTriggers(leader.picks)
   const effect = getEffect(leader.crewCard.effect)
@@ -50,6 +50,7 @@ export default function Loadout({ leader, set, setPick, archetype, roster }) {
           archetype={archetype}
           leader={leader}
           roster={models}
+          rules={rules}
           onChange={setPick}
         />
       ))}
