@@ -50,6 +50,24 @@ export function isSelectionSource(model) {
   )
 }
 
+/**
+ * Versatile models may be hired by any crew of their faction, keyword or not.
+ *
+ * Read from `characteristics`, which the faction index and the character detail
+ * both carry — the *keyword* index does not, which is why a model loaded only
+ * through `/keywords/{slug}` can look non-Versatile until its detail arrives.
+ * Compared case-insensitively because it is someone else's free-text list.
+ *
+ * This governs **hiring only**. It does not make a model a legal source for a
+ * leader selection: that rule is keyword overlap and lives in `checkSource`,
+ * which is deliberately untouched by this.
+ */
+export function isVersatile(model) {
+  return (model?.characteristics || []).some(
+    (c) => String(c).toLowerCase() === 'versatile'
+  )
+}
+
 /** Totems are named by the character that owns them, so collect them separately. */
 export function totemSlugs(models) {
   return new Set(models.map((m) => m.totemSlug).filter(Boolean))

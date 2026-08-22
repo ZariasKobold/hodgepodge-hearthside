@@ -1,6 +1,8 @@
 import { useState, useMemo } from 'react'
 import { hireCost, FIRST_HIRE_DISCOUNT, OUT_OF_KEYWORD_SURCHARGE } from '../../lib/campaign.js'
 import { hireRules, isOutOfKeyword, hiresInWeek } from '../../lib/campaignShape.js'
+import { isVersatile as versatileModel } from '../../lib/indexing.js'
+import { factionLabel } from '../../data/factions.js'
 import { Label, Field, Button, Input, Select } from '../ui.jsx'
 import HankSays from '../HankSays.jsx'
 import { hireGreeting, hireReaction, hireCantAfford, hireDone } from '../../data/hank.js'
@@ -20,7 +22,16 @@ import { hireGreeting, hireReaction, hireCantAfford, hireDone } from '../../data
 export default function WeeklyHire({ arsenal, week, houseRules, mustHire, roster, onHire }) {
   const [slug, setSlug] = useState('')
   const [manual, setManual] = useState({ name: '', cost: '' })
-  const [versatile, setVersatile] = useState(false)
+  // Tri-state on purpose: null follows the register, true/false is the player
+  // overriding it. A plain boolean ORed with detection made the checkbox
+  // unclickable in the one case that matters — a model the register already
+  // calls Versatile, where unticking silently did nothing.
+  const [versatileOverride, setVersatileOverride] = useState(null)
+
+  // Split so a Versatile model showing up outside your keywords reads as a
+  // rule rather than a bug. Both are equally hirable; only the surcharge differs.
+  const versatilePool = useMemo(() => roster.models.filter(versatileModel), [roster.models])
+  const keywordPool = useMemo(() => roster.models.filter((m) => !versatileModel(m)), [roster.models])
 
   const hiredThisWeek = hiresInWeek(arsenal, week)
   const isFirstOfWeek = hiredThisWeek.length === 0
@@ -32,12 +43,11 @@ export default function WeeklyHire({ arsenal, week, houseRules, mustHire, roster
     return { slug: null, name: manual.name.trim(), cost, keywords: [], characteristics: [] }
   }, [slug, manual, roster.models])
 
-  // The register may not carry Versatile reliably, so detection is a starting
-  // point the player can override rather than a fact we assert.
-  const detectedVersatile = Boolean(
-    picked?.characteristics?.some((c) => String(c).toLowerCase() === 'versatile')
-  )
-  const isVersatile = versatile || detectedVersatile
+  // The faction index carries `characteristics`, so this is now read rather
+  // than guessed — but it stays overridable, because a hand-typed hire has no
+  // characteristics at all and the player is the one holding the card.
+  const detectedVersatile = versatileModel(picked)
+  const isVersatile = versatileOverride ?? detectedVersatile
   const outOfKeyword = picked ? isOutOfKeyword(picked, arsenal.keywords) : false
 
   const cost = picked
@@ -52,7 +62,7 @@ export default function WeeklyHire({ arsenal, week, houseRules, mustHire, roster
     onHire(picked, cost)
     setSlug('')
     setManual({ name: '', cost: '' })
-    setVersatile(false)
+    setVersatileOverride(null)
   }
 
   return (
@@ -92,17 +102,41 @@ export default function WeeklyHire({ arsenal, week, houseRules, mustHire, roster
       <Field>
         <Label>Model to hire</Label>
         {roster.models.length > 0 ? (
-          <Select value={slug} onChange={(e) => { setSlug(e.target.value); setVersatile(false) }}>
+          <Select value={slug} onChange={(e) => { setSlug(e.target.value); setVersatileOverride(null) }}>
             <option value="">Choose from the register…</option>
-            {roster.models.map((m) => (
-              <option key={m.slug} value={m.slug}>{m.name} — {m.cost}</option>
-            ))}
+            <optgroup label="From your keywords">
+              {keywordPool.map((m) => (
+                <option key={m.slug} value={m.slug}>{m.name} — {m.cost}</option>
+              ))}
+            </optgroup>
+            {versatilePool.length > 0 && (
+              <optgroup label={`Versatile — ${factionLabel(arsenal.faction)}`}>
+                {versatilePool.map((m) => (
+                  <option key={m.slug} value={m.slug}>{m.name} — {m.cost}</option>
+                ))}
+              </optgroup>
+            )}
           </Select>
         ) : (
-          <p className="note">
-            The register isn't loaded, so type the hire by hand. The arithmetic
-            is the same either way.
-          </p>
+          <>
+            {/* The campaign view is reachable without ever visiting the
+                creation wizard, so the register has to be loadable from here
+                too — otherwise the Versatile pool is unreachable for anyone
+                resuming a campaign. */}
+            <div className="crew__bar">
+              <Button
+                onClick={() => roster.load({ keywords: arsenal.keywords, faction: arsenal.faction })}
+                disabled={roster.loading}
+              >
+                {roster.loading ? 'Reading…' : 'Load models from the register'}
+              </Button>
+              <span className={`label${roster.error ? ' note--warn' : ''}`} style={{ margin: 0 }}>
+                {roster.loading && roster.progress
+                  ? `Reading ${roster.progress.keyword} — ${roster.progress.done} of ${roster.progress.total}…`
+                  : roster.error || 'Or type the hire by hand below — the arithmetic is the same.'}
+              </span>
+            </div>
+          </>
         )}
       </Field>
 
@@ -140,9 +174,10 @@ export default function WeeklyHire({ arsenal, week, houseRules, mustHire, roster
               <input
                 type="checkbox"
                 checked={isVersatile}
-                onChange={(e) => setVersatile(e.target.checked)}
+                onChange={(e) => setVersatileOverride(e.target.checked)}
               />
               This model is Versatile — no out-of-keyword surcharge
+              {detectedVersatile && <span className="hire__adj"> (the register says so)</span>}
             </label>
           )}
 

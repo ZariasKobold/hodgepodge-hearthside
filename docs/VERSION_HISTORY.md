@@ -777,3 +777,87 @@ dialogue, and it does not complete downloads to disk either — the PNG blob was
 validated in-page instead). `/strategies` and `/schemes` still never called.
 NEXT: an audit is due (18 files, a new shared module, and a changed rule), then
 aftermath — six ordered phases, ONE stateful flow, not six screens.
+
+---
+
+### Session 15 — v0.5.1
+Date: 2026-08-22
+
+**feat: Versatile models are hirable from the declared faction**
+
+Reported from a table: during arsenal building you could not hire your
+faction's Versatile models. The *cost* rule for them already existed —
+`hireCost` has exempted Versatile from the out-of-keyword surcharge since
+v0.4.0 — but the models never reached the roster, because `useRoster` only ever
+fetched the two declared keywords. The rule was right and unreachable.
+
+**Two pools, one load.** `useRoster.load({ keywords, faction })` replaces
+`loadKeywords`. Keywords work as before; the faction's Versatile models come
+from `/characters?faction=X`, which is **two requests for a whole faction**
+because that index carries `characteristics` and `keywords`. The keyword index
+carries neither — which is exactly why v0.4.9 concluded "no register response
+has ever been observed to carry characteristics" and shipped a checkbox to
+compensate. That conclusion was drawn from the only endpoint then in use, and
+it was wrong about the register as a whole.
+
+**Three register traps, all silent failures:**
+
+- `per_page` must be sent on **every** page. Omitted on page 2, the server
+  re-serves the tail of page 1 instead of erroring. The first Neverborn pull
+  looked like 115 rows and was actually 100 with 15 duplicates.
+- Faction slugs diverge: the register wants `ten_thunders` and
+  `explorers_society`; ours are hyphenated and cannot be renamed, because they
+  are written into saved campaigns. An unknown faction returns **zero rows, not
+  an error** — so a Ten Thunders player would have seen an empty Versatile pool
+  with nothing anywhere looking broken. Hence `registerSlug` in
+  `src/data/factions.js`, explicit rather than a `replace('-','_')`, and a test
+  asserting no mapped slug ever contains a hyphen.
+- `/characteristics/versatile` returns only `{id,name,slug}` — no members. The
+  characteristic list cannot be used to find the models that have it.
+
+**Versatile governs hiring, not leader selection.** Putting these models into
+the roster risked quietly widening what a leader could take their action or
+ability from. It does not: `checkSource` still demands keyword overlap, so a
+Versatile model with no shared keyword is filtered out of `candidatesFor`. That
+is now locked down by test, using a 3ss model rather than Teddy — at 10ss Teddy
+is rejected on price before keyword is ever consulted, so it would have proved
+nothing. Verified live too: 14 Versatile models in the roster, zero of them
+offered as selection candidates.
+
+**A latent bug the fix made reachable.** The hire screen's Versatile checkbox
+was `versatile || detectedVersatile`. While detection never fired, that was
+harmless. Now that it does, unticking the box did nothing at all — the OR put
+it straight back. It is tri-state now: `null` follows the register, `true`/
+`false` is the player overriding it, because a hand-typed hire carries no
+characteristics and the player is the one holding the card.
+
+**The campaign view could not load the register at all.** `WeeklyHire` read
+`roster.models` but nothing there ever populated it; it only worked if you had
+passed through the loadout step this session. Resuming a campaign left the
+Versatile pool permanently unreachable. It has its own load button now.
+
+**Both pickers group rather than merge.** A Versatile model appearing beside
+your keyword models needs to read as a rule, not a bug, so the arsenal and hire
+selects use optgroups: "From your keywords" and "Versatile — <faction>".
+
+Verified live: 28 models loaded (14 keyword, 14 Versatile Neverborn); two
+Versatile models hired into the starting arsenal; zero leakage into leader
+selections; Teddy quoted at 10 − 5 = 5 scrip with no surcharge and the box
+pre-ticked "(the register says so)"; unticking moved it to 10 + 1 − 5 = 6 and
+reticking moved it back; and the campaign view's load button populating both
+groups from a cold page load.
+
+Tests 78 → 90.
+
+Files: src/lib/indexing.js, src/lib/indexing.test.js (new), src/lib/api.js,
+       src/data/factions.js, src/hooks/useRoster.js,
+       src/components/steps/Loadout.jsx, src/components/steps/Record.jsx,
+       src/components/steps/WeeklyHire.jsx, CLAUDE.md, package.json,
+       docs/VERSION_HISTORY.md
+RESOLVED: Versatile models unhirable; the dead Versatile checkbox; the campaign
+view having no way to load the register
+CORRECTED: v0.4.9's claim that no register response carries `characteristics`.
+The faction index does; the keyword index does not.
+UNVERIFIED: only Neverborn and Ten Thunders faction pulls have run. The other
+six use the same code path and the slug map is tested, but no live call.
+NEXT: the audit is still due, then aftermath.

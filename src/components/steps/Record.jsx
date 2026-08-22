@@ -5,12 +5,16 @@ import { factionLabel } from '../../data/factions.js'
 import { arsenalTotal, startingScrip, STARTING_SOULSTONES } from '../../lib/campaign.js'
 import { exportJSON } from '../../lib/storage.js'
 import { sourceSlug } from '../../lib/rules.js'
+import { isVersatile } from '../../lib/indexing.js'
 import { buildSheet, sheetToPNG, printSheet } from '../../lib/recordImage.js'
 import { Label, Button, Select, PrintLegal } from '../ui.jsx'
 import { RulesState } from '../RulesText.jsx'
 import CrewCards from '../CrewCards.jsx'
 import HankSays from '../HankSays.jsx'
 import { CREATION, sendOff } from '../../data/hank.js'
+
+/** Cheapest first, so the picker reads as a shopping list. */
+const byCost = (models) => [...models].sort((a, b) => a.cost - b.cost)
 
 export default function Record({ leader, set, archetype, roster, rules, fileNumber }) {
   const spent = arsenalTotal(leader.arsenal)
@@ -34,6 +38,18 @@ export default function Record({ leader, set, archetype, roster, rules, fileNumb
     }
     return [...out]
   }, [leader.picks])
+
+  // Versatile models are hirable without sharing a keyword, so the picker
+  // separates them. `isVersatile` is derived, never stored — the register owns
+  // that fact and may change it.
+  const versatileModels = useMemo(
+    () => roster.models.filter(isVersatile),
+    [roster.models]
+  )
+  const keywordModels = useMemo(
+    () => roster.models.filter((m) => !isVersatile(m)),
+    [roster.models]
+  )
 
   const fingerprint = pickSlugs.join('|')
   useEffect(() => {
@@ -185,13 +201,26 @@ export default function Record({ leader, set, archetype, roster, rules, fileNumb
         {roster.models.length > 0 ? (
           <Select value="" onChange={(e) => addModel(e.target.value)} style={{ marginTop: 8 }}>
             <option value="">Add a model…</option>
-            {[...roster.models].sort((a, b) => a.cost - b.cost).map((m) => (
-              <option key={m.slug} value={m.slug}>{m.name} — {m.cost}ss</option>
-            ))}
+            {/* Grouped rather than merged, so a Versatile model appearing
+                alongside your keyword models reads as a rule rather than a
+                bug. Both groups are equally hirable. */}
+            <optgroup label="From your keywords">
+              {byCost(keywordModels).map((m) => (
+                <option key={m.slug} value={m.slug}>{m.name} — {m.cost}ss</option>
+              ))}
+            </optgroup>
+            {versatileModels.length > 0 && (
+              <optgroup label={`Versatile — ${factionLabel(leader.faction)}`}>
+                {byCost(versatileModels).map((m) => (
+                  <option key={m.slug} value={m.slug}>{m.name} — {m.cost}ss</option>
+                ))}
+              </optgroup>
+            )}
           </Select>
         ) : (
           <div className="empty" style={{ marginTop: 8 }}>
-            Load the register on the loadout step to hire from your keywords.
+            Load the register on the loadout step to hire from your keywords and
+            your faction's Versatile models.
           </div>
         )}
 

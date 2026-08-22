@@ -1,4 +1,5 @@
 import { SLOTS } from '../../data/archetypes.js'
+import { isVersatile } from '../../lib/indexing.js'
 import { CREW_CARD_EFFECTS, getEffect } from '../../data/crewCards.js'
 import { availableTriggers } from '../../lib/validation.js'
 import { Label, Field, Button, Chip, Input, Select } from '../ui.jsx'
@@ -7,10 +8,13 @@ import { CREATION, selectGreeting, selectOffline, selectTrigger, selectDone } fr
 import SelectionSlot from '../SelectionSlot.jsx'
 
 export default function Loadout({ leader, set, setPick, archetype, roster, rules }) {
-  const { models, loading, progress, error, loadKeywords } = roster
+  const { models, loading, progress, error, load } = roster
   const triggers = availableTriggers(leader.picks)
   const effect = getEffect(leader.crewCard.effect)
 
+  // Versatile models are hirable but are not selection sources unless they
+  // also share a keyword, so the count is split rather than merged.
+  const versatileCount = models.filter(isVersatile).length
   const statusLine = loading
     ? progress
       ? `Reading ${progress.keyword} — ${progress.done} of ${progress.total}…`
@@ -18,7 +22,7 @@ export default function Loadout({ leader, set, setPick, archetype, roster, rules
     : error
       ? error
       : models.length
-        ? `${models.length} eligible models on file.`
+        ? `${models.length} models on file${versatileCount ? `, ${versatileCount} of them Versatile` : ''}.`
         : ''
 
   const allFilled = SLOTS.every((slot) => leader.picks[slot].length === archetype.slots[slot].n)
@@ -28,7 +32,7 @@ export default function Loadout({ leader, set, setPick, archetype, roster, rules
       <HankSays>{selectGreeting({ archetype: leader.archetype })}</HankSays>
 
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
-        <Button onClick={() => loadKeywords(leader.keywords)} disabled={loading}>
+        <Button onClick={() => load({ keywords: leader.keywords, faction: leader.faction })} disabled={loading}>
           {loading ? 'Reading…' : models.length ? 'Refresh register' : 'Load eligible models'}
         </Button>
         <span className={`label${error ? ' note--warn' : ''}`} style={{ margin: 0 }}>{statusLine}</span>

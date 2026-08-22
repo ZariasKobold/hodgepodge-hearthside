@@ -1,10 +1,10 @@
 # CLAUDE.md — Hodgepodge Hearthside project context
 
-<!-- HH v0.5.0 | Last updated: 2026-08-22 -->
+<!-- HH v0.5.1 | Last updated: 2026-08-22 -->
 
 ---
 
-## Current Version: 0.5.0
+## Current Version: 0.5.1
 
 ## Last Updated: 2026-08-22
 
@@ -143,6 +143,21 @@ Two facts from that setup worth keeping, because both cost time to learn:
   markers and tokens; `/crews/{shareCode}` is a user-built crew list, not the
   starting crew card effects, which are book content and live in
   `src/data/crewCards.js`.
+
+  Three traps in `/characters`, all found the hard way in v0.5.1:
+
+  1. **`per_page` must be sent on every page.** Omit it on page 2 and the
+     server re-serves the tail of page 1 rather than erroring — a naive loop
+     collects duplicates and silently misses the real remainder. `per_page` is
+     capped at 100 however much more you ask for.
+  2. **Faction slugs diverge from ours.** The register uses `ten_thunders` and
+     `explorers_society`; we use hyphens, because our slugs are written into
+     saved campaigns and cannot be renamed. An unknown faction returns **zero
+     rows, not an error**, so a wrong slug is a silent empty result. The map
+     lives in `src/data/factions.js` as `registerSlug`, and is tested.
+  3. **The faction index carries `keywords` and `characteristics`; the keyword
+     index does not.** That asymmetry is the whole reason Versatile detection
+     is possible in two requests instead of one per model.
 - ~~**The register proxy Function.**~~ **Verified 2026-08-18** —
   `/api/v1/factions` returns real faction JSON from BiggerHat in production.
   First BiggerHat call ever to actually execute. The other endpoints are still
@@ -478,7 +493,7 @@ every session. `docs/VERSION_HISTORY.md` holds how it got this way.
 npm install
 cp .env.example .env
 npm run dev      # Vite only — NO Functions, NO database. useAuth degrades to signed out.
-npm run test     # 78 tests across campaign.js, campaignShape.js and rules.js
+npm run test     # 90 tests across campaign.js, campaignShape.js, rules.js and indexing.js
 npm run build    # production bundle — the dev proxy does NOT exist here
 npm run seed     # optional local register file; ask BiggerHat's maintainer first
 

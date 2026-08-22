@@ -1,15 +1,23 @@
 import { useState, useCallback, useRef } from 'react'
 import { registry, throttledMap, RegistryError } from '../lib/api.js'
-import { toIndexedModel, isSelectionSource } from '../lib/indexing.js'
+import { toIndexedModel, isSelectionSource, isVersatile } from '../lib/indexing.js'
+import { registerFaction } from '../data/factions.js'
 import { save, load } from '../lib/storage.js'
 
 /**
- * Loads only the models that could ever matter: the two chosen keywords.
+ * Loads only the models that could ever matter.
  *
- * A full pull is several hundred detail requests. Once a player picks their
- * keywords the answer is usually a dozen or two models, so this fetches per
- * keyword and caches the result. Nobody waits for a bulk seed, and the
- * register gets a fraction of the traffic.
+ * Two pools, fetched together because they are wanted together:
+ *
+ *   keywords  the two the leader declared. One call per keyword returns every
+ *             character sharing it, which is why no bulk seed is needed.
+ *   versatile the declared faction's Versatile models. These can be hired by
+ *             any crew of the faction, so they belong in the arsenal picker
+ *             even though they share no keyword. Two calls for a whole faction,
+ *             because the faction index carries `characteristics` and the
+ *             keyword index does not.
+ *
+ * Both are cached. The register is donation-funded and game night doesn't wait.
  */
 export function useRoster() {
   const [models, setModels] = useState([])
@@ -18,9 +26,9 @@ export function useRoster() {
   const [error, setError] = useState(null)
   const abortRef = useRef(null)
 
-  const loadKeywords = useCallback(async (keywords) => {
+  const load_ = useCallback(async ({ keywords = [], faction = null } = {}) => {
     const wanted = keywords.filter(Boolean)
-    if (wanted.length === 0) return
+    if (wanted.length === 0 && !faction) return
 
     abortRef.current?.abort()
     const controller = new AbortController()
@@ -68,6 +76,15 @@ export function useRoster() {
         roster.forEach((m) => collected.set(m.slug, m))
       }
 
+      if (faction) {
+        const versatile = await loadVersatileFor(faction, controller.signal, setProgress)
+        // Keyword records win: they have been through the detail fetch and so
+        // carry actions, which the faction index never does.
+        versatile.forEach((m) => {
+          if (!collected.has(m.slug)) collected.set(m.slug, m)
+        })
+      }
+
       setModels([...collected.values()])
     } catch (err) {
       if (err.name === 'AbortError') return
@@ -82,5 +99,33 @@ export function useRoster() {
     setModels((prev) => [...prev, model])
   }, [])
 
-  return { models, loading, progress, error, loadKeywords, addManual }
+  return { models, loading, progress, error, load: load_, addManual }
+}
+
+/**
+ * The faction's Versatile models, indexed and cached.
+ *
+ * Kept out of the hook body so the keyword path stays readable. Returns an
+ * empty list for an unmapped faction rather than querying with a slug the
+ * register would answer with zero rows.
+ */
+async function loadVersatileFor(faction, signal, setProgress) {
+  const cacheKey = `versatile:${faction}`
+  const cached = load(cacheKey)
+  if (cached) return cached
+
+  const registerSlug = registerFaction(faction)
+  if (!registerSlug) return []
+
+  const records = await registry.charactersByFaction(registerSlug, {
+    signal,
+    onProgress: (done, total) => setProgress({ keyword: 'versatile models', done, total }),
+  })
+
+  const roster = records
+    .map(toIndexedModel)
+    .filter((m) => isVersatile(m) && isSelectionSource(m))
+
+  save(cacheKey, roster)
+  return roster
 }

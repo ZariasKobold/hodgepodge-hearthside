@@ -1,6 +1,11 @@
 const BASE = import.meta?.env?.VITE_REGISTRY_BASE || '/api/v1'
 const MODE = import.meta?.env?.VITE_REGISTRY_MODE || 'remote'
 
+/** The register caps a page at 100 however much more you ask for. */
+const FACTION_PAGE_SIZE = 100
+/** A faction is one or two pages; anything past this is a paginator misbehaving. */
+const FACTION_PAGE_CAP = 20
+
 export class RegistryError extends Error {
   constructor(message, { status, path } = {}) {
     super(message)
@@ -61,6 +66,45 @@ export const registry = {
 
   character: (slug, opts) =>
     request(`/characters/${encodeURIComponent(slug)}`, opts).then((j) => j.data),
+
+  /**
+   * Every character in a faction, across pages.
+   *
+   * Two things about this endpoint that cost time to learn:
+   *
+   * - `per_page` must be sent on **every** page. Omit it on page 2 and the
+   *   server re-serves the tail of page 1 instead of erroring, so a naive
+   *   loop silently collects duplicates and misses the real remainder.
+   * - Unlike `/keywords/{slug}`, these index records DO carry `keywords` and
+   *   `characteristics`. That is what makes Versatile detection possible
+   *   without a detail request per model.
+   *
+   * Deduplicated by slug regardless, and page-capped, because a paginator
+   * that repeats itself is a paginator that could fail to terminate.
+   */
+  charactersByFaction: async (factionSlug, { signal, onProgress } = {}) => {
+    const collected = new Map()
+    let page = 1
+    let lastPage = 1
+
+    while (page <= lastPage && page <= FACTION_PAGE_CAP) {
+      const json = await request(
+        `/characters?faction=${encodeURIComponent(factionSlug)}&per_page=${FACTION_PAGE_SIZE}&page=${page}`,
+        { signal }
+      )
+      for (const record of json.data || []) {
+        if (!collected.has(record.slug)) collected.set(record.slug, record)
+      }
+      lastPage = json.meta?.last_page || 1
+      onProgress?.(page, Math.min(lastPage, FACTION_PAGE_CAP))
+      page += 1
+      if (page <= lastPage && page <= FACTION_PAGE_CAP) {
+        await new Promise((resolve) => setTimeout(resolve, 150))
+      }
+    }
+
+    return [...collected.values()]
+  },
 
   factions: (opts) => request('/factions', opts).then((j) => j.data || []),
 
