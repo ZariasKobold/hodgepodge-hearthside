@@ -118,12 +118,23 @@ export function loadCampaign(id) {
   return id ? load(campaignKey(id)) : null
 }
 
-/** Writes the campaign and makes sure its id is on the shelf. */
-export function saveCampaign(campaign) {
-  if (!campaign?.id) return
-  save(campaignKey(campaign.id), campaign)
+/**
+ * Writes the campaign and makes sure its id is on the shelf.
+ *
+ * Stamps `updatedAt` unless the caller supplies one. The sync merge decides
+ * which copy of a campaign wins by comparing these, so a save that forgot to
+ * move the clock would make a newer local edit lose to an older remote row.
+ * `keepTimestamp` is for writes that came *from* the server, where the server's
+ * clock is the authority and restamping would claim a local edit that never
+ * happened.
+ */
+export function saveCampaign(campaign, { keepTimestamp = false } = {}) {
+  if (!campaign?.id) return null
+  const stamped = keepTimestamp ? campaign : { ...campaign, updatedAt: Date.now() }
+  save(campaignKey(stamped.id), stamped)
   const ids = campaignIds()
-  if (!ids.includes(campaign.id)) save(INDEX_KEY, [...ids, campaign.id])
+  if (!ids.includes(stamped.id)) save(INDEX_KEY, [...ids, stamped.id])
+  return stamped
 }
 
 export function removeCampaign(id) {

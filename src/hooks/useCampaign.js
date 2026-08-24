@@ -28,7 +28,7 @@ const LEGACY_LEADER_KEY = 'leader:current'
  * keep working. Permission from Wyrd is revocable, so a campaign must survive
  * this app disappearing.
  */
-export function useCampaign() {
+export function useCampaign({ onSaved, onRemoved } = {}) {
   const [ids, setIds] = useState(() => {
     // One-time lifts, oldest first: the v0.1 single leader, then the
     // single-campaign key everything before the shelf wrote to.
@@ -68,8 +68,18 @@ export function useCampaign() {
     if (!campaign) return
     if (lastWritten.current === campaign) return
     lastWritten.current = campaign
-    saveCampaign(campaign)
-  }, [campaign])
+    // Local first and synchronously; the mirror upward is best-effort and
+    // never gates the write. `saveCampaign` returns the stamped copy, which is
+    // what must go to the server — the unstamped one would lose every merge.
+    const stamped = saveCampaign(campaign)
+    if (stamped) onSaved?.(stamped)
+  }, [campaign, onSaved])
+
+  /** Re-reads the shelf from storage, after a sync pulled rows down. */
+  const refresh = useCallback(() => {
+    setIds(campaignIds())
+    setCampaign((prev) => (prev ? migrate(loadCampaign(prev.id)) || prev : prev))
+  }, [])
 
   /* ── the shelf ────────────────────────────────────────────────── */
 
@@ -99,10 +109,11 @@ export function useCampaign() {
 
   const discard = useCallback((id) => {
     removeCampaign(id)
+    onRemoved?.(id)
     setIds(campaignIds())
     setOpenId((prev) => (prev === id ? null : prev))
     setCampaign((prev) => (prev?.id === id ? null : prev))
-  }, [])
+  }, [onRemoved])
 
   /**
    * Files an imported campaign as a new entry rather than replacing anything.
@@ -220,7 +231,7 @@ export function useCampaign() {
 
   return {
     // the shelf
-    shelf, openId, open, close, startNew, discard, adopt,
+    shelf, openId, open, close, startNew, discard, adopt, refresh,
     // the open campaign
     campaign, setCampaignField, setHouseRules,
     arsenal, updateArsenal,

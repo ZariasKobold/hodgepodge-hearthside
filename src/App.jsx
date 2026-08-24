@@ -1,10 +1,11 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { getArchetype } from './data/archetypes.js'
 import { checkStructure } from './lib/validation.js'
 import { useCampaign } from './hooks/useCampaign.js'
 import { useRoster } from './hooks/useRoster.js'
 import { useRules } from './hooks/useRules.js'
 import { useAuth } from './hooks/useAuth.js'
+import { useSync } from './hooks/useSync.js'
 import { HankProvider } from './hooks/useHank.jsx'
 import Masthead from './components/Masthead.jsx'
 import { Button } from './components/ui.jsx'
@@ -31,14 +32,21 @@ function fileNumber(leader) {
 
 export default function App() {
   const [step, setStep] = useState(0)
+  // Declared before useCampaign so the mirror callback exists when the first
+  // save fires. The two are deliberately one-way: campaigns push into sync,
+  // sync never reaches back into campaign state except through `refresh`.
+  const syncRef = useRef({ mirror: () => {}, forget: () => {} })
   // Three views now. `library` is the shelf of leaders; the other two are only
   // reachable with a campaign open, because they edit one.
   const [view, setView] = useState('library')
   const {
-    shelf, openId, open, close, startNew, discard, adopt,
+    shelf, openId, open, close, startNew, discard, adopt, refresh,
     leader, set, setPick,
     campaign, arsenal, week, mustHire, addModel, spendScrip,
-  } = useCampaign()
+  } = useCampaign({
+    onSaved: (c) => syncRef.current.mirror(c),
+    onRemoved: (id) => syncRef.current.forget(id),
+  })
   const roster = useRoster()
   // Rules text is fetched live and held only in memory (§4). One instance for
   // the whole tree so the loadout's hover lookups and the record's writeout
@@ -47,6 +55,13 @@ export default function App() {
   // Held here rather than inside the badge so there is exactly one /api/auth/me
   // per load, and so the storage adapter has it to hand when it lands.
   const auth = useAuth()
+
+  /**
+   * Local storage stays the working copy; this mirrors it to the account and,
+   * on first sign-in, pushes up everything built while signed out.
+   */
+  const sync = useSync({ user: auth.user, available: auth.available, onChanged: refresh })
+  syncRef.current = sync
 
   // Play is gated behind an account (CLAUDE.md §12). The one escape hatch is
   // for local development, where Vite serves no Functions so signing in is
@@ -62,17 +77,26 @@ export default function App() {
    * An empty shelf has nothing to choose between, so the first visit drops
    * straight into building someone. Once anything is saved, the shelf is where
    * you land — after week one the question is which campaign, not whether.
+   *
+   * Waits for sync to settle first. On a device that has never seen this
+   * account, the shelf is empty for the moment it takes to fetch — and firing
+   * here in that window invented a blank leader on every new device, then
+   * pushed it up to the account. "Empty" and "not arrived yet" are different
+   * answers and only one of them means build someone.
    */
+  const shelfSettled = sync.settled
+
   useEffect(() => {
     if (!admitted) return
     if (openId) return
+    if (!shelfSettled) return
     if (shelf.length === 0 && view !== 'create') {
       startNew()
       setStep(0)
       setView('create')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [admitted, openId, shelf.length])
+  }, [admitted, openId, shelf.length, shelfSettled])
 
   const archetype = leader ? getArchetype(leader.archetype) : null
 
@@ -137,6 +161,7 @@ export default function App() {
             onNew={buildNew}
             onImport={(data) => { adopt(data); setStep(3); setView('arsenal') }}
             onDiscard={discard}
+            sync={sync}
           />
         )}
 

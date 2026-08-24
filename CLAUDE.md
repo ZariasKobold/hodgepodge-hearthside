@@ -1,10 +1,10 @@
 # CLAUDE.md — Hodgepodge Hearthside project context
 
-<!-- HH v0.6.1 | Last updated: 2026-08-22 -->
+<!-- HH v0.7.0 | Last updated: 2026-08-22 -->
 
 ---
 
-## Current Version: 0.6.1
+## Current Version: 0.7.0
 
 ## Last Updated: 2026-08-22
 
@@ -132,11 +132,9 @@ Two facts from that setup worth keeping, because both cost time to learn:
 
 1. **Aftermath.** Six ordered phases; see `AFTERMATH_PHASES`. Must be ONE
    stateful flow, not six screens — the fate deck isn't reshuffled between
-   phases.
-2. **Remote storage adapter.** `src/lib/storage.js` still writes only to
-   localStorage. Split into local/remote behind the existing interface; local
-   stays the fallback, never a stepping stone.
-3. **Visual design pass.** Functional but plain. Tokens are in
+   phases. When it lands, widen the D1 projection: `injuries`, `equipment` and
+   `games` have tables in 0001 and are currently carried only inside `doc`.
+2. **Visual design pass.** Functional but plain. Tokens are in
    `src/styles/tokens.css`; the records-office direction is deliberate and
    documented in the file header.
 
@@ -249,7 +247,7 @@ hodgepodge-hearthside/
 ├── src/                    the browser app
 │   ├── data/               facts from the book + all of Hank's dialogue
 │   ├── lib/                pure logic, imports nothing from React
-│   ├── hooks/              useCampaign, useRoster, useAuth, useHank
+│   ├── hooks/              useCampaign, useRoster, useAuth, useHank, useSync
 │   ├── components/         wizard steps and shared UI
 │   │   ├── ArsenalLibrary.jsx  the shelf — one card per leader
 │   │   ├── LeaderRecord.jsx    the filed record, shared by two views
@@ -516,7 +514,7 @@ every session. `docs/VERSION_HISTORY.md` holds how it got this way.
 npm install
 cp .env.example .env
 npm run dev      # Vite only — NO Functions, NO database. useAuth degrades to signed out.
-npm run test     # 107 tests across campaign.js, campaignShape.js, rules.js and indexing.js
+npm run test     # 118 tests across campaign.js, campaignShape.js, rules.js, indexing.js and remote.js
 npm run build    # production bundle — the dev proxy does NOT exist here
 npm run seed     # optional local register file; ask BiggerHat's maintainer first
 
@@ -553,7 +551,39 @@ production one isn't.
 
 ---
 
-## 12. Persistence plan
+## 12. Persistence — local first, D1 behind it
+
+**As of v0.7.0 campaigns sync to D1.** The arrangement is deliberately
+lopsided and must stay that way:
+
+- **localStorage is the working copy.** `useCampaign` writes it synchronously
+  and the running app reads it. Every screen works with the network down.
+- **D1 is a mirror.** `useSync` pushes each local save up and pulls the
+  account's shelf down. Every failure is survivable — the status line on the
+  shelf says so and the app carries on.
+- **Signing in adopts.** Anything built while signed out is pushed to the
+  account on first sign-in. `planSync` decides: remote-only pulls, local-only
+  pushes, and where both exist the newer `updatedAt` wins with ties keeping
+  local. It is pure and tested, because it is the only code here that can lose
+  somebody's twelve weeks.
+
+**D1 has no row-level security.** It is SQLite; there is no policy engine and
+no `auth.uid()`. Supabase needs RLS because PostgREST exposes the database to
+the browser — D1 never is, the binding lives only inside a Function. So there
+is no anon key to leak, *and* every authorization decision is code in
+`functions/lib/campaignStore.js`. The rule there: **every exported function
+takes `userId` first and one gate checks ownership before any write.** An
+earlier version guarded each statement individually and the `DELETE FROM
+arsenal_models` had no owner column to guard on — a signed-in stranger could
+wipe another player's model rows. Found by attacking it locally. Per-statement
+guards are not enough; the gate is.
+
+**The `doc` column is the source of truth; the normalized columns are a
+projection.** Migration 0002 explains why: `injuries`, `equipment` and `games`
+are still unwritten and Aftermath will reshape them, so normalizing now would
+be guessing. Read from `doc`, scope and list from the columns.
+
+## 12b. Original persistence plan
 
 `docs/data-model.md` is the design for campaigns, accounts, and Cloudflare D1.
 **Not implemented.** Read it before touching storage.

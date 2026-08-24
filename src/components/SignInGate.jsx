@@ -65,8 +65,10 @@ export default function SignInGate({ auth }) {
       <h2 className="gate__title">Sign in to begin</h2>
       <p className="gate__body">
         A campaign runs twelve weeks and belongs to whoever built it, so it's
-        filed against an account rather than this browser. Signing in also means
-        it follows you to another device, and survives clearing your history.
+        filed against an account rather than this browser. Signing in means it
+        follows you to another device and survives clearing your history — and
+        anything you have already built here is added to your account the first
+        time you sign in.
       </p>
       <p className="gate__body gate__body--aside">
         Discord only, and only your username and avatar are read. No email, no

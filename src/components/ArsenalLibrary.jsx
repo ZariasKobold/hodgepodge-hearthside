@@ -7,18 +7,48 @@ import { Button, Label } from './ui.jsx'
 import HankSays from '../components/HankSays.jsx'
 import { CREATION } from '../data/hank.js'
 
-/**
- * The shelf — every leader this browser holds, one card each.
- *
- * This is the landing screen once anything is saved, because after week one the
- * question is "which of my campaigns am I here for", not "let's build someone".
- * Before anything is saved there is nothing to choose between, so App drops
- * straight into creation instead.
- *
- * Everything on a card is read from the campaign at render. Nothing is copied
- * into an index, so renaming a leader shows here immediately rather than after
- * whatever would have refreshed the copy.
- */
+/** Where the data actually is — see the note in the shelf below. */
+function SyncLine({ sync, count }) {
+  if (sync.status === 'syncing') {
+    return <p className="note">Checking your account for campaigns…</p>
+  }
+
+  if (sync.status === 'offline') {
+    return (
+      <p className="note note--warn">
+        Not signed in to sync.{' '}
+        {count === 1 ? 'This campaign is' : `These ${count} campaigns are`} saved in{' '}
+        <strong>this browser only</strong> — clearing your history loses{' '}
+        {count === 1 ? 'it' : 'them'}. Export the JSON to keep a copy.
+      </p>
+    )
+  }
+
+  if (sync.status === 'failed') {
+    return (
+      <p className="note note--warn">
+        Saved here, but not to your account — {sync.error} These campaigns are
+        safe in this browser and will sync when the service is reachable.{' '}
+        <button className="gate__link" onClick={sync.reconcile}>Try again</button>
+      </p>
+    )
+  }
+
+  if (sync.status === 'synced') {
+    const bits = []
+    if (sync.adopted > 0) bits.push(`${sync.adopted} added to your account`)
+    if (sync.pulled > 0) bits.push(`${sync.pulled} pulled from it`)
+    return (
+      <p className="note">
+        Synced to your account{bits.length ? ` — ${bits.join(', ')}` : ''}. These
+        follow you to another device.
+      </p>
+    )
+  }
+
+  return null
+}
+
 function LeaderCard({ campaign, onOpen, onExport, onDiscard }) {
   const arsenal = myArsenal(campaign)
   if (!arsenal) return null
@@ -66,7 +96,19 @@ function LeaderCard({ campaign, onOpen, onExport, onDiscard }) {
   )
 }
 
-export default function ArsenalLibrary({ shelf, onOpen, onNew, onImport, onDiscard }) {
+/**
+ * The shelf — every leader this browser holds, one card each.
+ *
+ * This is the landing screen once anything is saved, because after week one the
+ * question is "which of my campaigns am I here for", not "let's build someone".
+ * Before anything is saved there is nothing to choose between, so App drops
+ * straight into creation instead.
+ *
+ * Everything on a card is read from the campaign at render. Nothing is copied
+ * into an index, so renaming a leader shows here immediately rather than after
+ * whatever would have refreshed the copy.
+ */
+export default function ArsenalLibrary({ shelf, onOpen, onNew, onImport, onDiscard, sync }) {
   const [error, setError] = useState(null)
   const [pendingDiscard, setPendingDiscard] = useState(null)
   const fileRef = useRef(null)
@@ -98,6 +140,12 @@ export default function ArsenalLibrary({ shelf, onOpen, onNew, onImport, onDisca
         <Label>Your leaders — one campaign each</Label>
         <span className="tally">{shelf.length} on file</span>
       </div>
+
+      {/* Where the data actually is, said plainly. The app used to claim a
+          campaign was "filed against an account" while it sat only in this
+          browser; the cure for that is not quieter wording, it is telling the
+          truth on the screen where the campaigns are. */}
+      {sync && <SyncLine sync={sync} count={shelf.length} />}
 
       {shelf.length === 0 && (
         <div className="empty" style={{ marginBottom: 18 }}>

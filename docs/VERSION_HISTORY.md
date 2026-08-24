@@ -1130,3 +1130,97 @@ RESOLVED: Leaders closing the campaign; View arsenal opening the wrong screen;
 the record markup existing twice
 NEXT: aftermath. Ten low audit findings open; the dialogue-count script is still
 unwritten; the corrected PDF is still unproven.
+
+---
+
+### Session 20 — v0.7.0
+Date: 2026-08-22
+
+**feat: campaigns sync to D1, and signing in adopts what you already built**
+
+The owner asked whether data was in the database. It was not — and worse, the
+sign-in gate said it was. Three claims on that screen were false: that a
+campaign was "filed against an account rather than this browser", that it
+"follows you to another device", and that it "survives clearing your history".
+Clearing browser data lost everything and signing in elsewhere showed an empty
+shelf. Same class of defect as audit H1, two screens away, and I had walked past
+it twice.
+
+**Local-first, deliberately lopsided.** localStorage stays the working copy and
+is written synchronously; D1 is a mirror. Every failure is survivable and says
+so on the shelf. This is what the roadmap meant by "local stays the fallback,
+never a stepping stone" — the app with the network down behaves exactly as it
+did before any of this existed.
+
+**Adoption on sign-in**, which is what was asked for. `planSync` compares the
+two shelves: remote-only pulls down, local-only pushes up, and where both have
+a copy the newer `updatedAt` wins with ties keeping local. It is pure and has
+eleven tests, because it is the only code in the path that can destroy twelve
+weeks of somebody's campaign.
+
+**On D1 and row-level security.** There is none. D1 is SQLite — no policy
+engine, no `auth.uid()`. Supabase needs RLS because PostgREST exposes the
+database straight to the browser; D1 never is, the binding exists only inside a
+Function. So there is no anon key to leak, and in exchange **every
+authorization decision is code we write**.
+
+That distinction stopped being theoretical during testing. The first version
+guarded each statement with `WHERE owner_user_id = ?`, which worked for the two
+statements that had an owner column — and the `DELETE FROM arsenal_models` has
+none, so it had no guard at all. A second signed-in account PUTting to someone
+else's campaign id **deleted that player's model rows** while the guarded
+statements silently did nothing, and the endpoint returned 200. Found by
+attacking it with a forged local session, not by reading it.
+
+The fix is one ownership gate before any write, because a single gate cannot be
+forgotten on the one statement that looks different. Re-ran the attack: 404,
+and the owner's three model rows, scrip and faction all intact.
+
+**Two more bugs the testing found:**
+
+- The offline warning never appeared. `useSync` skipped the update from `idle`
+  to avoid a pointless render — silencing the "this browser only" notice on the
+  one load where it mattered most.
+- Every fresh device invented a blank leader and pushed it to the account. The
+  auto-create effect read `sync.status` from render state, and on the commit
+  where auth resolves `reconcile()` has been called but has not updated status
+  yet, so the gate saw the old value and passed. `settled` is now derived from
+  `at` — the timestamp of a *completed* reconcile — which is the question
+  actually being asked. "Empty" and "not arrived yet" are different answers.
+
+**Schema.** Migration 0002, append-only, adds `doc`, `schema_version` and
+`updated_at` to `campaigns` plus an owner index. `doc` is the source of truth;
+the normalized columns are a projection written on the same upsert so the server
+can scope and list **without parsing JSON**, which is what matters for
+authorization. `injuries`, `equipment` and `games` have tables in 0001 but are
+unwritten and Aftermath will reshape them, so normalizing them now would be
+guessing — they ride inside `doc` until then. Applied to the remote database
+after confirming campaigns/arsenals/models held zero rows.
+
+A full campaign write is four statements regardless of size: models go in one
+multi-row INSERT, not one each. Well inside the 50-query cap.
+
+Verified against a local D1 with a forged session, since no preview redirect URI
+exists for Discord: round-trip of a full campaign; the normalized projection
+landing correctly (faction, scrip, total_cost 12, 3 model rows); cross-account
+read/write/delete all refused; adoption of two signed-out campaigns reporting
+"2 added to your account"; and a wiped-localStorage "new device" pulling both
+back with their models.
+
+Tests 107 → 118.
+
+Files: functions/lib/campaignStore.js (new),
+       functions/api/campaigns/[[path]].js (new), src/lib/remote.js (new),
+       src/lib/remote.test.js (new), src/hooks/useSync.js (new),
+       migrations/0002_campaign_sync.sql (new), src/hooks/useCampaign.js,
+       src/lib/storage.js, src/App.jsx, src/components/ArsenalLibrary.jsx,
+       src/components/SignInGate.jsx, CLAUDE.md, package.json,
+       docs/VERSION_HISTORY.md
+RESOLVED: the gate's three false claims; campaigns living only in localStorage;
+the cross-account arsenal_models deletion; the silent offline warning; the
+spurious blank leader on a new device
+UNVERIFIED: production. Everything above was proven against a local D1 with a
+forged session — the first real Discord sign-in against the live database is the
+owner's. Session expiry sweeping is still unexercised.
+NEXT: aftermath, and widen the projection when it lands. Ten low audit findings
+open; the dialogue-count script still unwritten; the corrected PDF still unproven.
