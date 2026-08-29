@@ -3,6 +3,7 @@ import { factionLabel } from '../data/factions.js'
 import { getArchetype } from '../data/archetypes.js'
 import { myArsenal, currentWeek, totalFor, liveModels } from '../lib/campaignShape.js'
 import { importJSON, exportJSON } from '../lib/storage.js'
+import { deleteAccount } from '../lib/remote.js'
 import { Button, Label } from './ui.jsx'
 import HankSays from '../components/HankSays.jsx'
 import { CREATION } from '../data/hank.js'
@@ -108,10 +109,28 @@ function LeaderCard({ campaign, onOpen, onExport, onDiscard }) {
  * into an index, so renaming a leader shows here immediately rather than after
  * whatever would have refreshed the copy.
  */
-export default function ArsenalLibrary({ shelf, onOpen, onNew, onImport, onDiscard, sync }) {
+export default function ArsenalLibrary({ shelf, onOpen, onNew, onImport, onDiscard, sync, signedIn }) {
   const [error, setError] = useState(null)
   const [pendingDiscard, setPendingDiscard] = useState(null)
+  const [erasing, setErasing] = useState(false)
   const fileRef = useRef(null)
+
+  const eraseAccount = async () => {
+    setError(null)
+    try {
+      await deleteAccount()
+      // Nothing of theirs should survive on this device either — the point of
+      // the button is that the data is gone, not that it is gone from one of
+      // two places.
+      for (const key of Object.keys(localStorage)) {
+        if (key.startsWith('hodgepodge:campaign')) localStorage.removeItem(key)
+      }
+      window.location.href = '/'
+    } catch (err) {
+      setErasing(false)
+      setError(String(err.message || err))
+    }
+  }
 
   const exportOne = (campaign) => {
     const arsenal = myArsenal(campaign)
@@ -199,6 +218,39 @@ export default function ArsenalLibrary({ shelf, onOpen, onNew, onImport, onDisca
       </div>
 
       {error && <p className="note note--warn">{error}</p>}
+
+      {/* The whole of the personal data this project holds, and the control
+          that removes it. Kept quiet and at the bottom — it is not a thing
+          anyone should hit on the way to something else. */}
+      {signedIn && (
+        <section className="privacy">
+          <p className="privacy__line">
+            Signed in with Discord. This app stores your Discord id, display name
+            and avatar — no email, no password, no tokens; there are no columns
+            for them.{' '}
+            {erasing ? null : (
+              <button className="gate__link leafcard__drop" onClick={() => setErasing(true)}>
+                Delete my account and all campaigns
+              </button>
+            )}
+          </p>
+
+          {erasing && (
+            <div className="gap-note">
+              <strong>Erase everything?</strong> This removes your account, every
+              campaign on it, and the copies in this browser. It cannot be undone
+              and there is no backup but yours.
+              <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
+                <Button onClick={eraseAccount}>Erase it all</Button>
+                <Button ghost onClick={() => shelf.forEach(exportOne)}>
+                  Export everything first
+                </Button>
+                <Button ghost onClick={() => setErasing(false)}>Keep my account</Button>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
     </>
   )
 }

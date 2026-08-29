@@ -1,10 +1,10 @@
 # CLAUDE.md — Hodgepodge Hearthside project context
 
-<!-- HH v0.7.0 | Last updated: 2026-08-22 -->
+<!-- HH v0.7.1 | Last updated: 2026-08-22 -->
 
 ---
 
-## Current Version: 0.7.0
+## Current Version: 0.7.1
 
 ## Last Updated: 2026-08-22
 
@@ -514,7 +514,7 @@ every session. `docs/VERSION_HISTORY.md` holds how it got this way.
 npm install
 cp .env.example .env
 npm run dev      # Vite only — NO Functions, NO database. useAuth degrades to signed out.
-npm run test     # 118 tests across campaign.js, campaignShape.js, rules.js, indexing.js and remote.js
+npm run test     # 134 tests; `functions/` is in the run too, for the authz tests
 npm run build    # production bundle — the dev proxy does NOT exist here
 npm run seed     # optional local register file; ask BiggerHat's maintainer first
 
@@ -577,6 +577,28 @@ earlier version guarded each statement individually and the `DELETE FROM
 arsenal_models` had no owner column to guard on — a signed-in stranger could
 wipe another player's model rows. Found by attacking it locally. Per-statement
 guards are not enough; the gate is.
+
+**The three things that stand in for RLS**, since none of them is automatic:
+
+1. `requireSubject` throws if a store function is called without a user, so a
+   missing id becomes an exception rather than a query across everybody's rows.
+2. One ownership gate before any write, not a guard per statement.
+3. `functions/lib/campaignStore.test.js` — 16 tests that run the store against
+   a fake D1 and assert what was *actually* sent: every read binds the caller,
+   a cross-account write runs exactly one statement and deletes nothing, and
+   the owner is never taken from the payload. These are the most important
+   tests in the project; the hand-run version of them found the real hole.
+
+Mutations also require a same-origin `Origin` header (`sameOrigin` in
+`functions/lib/auth.js`) — a second lock behind `SameSite=Lax`, in case that
+cookie attribute is ever loosened for an unrelated reason.
+
+**Personal data, and the way out.** The `users` table holds a Discord id,
+display name and avatar URL. No email, no password, no tokens — no columns for
+them. `DELETE /api/account` erases the account, its campaigns, arsenals, model
+rows and sessions, clears the cookie, and the client clears localStorage too.
+Nothing is soft-deleted: the honest answer to "delete my account" is that the
+rows stop existing.
 
 **The `doc` column is the source of truth; the normalized columns are a
 projection.** Migration 0002 explains why: `injuries`, `equipment` and `games`

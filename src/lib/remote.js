@@ -44,6 +44,27 @@ async function call(path, { method = 'GET', body, signal } = {}) {
   return res.json()
 }
 
+/**
+ * Erases the account and everything on it.
+ *
+ * Its own call rather than a `remote` method: this is not campaign sync, it is
+ * the end of the relationship, and it should not sit in a list of routine
+ * operations where it could be reached by a loop.
+ */
+export async function deleteAccount() {
+  const res = await fetch('/api/account', {
+    method: 'DELETE',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ confirm: true }),
+  })
+  if (!res.ok) {
+    const detail = await res.json().catch(() => null)
+    throw new SyncError(detail?.message || `Delete returned ${res.status}.`, { status: res.status })
+  }
+  return res.json()
+}
+
 export const remote = {
   list: (opts) => call('', opts).then((j) => j.campaigns || []),
   get: (id, opts) => call(`/${encodeURIComponent(id)}`, opts).then((j) => j.campaign),

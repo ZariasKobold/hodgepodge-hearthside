@@ -180,6 +180,31 @@ export async function completeOAuth(request, env, providerName) {
   })
 }
 
+/**
+ * Is this state-changing request coming from our own page?
+ *
+ * `SameSite=Lax` on the session cookie already stops a cross-site form or fetch
+ * from carrying it, so this is a second lock on the same door rather than the
+ * only one. It costs a header comparison and it closes the gap if that cookie
+ * attribute is ever loosened — which is exactly the kind of change that gets
+ * made for an unrelated reason and quietly removes a protection nobody
+ * remembered was load-bearing.
+ *
+ * Same-origin requests from a browser always carry `Origin` on a mutation. A
+ * request with no Origin at all is a non-browser caller (curl, a script), which
+ * cannot be riding somebody's ambient cookie, so it is allowed through to the
+ * session check.
+ */
+export function sameOrigin(request) {
+  const origin = request.headers.get('Origin')
+  if (!origin) return true
+  try {
+    return new URL(origin).host === new URL(request.url).host
+  } catch {
+    return false
+  }
+}
+
 /** Returns the signed-in user, or null. Expired sessions are swept on read. */
 export async function currentUser(request, env) {
   const sessionId = readCookie(request, SESSION_COOKIE)

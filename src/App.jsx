@@ -162,6 +162,7 @@ export default function App() {
             onImport={(data) => { adopt(data); setStep(3); setView('arsenal') }}
             onDiscard={discard}
             sync={sync}
+            signedIn={Boolean(auth.user)}
           />
         )}
 

@@ -1,4 +1,4 @@
-import { currentUser, json } from '../../lib/auth.js'
+import { currentUser, json, sameOrigin } from '../../lib/auth.js'
 import {
   listCampaigns, getCampaign, putCampaign, deleteCampaign,
 } from '../../lib/campaignStore.js'
@@ -26,6 +26,11 @@ export async function onRequest(context) {
 
   if (!env.DB) {
     return json({ message: 'No database is bound to this deployment.' }, 503)
+  }
+
+  // Reads are harmless cross-origin; writes are not.
+  if (request.method !== 'GET' && !sameOrigin(request)) {
+    return json({ message: 'Cross-origin writes are not accepted.' }, 403)
   }
 
   const user = await currentUser(request, env)

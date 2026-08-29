@@ -521,3 +521,14 @@ body {
   margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line-soft);
 }
 .leafcard__drop { color: var(--oxide); }
+
+
+/* the privacy footer — quiet on purpose ------------------------------- */
+.privacy {
+  margin-top: 34px; padding-top: 16px;
+  border-top: 1px solid var(--line-soft);
+}
+.privacy__line {
+  font-family: var(--body); font-size: 13px; line-height: 1.6;
+  color: var(--faint); margin: 0;
+}

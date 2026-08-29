@@ -26,7 +26,11 @@ export default defineConfig(({ mode }) => {
     },
     test: {
       environment: 'node',
-      include: ['src/**/*.test.js'],
+      // `functions/` is tested too. It runs on a different runtime and never
+      // imports from `src/`, but the authorization logic there is the only code
+      // in the project that can expose one player's data to another, so it is
+      // the last place that should go untested.
+      include: ['src/**/*.test.js', 'functions/**/*.test.js'],
     },
   }
 })

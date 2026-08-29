@@ -1224,3 +1224,68 @@ forged session — the first real Discord sign-in against the live database is t
 owner's. Session expiry sweeping is still unexercised.
 NEXT: aftermath, and widen the projection when it lands. Ten low audit findings
 open; the dialogue-count script still unwritten; the corrected PDF still unproven.
+
+---
+
+### Session 21 — v0.7.1
+Date: 2026-08-22
+
+**feat: authorization tests, a subject guard, origin checks, and account erasure**
+
+Sync reached production and works — the owner confirmed arsenals appearing on
+both phone and computer. The follow-up question was the right one: what stands
+in for RLS, and what happens if Discord details leak.
+
+**Session expiry was checked first and is fine.** `currentUser` compares
+`expires_at` and deletes the row on read. That was the most likely real hole and
+it was already closed.
+
+**Three things now stand in for row-level security**, because D1 offers none:
+
+1. `requireSubject` throws when a store function is called without a user. The
+   failure that matters is not a wrong id, it is a *missing* one — that is what
+   turns a scoped read into a query across every row. Now it is an exception on
+   the first call.
+2. One ownership gate before any write, already in from v0.7.0.
+3. **Sixteen authorization tests** against a fake D1 that records every
+   statement and its bindings, so a test asserts what was actually sent rather
+   than what the code appears to say. They cover: every read binding the caller,
+   a cross-account write running exactly one statement and deleting nothing, the
+   `arsenal_models` delete carrying its own scope through `arsenals`, the owner
+   never being taken from the payload, and every entry point refusing a missing
+   subject.
+
+That last set exists because the hand-run version found a live vulnerability
+last session. Hand-running it again next time was never going to happen.
+
+**Same-origin required on mutations.** `SameSite=Lax` already stops a
+cross-site request carrying the cookie, so this is a second lock on one door —
+worth it because loosening that cookie attribute is exactly the kind of change
+made for an unrelated reason that quietly removes a protection nobody
+remembered was load-bearing. Verified: cross-origin PUT 403, same-origin 200.
+
+**Account erasure.** The only personal data here is a Discord id, display name
+and avatar URL. Without a delete, "we hold very little about you" is a promise
+with no exit. `DELETE /api/account` needs an explicit `{confirm:true}`, erases
+campaigns, arsenals, model rows, sessions and the user, clears the cookie, and
+the client clears localStorage as well — the point is the data is gone, not that
+it is gone from one of two places. Nothing soft-deleted.
+
+Verified against local D1: before, one user with three campaigns and two model
+rows; after, every count zero, the second test account untouched, and the dead
+session refused with 401.
+
+Tests 118 → 134. `vite.config.js` now includes `functions/**/*.test.js`; that
+directory runs on another runtime and never imports from `src/`, but it holds
+the only code that can expose one player's data to another.
+
+Files: functions/lib/campaignStore.js, functions/lib/campaignStore.test.js (new),
+       functions/api/account.js (new), functions/api/campaigns/[[path]].js,
+       functions/lib/auth.js, src/lib/remote.js,
+       src/components/ArsenalLibrary.jsx, src/App.jsx, src/styles/app.css,
+       vite.config.js, CLAUDE.md, package.json, docs/VERSION_HISTORY.md
+RESOLVED: scoping was convention, now guarded and tested; no way to erase
+personal data; no CSRF defence behind SameSite
+UNVERIFIED: erasure in production — deliberately not tested against the live
+database, since the only account on it is the owner's.
+NEXT: the shareable arsenal sheet, then aftermath.

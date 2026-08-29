@@ -28,8 +28,26 @@
  * with one multi-row INSERT, not one INSERT each.
  */
 
+/**
+ * The nearest thing D1 offers to a policy: a guard that refuses to run at all
+ * without a subject.
+ *
+ * Postgres would reject an unscoped read through RLS. SQLite cannot, so this
+ * turns the failure that matters — a caller that forgot to say who is asking,
+ * and would otherwise query the whole table — from a silent data leak into a
+ * thrown error on the first call. It is not row-level security; it is the part
+ * of row-level security that catches mistakes, done by hand.
+ */
+function requireSubject(userId, fn) {
+  if (typeof userId !== 'string' || userId.length === 0) {
+    throw new Error(`${fn} was called without a user — refusing to touch the database.`)
+  }
+  return userId
+}
+
 /** Reading is one row: `doc` is the source of truth, the columns are a projection. */
 export async function listCampaigns(userId, env) {
+  requireSubject(userId, 'listCampaigns')
   const { results } = await env.DB.prepare(
     `SELECT id, doc, schema_version, updated_at
        FROM campaigns
@@ -41,6 +59,7 @@ export async function listCampaigns(userId, env) {
 }
 
 export async function getCampaign(userId, campaignId, env) {
+  requireSubject(userId, 'getCampaign')
   const row = await env.DB.prepare(
     `SELECT id, doc, schema_version, updated_at
        FROM campaigns
@@ -59,6 +78,8 @@ export async function getCampaign(userId, campaignId, env) {
  * hijacked by id collision either.
  */
 export async function putCampaign(userId, campaign, env) {
+  requireSubject(userId, 'putCampaign')
+
   /**
    * One ownership gate, before anything is written.
    *
@@ -195,6 +216,7 @@ export async function putCampaign(userId, campaign, env) {
 }
 
 export async function deleteCampaign(userId, campaignId, env) {
+  requireSubject(userId, 'deleteCampaign')
   // ON DELETE CASCADE clears arsenals and their models.
   const result = await env.DB.prepare(
     'DELETE FROM campaigns WHERE id = ? AND owner_user_id = ?'
@@ -220,4 +242,48 @@ function fromRow(row) {
     return { id: row.id, updatedAt: row.updated_at || 0, corrupt: true }
   }
   return { ...doc, id: row.id, updatedAt: row.updated_at || 0 }
+}
+
+/**
+ * Erases an account and everything filed under it.
+ *
+ * Nothing here is soft-deleted. The Discord id, display name and avatar are the
+ * only personal data this project holds, and the honest answer to "delete my
+ * account" is that the rows stop existing — not that a flag is set on them.
+ *
+ * `campaigns` and `sessions` cascade from `users` in 0001, but the deletes are
+ * explicit and ordered anyway: relying on a foreign key to erase somebody's
+ * data means relying on a `PRAGMA foreign_keys` that a future connection might
+ * not have set.
+ */
+export async function deleteAccount(userId, env) {
+  requireSubject(userId, 'deleteAccount')
+
+  const owned = await env.DB.prepare(
+    'SELECT id FROM campaigns WHERE owner_user_id = ?'
+  ).bind(userId).all()
+  const ids = (owned.results || []).map((r) => r.id)
+
+  const statements = []
+
+  if (ids.length > 0) {
+    const marks = ids.map(() => '?').join(',')
+    statements.push(
+      env.DB.prepare(
+        `DELETE FROM arsenal_models WHERE arsenal_id IN
+           (SELECT id FROM arsenals WHERE campaign_id IN (${marks}))`
+      ).bind(...ids),
+      env.DB.prepare(`DELETE FROM arsenals WHERE campaign_id IN (${marks})`).bind(...ids),
+      env.DB.prepare(`DELETE FROM campaigns WHERE owner_user_id = ?`).bind(userId)
+    )
+  }
+
+  statements.push(
+    env.DB.prepare('DELETE FROM arsenals WHERE user_id = ?').bind(userId),
+    env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(userId),
+    env.DB.prepare('DELETE FROM users WHERE id = ?').bind(userId)
+  )
+
+  await env.DB.batch(statements)
+  return { deletedCampaigns: ids.length }
 }
