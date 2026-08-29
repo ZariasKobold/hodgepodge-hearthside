@@ -1289,3 +1289,62 @@ personal data; no CSRF defence behind SameSite
 UNVERIFIED: erasure in production — deliberately not tested against the live
 database, since the only account on it is the owner's.
 NEXT: the shareable arsenal sheet, then aftermath.
+
+---
+
+### Session 22 — v0.8.0
+Date: 2026-08-22
+
+**feat: the arsenal sheet — every field of the official one, in our own hand**
+
+The owner supplied both pages of Wyrd's Arsenal Sheet and chose "design
+something better, but capture everything from the original". Copying the layout
+was offered explicitly and declined, which is the right call: §8 bars trade
+dress and the fan policy permitting this project is revocable. So the **fields**
+match one for one — a player who knows the real sheet finds everything where
+they expect it — while the type, palette and rules are the records-office ones
+used everywhere else.
+
+**What the sheet gave us that no amount of guessing would have:** a concrete
+list of what this app does not yet track. Games won, crew rating, equipment (ten
+slots), per-model injuries, the leadership experience track, totems, and the
+master's health track. All of them are ruled and left blank rather than omitted,
+so the sheet is usable at a table with a pencil today instead of being useless
+until Aftermath lands.
+
+**What it already knew, and prints:** crew name, faction, keywords, scrip, the
+roster with costs, the crew card and its page reference, both advancement paths
+as checkboxes, Miraculous Recovery, Df/Wp/Sp/Sz, base size, abilities, and the
+full **Actions table with Rg / Skl / Rst / TN / Dmg** — which the register has
+been handing us since v0.5.0 and nothing had used. `actionColumns` is a sibling
+of `statLine` rather than a parse of it: a sheet is a table and a record is a
+sentence, and splitting one back out of the other breaks the first time a value
+contains a separator.
+
+Games won is derived from `campaign.games`, not stored — same rule as every
+other derived value here.
+
+The experience track is held as data (`EXPERIENCE_TRACK`), three rows of
+thirteen with the numbered boxes marked. That is a bare fact of the sheet, the
+same kind as the archetype stat lines in `archetypes.js`, and reproduces no
+rules text.
+
+Verified live against a seeded leader: both pages render, games won reads 2 from
+three recorded games, the crew list fills three of twelve rows with the injuries
+sub-labels intact, Strategist is ticked and Bruiser is not, the wound track has
+thirteen circles for a Schemer, and the actions table reads
+`Blowdart · Missile 10" · 5 · Df · · 2` straight from BiggerHat.
+
+Tests unchanged at 134 — this is presentation over data that is already covered.
+
+Files: src/components/ArsenalSheet.jsx (new), src/lib/rules.js, src/App.jsx,
+       src/components/Masthead.jsx, src/components/steps/Arsenal.jsx,
+       src/styles/app.css, CLAUDE.md, package.json, docs/VERSION_HISTORY.md
+RESOLVED: no shareable sheet; the register's Rg/Skl/Rst/TN/Dmg going unused
+NEXT: campaign membership. The owner asked for invitations with real security
+("so random people don't join and gain information about your discord") and a
+read-only shared page showing every participant's arsenal, since arsenals are
+public information by the rules. That widens read access from **owner** to
+**member** — the exact change that reintroduces the v0.7.0 bug class — so it
+lands with its own attack tests. `campaign_members` and `join_code` are already
+in migration 0001, unused.

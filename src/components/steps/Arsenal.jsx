@@ -21,7 +21,7 @@ import CrewCards from '../CrewCards.jsx'
  * arsenal (creation) or the weekly hire (campaign), and leave by annihilation.
  * A delete button here would imply a fourth route that the rules do not have.
  */
-export default function Arsenal({ arsenal, leader, archetype, week, rules, fileNumber, onEditLeader, onHire }) {
+export default function Arsenal({ arsenal, leader, archetype, week, rules, fileNumber, onEditLeader, onHire, onSheet }) {
   const [imaging, setImaging] = useState(null)
 
   const models = liveModels(arsenal)
@@ -65,6 +65,7 @@ export default function Arsenal({ arsenal, leader, archetype, week, rules, fileN
 
       <div className="export noprint">
         <Button onClick={onEditLeader}>Edit this leader</Button>
+        {onSheet && <Button ghost onClick={onSheet}>Arsenal sheet</Button>}
         <Button ghost onClick={onHire}>Weekly hire</Button>
         <Button ghost onClick={() => exportJSON(arsenal, `${stem}.json`)}>Export JSON</Button>
         <Button ghost onClick={saveImage} disabled={imaging === 'working'}>

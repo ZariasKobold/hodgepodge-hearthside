@@ -237,6 +237,30 @@ export function statLine(action) {
   return parts
 }
 
+/**
+ * The same facts as `statLine`, split into the columns the arsenal sheet uses:
+ * Rg, Skl, Rst, TN, Dmg.
+ *
+ * Separate from `statLine` rather than parsed back out of it — a sheet is a
+ * table and a record is a sentence, and deriving one from the other by
+ * splitting on separators would break the moment a value contained one.
+ */
+export function actionColumns(action) {
+  if (!action) return { rg: '', skl: '', rst: '', tn: '', dmg: '' }
+
+  const range = action.range == null || action.range === ''
+    ? ''
+    : action.range === '*' ? '*' : `${action.range}"`
+
+  return {
+    rg: action.rangeTypeLabel ? `${action.rangeTypeLabel} ${range}` : range,
+    skl: [action.stat, action.statSuits, action.statModifier].filter(Boolean).join(' '),
+    rst: action.resistedBy || '',
+    tn: [action.targetNumber, action.targetSuits].filter(Boolean).join(' '),
+    dmg: action.damage == null ? '' : String(action.damage),
+  }
+}
+
 /* ── the memory-only cache ─────────────────────────────────────────── */
 
 const cache = new Map()

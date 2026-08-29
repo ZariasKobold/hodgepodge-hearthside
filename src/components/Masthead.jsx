@@ -51,6 +51,13 @@ export default function Masthead({ step, onJump, fileNumber, auth, admitted = tr
               Arsenal
             </button>
             <button
+              className={`views__item${view === 'sheet' ? ' views__item--on' : ''}`}
+              onClick={() => onView('sheet')}
+              aria-current={view === 'sheet' ? 'page' : undefined}
+            >
+              Sheet
+            </button>
+            <button
               className={`views__item${view === 'create' ? ' views__item--on' : ''}`}
               onClick={() => onView('create')}
               aria-current={view === 'create' ? 'page' : undefined}

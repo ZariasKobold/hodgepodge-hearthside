@@ -18,6 +18,7 @@ import SignInGate from './components/SignInGate.jsx'
 import ArsenalLibrary from './components/ArsenalLibrary.jsx'
 import WeeklyHire from './components/steps/WeeklyHire.jsx'
 import Arsenal from './components/steps/Arsenal.jsx'
+import ArsenalSheet from './components/ArsenalSheet.jsx'
 import './styles/app.css'
 
 /** A stable case number, so the same leader always files under the same mark. */
@@ -176,6 +177,17 @@ export default function App() {
             fileNumber={fileNumber(leader)}
             onEditLeader={() => { setStep(0); setView('create') }}
             onHire={() => setView('campaign')}
+            onSheet={() => setView('sheet')}
+          />
+        )}
+
+        {admitted && inCampaign && view === 'sheet' && archetype && (
+          <ArsenalSheet
+            arsenal={arsenal}
+            leader={leader}
+            archetype={archetype}
+            campaign={campaign}
+            rules={rules}
           />
         )}
 

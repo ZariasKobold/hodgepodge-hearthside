@@ -1,10 +1,10 @@
 # CLAUDE.md — Hodgepodge Hearthside project context
 
-<!-- HH v0.7.1 | Last updated: 2026-08-22 -->
+<!-- HH v0.8.0 | Last updated: 2026-08-22 -->
 
 ---
 
-## Current Version: 0.7.1
+## Current Version: 0.8.0
 
 ## Last Updated: 2026-08-22
 
@@ -250,6 +250,7 @@ hodgepodge-hearthside/
 │   ├── hooks/              useCampaign, useRoster, useAuth, useHank, useSync
 │   ├── components/         wizard steps and shared UI
 │   │   ├── ArsenalLibrary.jsx  the shelf — one card per leader
+│   │   ├── ArsenalSheet.jsx    the official sheet's fields, our look
 │   │   ├── LeaderRecord.jsx    the filed record, shared by two views
 │   │   └── steps/Arsenal.jsx   the standing view of one campaign
 │   └── styles/             tokens.css holds the design direction
@@ -489,7 +490,11 @@ Wyrd's Fan Site and Art Policy permits this. The conditions are real:
 - **The disclaimer appears on every page.** It's in `App.jsx`. Never remove it.
 - **No Wyrd trademark in the domain.** hodgepodgehearthside.com is clear.
 - **Don't copy their trade dress.** This deliberately doesn't resemble their
-  cards or their app. Keep it that way.
+  cards or their app. Keep it that way. `ArsenalSheet.jsx` is the test case:
+  it matches the official sheet **field for field**, so a player finds
+  everything where they expect it, in this app's own type and palette. Owner
+  decision, v0.8.0 — "design something better, but capture everything from the
+  original". Copying the layout was offered and declined.
 - **Permission is revocable at any time, for any reason.** Which is why every
   campaign must export to JSON — someone's twelve weeks has to survive this app
   going away. Treat data portability as a requirement, not a nice-to-have.
