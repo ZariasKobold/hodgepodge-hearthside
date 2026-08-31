@@ -3,6 +3,7 @@ import { FACTIONS } from '../../data/factions.js'
 import { registry } from '../../lib/api.js'
 import { Label, Field, Input, Chip } from '../ui.jsx'
 import Combobox from '../Combobox.jsx'
+import PortraitPicker from '../PortraitPicker.jsx'
 import HankSays from '../HankSays.jsx'
 import { CREATION } from '../../data/hank.js'
 
@@ -44,6 +45,15 @@ export default function Identity({ leader, set }) {
           value={leader.name}
           onChange={(e) => set({ name: e.target.value })}
           placeholder="Not a name an existing model already has"
+        />
+      </Field>
+
+      <Field>
+        <Label>Picture of the model</Label>
+        <PortraitPicker
+          value={leader.portrait || null}
+          name={leader.name}
+          onChange={(portrait) => set({ portrait })}
         />
       </Field>
 

@@ -4,7 +4,7 @@
 
 ---
 
-## Current Version: 0.9.1
+## Current Version: 0.10.0
 
 ## Last Updated: 2026-08-31
 
@@ -73,9 +73,10 @@ Feature sessions ship features and miss cross-file drift. Audit whenever any
 of these fire:
 
 - Every 10 sessions, counted from the numbered entries in `docs/VERSION_HISTORY.md`.
-  **The Session 20 audit was missed** — sessions 20, 21, 22 and 23 all shipped
+  **The Session 20 audit was missed** — every session since has shipped
   features without one, and v0.7.0's `arsenal_models` hole is the kind of thing
-  that catches. Treat it as **overdue: run it next session (24).** Sessions are
+  that catches. Treat it as **overdue: run it before any further feature
+  work**, rather than pinning it to a session number that keeps slipping. Sessions are
   counted rather than version
   numbers because a minor bump skips a patch series and makes a version-based
   target unreachable — which is exactly what happened to the old v0.3.10 target.

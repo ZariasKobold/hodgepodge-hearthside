@@ -65,7 +65,10 @@ function LeaderCard({ campaign, onOpen, onExport, onDiscard }) {
   const named = leader.name?.trim()
 
   return (
-    <article className="leafcard">
+    <article className={`leafcard${leader.portrait ? ' leafcard--hasart' : ''}`}>
+      {leader.portrait && (
+        <img className="leafcard__portrait" src={leader.portrait} alt="" />
+      )}
       <div className="leafcard__head">
         <span className="record__eyebrow">
           {arsenal.faction ? factionLabel(arsenal.faction) : 'No faction yet'}

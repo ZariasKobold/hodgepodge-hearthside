@@ -47,6 +47,12 @@ export function createLeader(patch = {}) {
     base: 30,
     advancementPath: '',
     representingModel: '',
+    /**
+     * A square WebP data URL of the model standing in for this leader, or null.
+     * Lives in the doc so it exports, syncs and survives this app going away;
+     * lib/portrait.js holds the size budget that keeps it under D1's row cap.
+     */
+    portrait: null,
     picks: { attack: [], tactical: [], ability: [] },
     trigger: '',
     experience: { boxesChecked: 0 },

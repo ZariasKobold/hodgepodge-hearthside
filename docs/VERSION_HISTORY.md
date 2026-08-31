@@ -1468,3 +1468,84 @@ directory and copies, and says why.
 Cloudflare serves it publicly even though no page requests it. It costs nothing
 at page load and it is the owner's file in the owner's chosen location; logged
 under Known issues rather than moved.
+
+---
+
+### Session 25 — v0.10.0
+Date: 2026-08-31
+
+**feat: the camp becomes the masthead, and leaders get a face**
+
+Two owner-supplied images and one owner-requested feature.
+
+**The hero.** `Hank-Hero-Image.png` replaces the code-drawn `road-horizon.svg`,
+which is deleted. Served as two WebP derivatives — 960w at 99 KB below the
+breakpoint, 1600w at 215 KB above it — from a 2.4 MB master.
+
+The crop anchor is the load-bearing detail and the first attempt got it wrong:
+the camp sits in the lower half of the image, so a centred `cover` crop showed
+sky and mesas and cut off Hank, the fire and Henrietta entirely. It is anchored
+at `50% 72%` and that number is recorded in `docs/ART_BRIEF.md`, because it
+must be re-checked if the hero is ever redrawn.
+
+The wordmark and nav now sit over a picture rather than a flat panel, so both
+gained shadows and the nav buttons gained a translucent plate. Measured against
+the brightest pixel of the sunset the nav still clears **5.24:1**.
+
+**The background is deliberately NOT wired up.** `website-background.png` is
+optimised and committed, but it carries the Wyrd wordmark on the `MALIFAUX`
+signpost, and §8 forbids copying Wyrd's trade dress on a permission that is
+revocable at any time. The owner is regenerating it. Two related marks in the
+owner's mockup — a footer Wyrd logo, and a masthead subtitle reading "Wyrd
+Games Campaign Companion" — were **not** implemented: the second directly
+contradicts the disclaimer §8 requires, which says this app is not endorsed
+by Wyrd.
+
+**Leader portraits.** New `src/lib/portrait.js` plus 24 tests, a
+`PortraitPicker` cropper, and `leader.portrait` in the campaign shape.
+
+**Key decisions and why:**
+
+- **Stored as a WebP data URL inside the campaign doc**, not in a bucket. It
+  rides the machinery that already exists — localStorage working copy, D1
+  mirror, JSON export — so it needs no R2, no signed URLs, no second auth path,
+  and it survives this app disappearing, which §8 requires. There is also no
+  public asset URL to guess.
+- **`MAX_STORED_BYTES` is the load-bearing number, and it exists because of
+  D1.** D1 caps a row at roughly 1 MB and the whole campaign lives in `doc`, so
+  an unbounded portrait would not fail at upload — it would fail later, at
+  sync, on a device the player is not looking at. A real 256px crop measured
+  **18 KB**, taking a whole campaign to 25 KB.
+- **Quality is dropped before dimensions.** At 256px a soft photo still reads;
+  a 128px one looks broken beside hand-drawn art.
+- **The stored image is square; the circle is CSS.** Baking transparent corners
+  would cost bytes, lock the shape, and make the asset useless anywhere that is
+  not a circle. The cropper dims the corners so it stays honest about what is
+  kept.
+- **No `schemaVersion` bump.** The field is optional and an absent key reads as
+  undefined, which is falsy everywhere it is consulted, so old campaigns need
+  no migration step.
+
+**Three bugs found by driving the real UI, all introduced by this work:**
+
+- **`loadImage` revoked its own object URL in `onload`.** The canvas was fine —
+  the bitmap is decoded by then — but `img.src` pointed at a dead URL, so the
+  cropper's preview rendered as an empty black square. Ownership of the URL now
+  passes to the caller, with `releaseImage` called on save, cancel, replace and
+  unmount.
+- **Taking pointer capture stopped the browser focusing the frame**, so arrow-key
+  panning silently did nothing after a click: the frame answered the mouse and
+  ignored the keyboard until it was tabbed to. It now focuses explicitly on
+  pointer down. Found by testing the keyboard path rather than assuming it.
+- **A grid item spanning every row sizes those rows from the inside**, so the
+  104px portrait stretched the shelf card's text rows and opened a gap under
+  the eyebrow. `align-content: start` cannot fix that — the rows had already
+  grown. The portrait is absolutely positioned instead.
+
+**Verified:** 158 tests, build clean, detector clean. A real 2.4 MB PNG driven
+through the whole path — validate, decode, pan by keyboard, crop, encode,
+store, render on the shelf — at both desktop and mobile widths.
+
+**Not covered by tests:** `renderPortrait`, `loadImage` and `releaseImage` touch
+canvas and object URLs, the same licence `storage.js` takes. Everything above
+them in the module is pure and tested.

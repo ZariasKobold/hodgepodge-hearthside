@@ -9,11 +9,11 @@ export default function Masthead({ step, onJump, fileNumber, auth, admitted = tr
   return (
     <header className="masthead">
       <div className="masthead__top">
-        <div>
+        <div className="masthead__name">
           <h1 className="masthead__title">Hodgepodge Hearthside</h1>
           <div className="masthead__sub">An Emissary's Campfire Wisecracks for Campaign Play</div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div className="masthead__chrome">
           <button
             className="hank-toggle"
             onClick={toggle}

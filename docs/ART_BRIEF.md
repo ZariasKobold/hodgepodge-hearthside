@@ -69,22 +69,46 @@ it will overwrite the master.
 Henrietta must stay in frame in any replacement. She is established character
 (§7) and she is the difference between "a man" and "Hank".
 
-## 2. The road horizon — `road-horizon.svg`
+## 2. The masthead hero — `hero-1600.webp` / `hero-960.webp` ✅ DONE
 
-The band across the bottom of the masthead. Currently hills, pines, a leaning
-telegraph pole, and the two of them walking.
+Owner-drawn camp at dusk: tent and Hank on the left, the fire centre, Henrietta
+packed and lying down on the right, mesas and sunset behind. It replaced the
+code-drawn `road-horizon.svg`, which has been deleted.
 
 | | |
 |---|---|
-| Shape | Very wide. Current viewBox is `0 0 1200 130`. |
-| Rendered at | Full masthead width, **118 px tall**, `background-size: cover`, anchored bottom-centre. |
-| Opacity | Drawn at **0.55** in CSS, so supply it at full strength. |
+| Master | `Hank-Hero-Image.png`, 1983 × 793, 2.4 MB. |
+| Served | `hero-1600.webp` (215 KB) above 960px, `hero-960.webp` (99 KB) below it. |
+| Rendered at | Full masthead width, `cover`, anchored `50% 72%`. Masthead is 268px tall on desktop, 208px on phones. |
 
-**It must survive being cropped.** On a phone the visible slice is roughly the
-middle third; on a wide monitor it is the whole thing scaled up. So: no single
-focal point that breaks when cut, and nothing important within 15% of either
-edge. It sits *behind the navigation buttons* — it is depth, not a picture. If
-it starts competing for attention it is too strong.
+**The crop anchor is the load-bearing number.** The camp occupies the lower
+half of the image, so a default centred crop shows sky and mesas and cuts Hank
+and the fire off entirely — which is exactly what the first attempt did. If the
+hero is ever redrawn, re-check `background-position` in `.masthead`.
+
+**It must survive being cropped hard.** On a phone the visible slice is roughly
+the middle third. Nothing important can sit within 15% of either edge. It sits
+*behind the wordmark and the navigation*, so a scrim is layered over it —
+heaviest top and bottom where type sits, thinnest across the middle so the fire
+still reads. Supply at full strength; the scrim is CSS.
+
+## 2b. The page background — `background-1536.webp` ⏸ ON HOLD
+
+Owner-drawn props and an ornate frame: steer skull, wanted poster, lantern,
+signposts, whiskey, contract. Optimised to 255 KB and sitting in `public/art/`,
+but **not wired up**, for two reasons:
+
+1. **It carries the Wyrd wordmark** on the `MALIFAUX` signpost. §8 forbids
+   copying Wyrd's trade dress, and the permission this project runs on is
+   revocable at any time. Awaiting a regenerated version without it.
+2. **The ornate frame cannot be part of a flat background image.** The content
+   panel's height varies enormously — one leader versus eight, or the arsenal
+   sheet, which runs to pages — and a baked frame cannot stretch. It needs
+   supplying as a **separate asset from the props**, so it can become a CSS
+   `border-image` 9-slice: four corners that stay crisp, four edges that tile.
+
+The side props also need a breakpoint below which they are hidden, or on a
+phone they sit directly behind the text.
 
 ## 3. Assets there is currently no slot for
 
