@@ -92,7 +92,18 @@ the middle third. Nothing important can sit within 15% of either edge. It sits
 heaviest top and bottom where type sits, thinnest across the middle so the fire
 still reads. Supply at full strength; the scrim is CSS.
 
-## 2b. The page background — `background-1536.webp` ✅ DONE
+## 2b. The page background — `background-1536.webp` ❌ BUILT, THEN REMOVED
+
+**Removed by owner decision in v0.10.2, after seeing it live: "This is way too
+much."** The art is good; there was simply too much of it at once, with the
+hero already carrying the scene. The files are kept and nothing references
+them. Everything below is the spec as built, so it can be restored without
+re-deriving any of it.
+
+The obvious lesson for a future attempt: **the hero and a full background are
+competing for the same job.** If the props come back they probably need to be
+much quieter — lower opacity, or confined to a narrow margin strip rather than
+scaled to `cover` — and the hero may need to shrink to make room.
 
 Owner-drawn props at the table's edges: steer skull, wanted poster, lantern,
 strongbox, signposts, whiskey, contract, skull. The signposts read Sable Ridge,

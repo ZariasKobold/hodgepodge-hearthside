@@ -4,7 +4,7 @@
 
 ---
 
-## Current Version: 0.10.1
+## Current Version: 0.10.2
 
 ## Last Updated: 2026-08-31
 
@@ -111,7 +111,7 @@ Shipped and live:
 | **Arsenal sheet** | Every field of the official sheet, in this app's own type and palette. |
 | **D1 sync** | Local-first, D1 mirrors. Signing in adopts anything built signed out. **Confirmed working across the owner's phone and computer.** |
 | **Security** | Ownership gate, `requireSubject`, same-origin writes, 16 authorization tests, account erasure. |
-| **The look** | v0.10.1. A camp at dusk. Owner-drawn hero across the masthead, owner-drawn props at the page edges, one firelight source over them, Rye on the wordmark, Alegreya everywhere else. |
+| **The look** | v0.10.2. A camp at dusk. Owner-drawn hero across the masthead, one firelight source, Rye on the wordmark, Alegreya everywhere else. The page behind the reading column is deliberately plain — a full background of props was built and removed by owner decision. |
 | **Hank has a face** | v0.9.1. Owner-drawn 16-bit medallion, served as a 33 KB WebP beside every line he speaks. See `docs/ART_BRIEF.md`. |
 
 134 tests. The audit's high and all mediums are closed.

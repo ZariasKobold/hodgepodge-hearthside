@@ -22,31 +22,17 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Hank's things, laid out at the edges of the table.
-   Two fixed layers rather than one: the objects do not breathe, and the fire
-   has to fall on top of them rather than under them. ::after paints after
-   ::before, so the order here is the lighting order.
-
-   Loaded only above 900px. Below that the props are cropped out of frame
-   entirely by `cover`, so a phone would be paying 250 KB for pixels it never
-   sees — and any prop that did survive the crop would sit behind the text. */
-body::before {
-  content: '';
-  position: fixed; inset: 0; z-index: 0; pointer-events: none;
-  background: var(--night);
-}
-@media (min-width: 900px) {
-  body::before {
-    background: url('/art/background-1536.webp') 50% 0 / cover no-repeat, var(--night);
-    opacity: .9;
-  }
-}
-
 /* The one light source. It sits low and centre, the way a fire does, and its
    slow rise and fall is the single authored moment of motion in the app —
    everything else that moves is affordance. Fixed rather than scrolled: you
-   do not leave the campsite by scrolling down a page. */
-body::after {
+   do not leave the campsite by scrolling down a page.
+
+   The page behind the reading column is deliberately plain. A full background
+   of Hank's belongings was built and removed by owner decision in v0.10.2 —
+   the art is good and there was simply too much of it at once, with the hero
+   already carrying the scene. `public/art/website-background.png` and its
+   WebP derivative are kept; nothing references them. */
+body::before {
   content: '';
   position: fixed; inset: 0; z-index: 0; pointer-events: none;
   background:
@@ -55,19 +41,6 @@ body::after {
   animation: hearth 7s cubic-bezier(.4,0,.5,1) infinite alternate;
 }
 @keyframes hearth { from { opacity: .8 } to { opacity: 1 } }
-
-/* A plate under the reading column, soft-edged so it reads as light falling on
-   the table rather than as a box. Without it, bare text — labels, notes, the
-   colophon — sits directly on the wanted poster and the signposts. */
-@media (min-width: 900px) {
-  .wrap {
-    background: linear-gradient(90deg,
-      rgba(20, 14, 9, 0) 0%,
-      rgba(20, 14, 9, .90) 7%,
-      rgba(20, 14, 9, .90) 93%,
-      rgba(20, 14, 9, 0) 100%);
-  }
-}
 
 /* Browser surfaces belong to the design too. Left alone they ship as system
    defaults that belong to no palette at all. */
@@ -655,8 +628,7 @@ body::after {
   .hank, .hank-toggle, .gate, .account { display: none !important; }
 
   body { background: #fff; color: #000; }
-  body::before, body::after { display: none !important; }
-  .wrap { background: none !important; }
+  body::before { display: none !important; }
   .shell { padding: 0; }
   .wrap { max-width: none; padding: 0; }
 

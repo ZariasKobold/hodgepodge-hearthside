@@ -1602,3 +1602,42 @@ to make it taller.
 
 **Verified:** 158 tests, build clean, detector clean. Crop geometry measured at
 1280, 1600 and 2000px and confirmed identical; mobile checked separately.
+
+---
+
+### Session 27 — v0.10.2
+Date: 2026-08-31
+
+**revert: the background comes back out**
+
+Owner decision on seeing v0.10.1 live: *"This is way too much. Take back out the
+background. I don't like it as it turns out."* Removed the same session it
+shipped.
+
+Worth recording rather than quietly reverting, because the judgement is the
+useful part: **the hero and a full-page background were competing for the same
+job.** The masthead already carries the whole camp — tent, Hank, fire,
+Henrietta, sunset — and putting a second detailed scene behind the reading
+column meant every part of the page was asking to be looked at. Neither image
+was at fault; there were two of them.
+
+What came out with it, because all of it existed only to serve the background:
+
+- The second fixed layer. `body::after` folded back into `body::before`, which
+  is once again the single firelight layer it was in v0.9.0.
+- The `min-width: 900px` gate that kept the 250 KB image off phones.
+- The soft-edged plate under the reading column, whose only purpose was
+  keeping bare labels and the colophon off the wanted poster.
+- The print override for both.
+
+**Kept:** `website-background.png` and `background-1536.webp` stay in
+`public/art/`, referenced by nothing. They are the owner's art and the spec for
+rebuilding is preserved in `docs/ART_BRIEF.md` under a heading that says
+plainly it was built and removed. If it is ever tried again the note there says
+the props need to be far quieter — a margin strip rather than `cover` — and the
+hero would likely have to shrink to make room.
+
+The hero, its vw-based height and both crop anchors are untouched.
+
+**Verified:** 158 tests, build clean, and `background-1536` appears zero times
+in the built stylesheet.
