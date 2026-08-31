@@ -1,13 +1,15 @@
 # Art brief — the imagery this app is built to receive
 
 Written v0.9.0, when the visual direction changed from a records office to a
-camp at dusk. Everything in `public/art/` today is a **placeholder drawn in
-code**. It is deliberately silhouette-only so that it reads as intentional
-rather than unfinished, but it is not the real thing and it is not meant to
-survive.
+camp at dusk, and kept current since.
+
+**Everything in `public/art/` is now owner-drawn.** The code-drawn placeholders
+this file was originally written for are gone: the portrait was replaced in
+v0.9.1, the hero in v0.10.0, and `road-horizon.svg` was deleted with it.
 
 This file exists so that art can be made once, to the right spec, instead of
-made twice.
+made twice — and so the load-bearing numbers, the crop anchors especially, are
+written down where the next person will look.
 
 ---
 
@@ -18,9 +20,14 @@ one, overwrite the file. No component changes, no rebuild step, no cache
 busting — Cloudflare Pages serves `public/` verbatim.
 
 ```
-public/art/hank-portrait.webp    ← the face beside every line he speaks (REAL ART)
-public/art/16-bit-hank.png       ← the 1254px master it was derived from
-public/art/road-horizon.svg      ← the band behind the masthead (still placeholder)
+public/art/hank-portrait.webp    ← the face beside every line he speaks
+public/art/16-bit-hank.png       ← the 1254px master, and the source of the icons
+public/art/hero-1600.webp        ← the masthead camp, above 960px
+public/art/hero-960.webp         ← the same, for phones
+public/art/Hank-Hero-Image.png   ← the 1983x793 master those come from
+public/art/background-1536.webp  ← the props at the page edges, drawn at 10%
+public/art/website-background.png ← its 1536x1024 master
+public/icon-*.png                ← PWA icons, derived from 16-bit-hank.png
 ```
 
 If a raster file is supplied instead of vector, keep the same basename and
@@ -79,9 +86,14 @@ code-drawn `road-horizon.svg`, which has been deleted.
 |---|---|
 | Master | `Hank-Hero-Image.png`, 1983 × 793, 2.4 MB. |
 | Served | `hero-1600.webp` (215 KB) above 960px, `hero-960.webp` (99 KB) below it. |
-| Rendered at | Full masthead width, `cover`, anchored `50% 72%`. Masthead is 268px tall on desktop, 208px on phones. |
+| Rendered at | Full masthead width, `cover`, anchored `50% 72%` above 960px and `36% 60%` below. Masthead height is `clamp(250px, 23vw, 520px)`. |
 
-**The crop anchor is the load-bearing number.** The camp occupies the lower
+**The crop anchor and the vw height are the load-bearing numbers.** The height
+is in `vw` rather than pixels because with `cover` the visible fraction of the
+image is `height x 2.5 / width` — a fixed pixel height crops harder the wider
+the monitor, which is how Hank lost his head on a 2000px screen in v0.10.0.
+
+**The crop anchor.** The camp occupies the lower
 half of the image, so a default centred crop shows sky and mesas and cuts Hank
 and the fire off entirely — which is exactly what the first attempt did. If the
 hero is ever redrawn, re-check `background-position` in `.masthead`.
@@ -114,7 +126,7 @@ clear of §8.
 | | |
 |---|---|
 | Master | `website-background.png`, 1536 × 1024, 2.66 MB. |
-| Served | `background-1536.webp`, **250 KB**, at 90% opacity. |
+| Served | `background-1536.webp`, **250 KB**, at **10%** opacity. |
 | Rendered at | `body::before`, fixed, `cover`, anchored `50% 0`. |
 
 **It is not loaded below 900px.** `cover` crops the props out of frame entirely
@@ -126,9 +138,10 @@ any prop that did survive would sit behind the text.
 rather than under them, and the objects must not breathe with the fire's
 animation.
 
-**A soft-edged plate sits under the reading column** above 900px. Without it,
-bare text — labels, notes, the colophon — lands directly on the wanted poster
-and the signposts.
+**There is deliberately no plate under the reading column.** One existed at
+90%, to keep bare labels and the colophon off the wanted poster. At 10% nothing
+competes with the text, so the plate went and the page stayed simpler. If the
+opacity is ever raised, that plate is the first thing that has to come back.
 
 ### If the frame ever comes back
 
