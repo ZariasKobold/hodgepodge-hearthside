@@ -1971,3 +1971,58 @@ touched which campaign was open, never a campaign.
 
 **Verified:** 181 tests, build clean, and the five tabs confirmed present on
 load and after opening a campaign.
+
+---
+
+### Session 34 — v0.14.0
+Date: 2026-08-31
+
+**feat: installable — manifest, icons and a service worker**
+
+Owner request: make it installable on a device.
+
+**The constraint that shaped the whole thing: the service worker must never
+cache `/api/`.** That path carries three things and each forbids it on its own.
+`/api/v1/*` is the BiggerHat proxy, so a cached response there is card text on
+disk, outliving the tab and no longer refreshed by an errata — §4's exact
+prohibition, and it would silently undo the trouble `rules.js` takes to hold
+that text in a Map that dies with the page. `/api/auth/*` cached is a stale
+identity, and `/api/campaigns/*` cached is somebody's twelve weeks, wrong. One
+`return`, first branch in the fetch handler, covers all three. It is written
+into CLAUDE.md §4 rather than only into the file, because it is the kind of
+rule a later "let's cache more" change would step on without noticing.
+
+**Verified rather than assumed:** with `/api/auth/me` and `/api/v1/factions`
+both explicitly fetched, an audit of every Cache Storage entry found **zero**
+under `/api/`.
+
+**What is cached:** the shell, the hashed bundles, the artwork and the four
+webfonts. All of it is content-hashed or immutable, so cache-first is safe —
+a deploy produces new URLs, and `index.html` is fetched network-first so those
+new URLs are found. No `skipWaiting`: a new worker waits for the old one to be
+released rather than swapping assets under a page that is mid-campaign.
+
+**Icons** are derived from `16-bit-hank.png` with sharp. The maskable one is
+not simply a resize: Android crops a maskable icon to a circle inscribed in
+about 80% of the square, and this artwork is *already* a circle, so a naive
+export would have lost the brass rim and a slice of Hank. It is scaled into the
+safe zone and padded on `--night` instead. Everything is flattened onto that
+same colour, because the source has transparent corners and palette
+quantisation was turning them white.
+
+**Registration is production-only.** `npm run dev` serves `public/` too, so
+registering there would put a worker in front of the dev server and cache
+whatever Vite happened to be serving — the classic way to spend an afternoon
+chasing a stale bundle that no longer exists on disk.
+
+**Tested offline for real**, not simulated: the preview server was stopped
+outright and the page reloaded. The app rendered completely — Rye from cache,
+the hero image, the full navigation.
+
+**Known, and needing an owner decision:** in production that offline launch
+reaches `SignInGate`, because `/api/auth/me` cannot answer and §12b gates play
+behind an account. So an installed app opened without a connection currently
+opens to "Sign-in is unreachable". The install is still worth having — own
+window, instant launch, no browser chrome — but "installable" and "usable on a
+train" are not the same thing yet, and closing that gap means changing a
+documented rule rather than adding code.

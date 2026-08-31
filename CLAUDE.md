@@ -4,7 +4,7 @@
 
 ---
 
-## Current Version: 0.13.1
+## Current Version: 0.14.0
 
 ## Last Updated: 2026-08-31
 
@@ -383,6 +383,10 @@ in `src/data/hank.js`. Missing piece is UI plus the `Campaign` object.
 hodgepodge-hearthside/
 ├── CLAUDE.md               this file — read first
 ├── wrangler.toml           D1 binding — for the CLI *and* the deployed site
+├── public/
+│   ├── sw.js               service worker — READ ITS HEADER before editing
+│   ├── manifest.webmanifest
+│   └── art/                owner-drawn art plus the icons derived from it
 ├── migrations/             D1 schema, append-only
 ├── functions/              Cloudflare Pages Functions — edge, never bundled
 │   ├── lib/
@@ -513,6 +517,20 @@ Two reasons, and the second is the durable one:
 **Never add a field that carries rules text to anything that persists.** Not to
 the indexed model, not to a localStorage key, not to the JSON export, not to
 D1. If a feature seems to need that, the feature is wrong.
+
+### The service worker must never cache /api/ — added v0.14.0
+
+The app is installable, which means there is a `public/sw.js` with a Cache
+Storage at its disposal. **Nothing under `/api/` may go into it.**
+
+`/api/v1/*` is the BiggerHat proxy. A cached response there is card text on
+disk, outliving the tab and no longer refreshed by an errata — which is exactly
+what this section forbids, and it would quietly undo the trouble `rules.js`
+goes to in holding that text in a module-level Map. The same bypass also keeps
+`/api/auth/*` from serving a stale identity and `/api/campaigns/*` from serving
+somebody's twelve weeks wrong, so one `return` covers all three.
+
+It is the first branch in the fetch handler. Do not add an exception to it.
 
 ### The display-only exception — added v0.5.0 by owner decision
 
