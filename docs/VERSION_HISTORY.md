@@ -1695,3 +1695,58 @@ screenshot, *then* read the DOM. And trust `elementFromPoint` over the picture.
 row and the chrome hidden; document height unchanged across the transition;
 re-expands on the way back up; no ancestor creating a containing block that
 would break `fixed`. 158 tests, build clean.
+
+---
+
+### Session 29 — v0.11.0
+Date: 2026-08-31
+
+**feat: a 1024 column, a bottom navbar on phones, and a footer that fills**
+
+Four owner observations from the live site, taken together.
+
+**The reading column goes to 1024px**, centred above that. Four places carried
+the same hard-coded 820px; they now read one `--wrap-w`, because a masthead row
+that disagrees with the column beneath it is immediately visible.
+
+One measure had to be protected rather than widened: `.hank__line` is capped at
+76ch. Hank's narration is the only genuinely long-form prose on the page and at
+1024px it ran past 120 characters a line. Nothing else needed it.
+
+**The footer fills its column again.** The `max-width: 68ch` on `.colophon` and
+`.privacy__line` dated from the 820px column and the busy props background;
+at 1024 on a plain ground it just left a ragged hole down the right-hand side.
+Removed — measured at 984px, exactly the column's inner width.
+
+**Phones get a bottom navbar.** Five destinations could not fit a shrinking
+top bar without clipping, and the horizontally-scrolling row that replaced the
+wrapped rows only moved the problem — it hid whichever end you were not looking
+at, which is what the owner's screenshot showed. Below 768px `.views` leaves
+the masthead and becomes a fixed bottom bar: always visible, never clipped, and
+where a thumb already is. The wordmark stays at the top, as the owner asked.
+
+The nav stays inside `<header>` in the DOM and is *not* clipped by the
+masthead's `overflow: hidden` — `position: fixed` resolves against the viewport,
+and an ancestor's overflow only clips a fixed descendant if that ancestor is
+also its containing block, which the masthead is not. Verified rather than
+assumed. `env(safe-area-inset-bottom)` keeps it clear of the home indicator,
+and `.shell` gains matching bottom padding so the last card is not underneath
+it.
+
+**The shrink thresholds came down, 150/60 to 80/24.** The shelf is the shortest
+page in the app and, at a 1024 column, has about 110px of scroll in total — so
+a 150px trigger meant the one screen you land on could never shrink, which is
+exactly where the hero is most in the way. Shrinking has to be reachable on the
+shortest page.
+
+**A real bug found while measuring, present since the hero landed in v0.10.0:**
+the wordmark was never centred. `.masthead__top` was centred, but the
+centering override sat *above* the base rule's `justify-content: space-between`
+and lost to it at equal specificity, so the title was pinned left. Invisible at
+an 820px column; obvious at 1024. Fixed at the base rule so there is one
+source.
+
+**Verified:** wordmark, subtitle, nav and column all centred at the same
+midpoint; footer 984px against a 984px inner column; shelf now shrinks at its
+109px maximum scroll; phone header 71px with a 48px bottom bar carrying all
+five labels untruncated. 158 tests, build clean.

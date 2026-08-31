@@ -6,12 +6,18 @@ const STEPS = ['Identity', 'Archetype', 'Loadout', 'Record']
 
 /**
  * Past this the camp has been looked at and the navigation is what matters.
+ *
  * Two thresholds rather than one on purpose: the bar shrinks as you pass the
  * larger and only re-expands below the smaller, so a scroll position sitting
  * exactly on a single threshold cannot flip it back and forth.
+ *
+ * They are low because the shelf is a short page — at a 1024 column it has
+ * around 110px of scroll in total, so a 150px trigger meant the one screen you
+ * land on could never shrink at all, which is where the hero is most in the
+ * way. Shrinking has to be reachable on the shortest page in the app.
  */
-const SHRINK_AT = 150
-const GROW_AT = 60
+const SHRINK_AT = 80
+const GROW_AT = 24
 
 export default function Masthead({ step, onJump, fileNumber, auth, admitted = true, view = 'library', onView, inCampaign = false, onLibrary }) {
   const { enabled, toggle } = useHank()
