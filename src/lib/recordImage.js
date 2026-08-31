@@ -28,6 +28,10 @@ export const LEGAL =
  *                 names, which is what the record did before any of this.
  */
 export function buildSheet({ leader, archetype, factionLabel, fileNumber, slots, slotLabel, effect, cardFor }) {
+  // The picture goes on the PNG too — it was on the shelf card and nowhere
+  // that leaves the app (audit L12). Null when there isn't one, and every
+  // step below is skipped in that case.
+  const portrait = leader.portrait || null
   const sections = []
 
   for (const slot of slots) {
@@ -101,6 +105,7 @@ export function buildSheet({ leader, archetype, factionLabel, fileNumber, slots,
   }
 
   return {
+    portrait,
     eyebrow: `${factionLabel} · ${archetype.name}`,
     file: fileNumber,
     name: leader.name || 'Unnamed',
@@ -195,9 +200,21 @@ function compose(ctx, sheet) {
   ops.push({ op: 'rule', y, x1: PAD, x2: right, color: OXIDE, width: 2 })
   y += 26
 
-  text(sheet.name, { font: `800 44px ${DISPLAY}`, color: INK, size: 44, gap: 4 })
+  /* The portrait sits top-right, and the two lines beside it are given a
+     narrower measure so a long leader name wraps clear of it rather than
+     running underneath. */
+  const PORTRAIT = 96
+  const portraitTop = y - 8
+  if (sheet.portrait) {
+    ops.push({ op: 'image', x: right - PORTRAIT, y: portraitTop, w: PORTRAIT, h: PORTRAIT })
+  }
+  const headMax = sheet.portrait ? inner - (PORTRAIT + 18) : inner
+
+  text(sheet.name, { font: `800 44px ${DISPLAY}`, color: INK, size: 44, gap: 4, max: headMax })
   y += 8
-  text(sheet.line, { font: `400 13px ${DATA}`, color: MUTE, size: 13, gap: 4 })
+  text(sheet.line, { font: `400 13px ${DATA}`, color: MUTE, size: 13, gap: 4, max: headMax })
+  // Never let the following content start above the picture's bottom edge.
+  if (sheet.portrait) y = Math.max(y, portraitTop + PORTRAIT + 8)
   y += 26
 
   // stats
@@ -242,7 +259,7 @@ function compose(ctx, sheet) {
   return { ops, height: Math.ceil(y + PAD) }
 }
 
-function paint(ctx, ops, height) {
+function paint(ctx, ops, height, portraitImage) {
   ctx.fillStyle = CARD
   ctx.fillRect(0, 0, W, height)
   ctx.strokeStyle = LINE
@@ -256,6 +273,26 @@ function paint(ctx, ops, height) {
       ctx.beginPath()
       ctx.moveTo(op.x1, op.y)
       ctx.lineTo(op.x2, op.y)
+      ctx.stroke()
+      continue
+    }
+    if (op.op === 'image') {
+      // Skipped rather than boxed if the decode failed — a missing picture is
+      // a smaller problem than a broken one.
+      if (!portraitImage) continue
+      const r = op.w / 2
+      const cx = op.x + r
+      const cy = op.y + r
+      ctx.save()
+      ctx.beginPath()
+      ctx.arc(cx, cy, r, 0, Math.PI * 2)
+      ctx.clip()
+      ctx.drawImage(portraitImage, op.x, op.y, op.w, op.h)
+      ctx.restore()
+      ctx.strokeStyle = LINE
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      ctx.arc(cx, cy, r - 0.5, 0, Math.PI * 2)
       ctx.stroke()
       continue
     }
@@ -288,8 +325,22 @@ async function readyFonts() {
   } catch { /* draw with whatever is available */ }
 }
 
+/** Decodes the stored data URL. Resolves to null rather than rejecting. */
+function loadPortrait(dataUrl) {
+  if (!dataUrl) return Promise.resolve(null)
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.onload = () => resolve(img)
+    img.onerror = () => resolve(null)
+    img.src = dataUrl
+  })
+}
+
 export async function sheetToPNG(sheet, filename) {
   await readyFonts()
+  // Before composing: the image has to exist by the time paint runs, and paint
+  // is synchronous.
+  const portraitImage = await loadPortrait(sheet.portrait)
 
   const measure = document.createElement('canvas').getContext('2d')
   const { ops, height } = compose(measure, sheet)
@@ -300,7 +351,7 @@ export async function sheetToPNG(sheet, filename) {
   const ctx = canvas.getContext('2d')
   ctx.scale(SCALE, SCALE)
   ctx.textBaseline = 'alphabetic'
-  paint(ctx, ops, height)
+  paint(ctx, ops, height, portraitImage)
 
   const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'))
   if (!blob) throw new Error('The browser would not produce an image.')

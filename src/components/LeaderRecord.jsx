@@ -64,10 +64,20 @@ export default function LeaderRecord({ leader, archetype, fileNumber, rules }) {
         <span className="record__file">{fileNumber}</span>
       </div>
 
-      <h2 className="record__name">{leader.name || 'Unnamed leader'}</h2>
-      <div className="record__line">
-        {leader.keywords.filter(Boolean).join(' / ')} · {leader.advancementPath} · Sz {leader.size} ·{' '}
-        {leader.base}mm{leader.characteristics.length ? ` · ${leader.characteristics.join(', ')}` : ''} · master
+      {/* The picture belongs on the document, not only on the shelf card it
+          was first wired to (audit L12). It prints, because the record is one
+          of the things people carry to a table. */}
+      <div className="record__identity">
+        <div>
+          <h2 className="record__name">{leader.name || 'Unnamed leader'}</h2>
+          <div className="record__line">
+            {leader.keywords.filter(Boolean).join(' / ')} · {leader.advancementPath} · Sz {leader.size} ·{' '}
+            {leader.base}mm{leader.characteristics.length ? ` · ${leader.characteristics.join(', ')}` : ''} · master
+          </div>
+        </div>
+        {leader.portrait && (
+          <img className="record__portrait" src={leader.portrait} alt="" />
+        )}
       </div>
 
       <div className="record__stats">

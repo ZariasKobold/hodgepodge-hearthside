@@ -14,7 +14,39 @@ html, body, #root { height: 100%; }
 
 body {
   margin: 0;
-  background: var(--night);
+  /* A table, not a void.
+     Drawn in gradients rather than shipped as an image: it costs no request,
+     no bytes and no cache, and it stays crisp at any zoom. Three horizontal
+     layers because real grain is not one frequency — a fine close grain, a
+     coarser one beating against it so the two never line up into a visible
+     repeat, and occasional seams where one board meets the next. The vertical
+     layer at the end is not grain at all, it is the room darkening toward the
+     edges so the field does not read as wallpaper.
+
+     Every alpha here is between .012 and .22 on near-black. It should be felt
+     rather than seen; if you can identify it as stripes it is too strong.
+     Fixed, because a table does not scroll. The print block resets `background`
+     wholesale, so none of this reaches paper. */
+  background-color: var(--night);
+  background-image:
+    /* seams between boards */
+    repeating-linear-gradient(0deg,
+      rgba(0, 0, 0, .22) 0px, rgba(0, 0, 0, .22) 1px,
+      rgba(240, 200, 150, .022) 1px, rgba(240, 200, 150, .022) 2px,
+      transparent 2px, transparent 137px),
+    /* fine grain */
+    repeating-linear-gradient(0deg,
+      rgba(255, 235, 205, .016) 0px, rgba(255, 235, 205, .016) 1px,
+      transparent 1px, transparent 4px),
+    /* coarse grain, deliberately out of step with the fine grain */
+    repeating-linear-gradient(0deg,
+      rgba(0, 0, 0, .055) 0px, rgba(0, 0, 0, .055) 1px,
+      transparent 1px, transparent 9px),
+    /* the edges of the room */
+    linear-gradient(90deg,
+      rgba(0, 0, 0, .30) 0%, rgba(0, 0, 0, 0) 24%,
+      rgba(0, 0, 0, 0) 76%, rgba(0, 0, 0, .30) 100%);
+  background-attachment: fixed;
   color: var(--text);
   font-family: var(--body);
   font-size: 17px;
@@ -352,6 +384,15 @@ body::before {
 .record__file { font-family: var(--data); font-size: 10px; color: var(--card-mute); }
 .record__name { font-family: var(--display); font-size: 34px; font-weight: 800; line-height: 1.05; }
 .record__line { font-family: var(--data); font-size: 12px; color: var(--card-mute); margin-top: 8px; }
+/* The leader's picture, on the document rather than only on the shelf. */
+.record__identity {
+  display: flex; gap: 20px; align-items: flex-start; justify-content: space-between;
+}
+.record__portrait {
+  flex: none; width: 92px; height: 92px; border-radius: 50%;
+  object-fit: cover; display: block;
+  border: 1px solid var(--card-line);
+}
 .record__stats { display: flex; gap: 22px; flex-wrap: wrap; margin: 20px 0; font-family: var(--data); }
 .record__stat-k { font-size: 9px; letter-spacing: 2px; color: #8a8175; text-transform: uppercase; }
 .record__stat-v { font-size: 24px; font-weight: 700; }
@@ -665,9 +706,12 @@ body::before {
   font-family: var(--body); font-size: 14px; line-height: 1.55;
   color: var(--rules-ink); margin: 0;
 }
+/* Not uppercased. The stat line above writes `Pulse 3"` and an inline
+   {{pulse}} rendered `PULSE 2"` — the same concept in two voices, visible
+   together on one crew card (audit L9). */
 .rules__icon {
   font-family: var(--data); font-size: .82em; letter-spacing: 1px;
-  text-transform: uppercase; color: var(--rules-mute);
+  color: var(--rules-mute);
 }
 .rules__triggers { list-style: none; margin: 7px 0 0; padding: 0 0 0 11px; border-left: 1px solid var(--rules-line); }
 .rules__triggers li {
@@ -768,7 +812,12 @@ body::before {
      So the card may split, and what is pinned instead is its tail: a heading
      may not be the last thing on a page, and the foot may not be separated
      from whatever it is closing. */
-  .crewcard__entry, .record__section { break-inside: avoid; page-break-inside: avoid; }
+  /* An ENTRY may not split — half an action is worse than no action. A
+     SECTION may, because pinning the section is what produced the near-empty
+     page: the whole Abilities block jumped to the next sheet rather than
+     letting two of its entries follow the others. */
+  .crewcard__entry { break-inside: avoid; page-break-inside: avoid; }
+  .record__section { break-inside: auto; page-break-inside: auto; }
   .record__section-k, .crewcard__entry > .label {
     break-after: avoid; page-break-after: avoid;
   }
@@ -777,6 +826,33 @@ body::before {
   }
   /* Two lines is the least that may be left behind or carried over. */
   .record, .crewcard, .sheet__page { orphans: 2; widows: 2; }
+
+  /* Crew cards get one printed page each, so they have to fit one. At screen
+     sizes a dense card measured 921px against 950px of printable height —
+     29px of headroom, which one extra trigger line eats, and that is exactly
+     what the first export showed. Tightened here and only here: the same card
+     now measures 761px, with 189px to spare.
+
+     Measured rather than guessed, by switching this block to screen media in
+     the browser and rendering a representative card at the printable width. A
+     genuinely enormous card still will not fit, and the rules above make that
+     spill a few entries instead of a whole section. */
+  .crewcard { padding: 16px 18px 12px; }
+  .crewcard__name { font-size: 20px; }
+  .crewcard .record__line { font-size: 11px; }
+  .crewcard .record__stats { margin: 10px 0; gap: 16px; }
+  .crewcard .record__stat-v { font-size: 17px; }
+  .crewcard .record__section { margin-bottom: 9px; }
+  .crewcard__entry { margin-bottom: 7px; }
+  .crewcard .record__entry { font-size: 13px; }
+  .crewcard .rules__body { font-size: 12px; line-height: 1.4; }
+  .crewcard .rules__stat { font-size: 10px; }
+  .crewcard .rules__triggers li { font-size: 11px; line-height: 1.35; margin-bottom: 3px; }
+  .crewcard .record__foot { margin-top: 10px; padding-top: 7px; }
+
+  /* Smaller on paper, where the space is worth more than the picture. */
+  .record__portrait { width: 68px; height: 68px; }
+  .sheet__portrait { width: 52px; height: 52px; }
 
   .legal-print {
     display: block; margin: 10px 0 0;
@@ -866,6 +942,13 @@ body::before {
 }
 .sheet__tallies { display: flex; gap: 10px; flex-wrap: wrap; }
 .sheet__tallies .sheet__field { min-width: 84px; }
+
+.sheet__head-id { display: flex; gap: 14px; align-items: center; }
+.sheet__portrait {
+  flex: none; width: 62px; height: 62px; border-radius: 50%;
+  object-fit: cover; display: block;
+  border: 1px solid var(--card-line);
+}
 
 .sheet__identity { display: flex; gap: 12px; flex-wrap: wrap; }
 .sheet__identity > * { flex: 1; min-width: 140px; }

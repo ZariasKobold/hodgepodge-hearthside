@@ -30,8 +30,13 @@ export default function WeeklyHire({ arsenal, week, houseRules, mustHire, roster
 
   // Split so a Versatile model showing up outside your keywords reads as a
   // rule rather than a bug. Both are equally hirable; only the surcharge differs.
-  const versatilePool = useMemo(() => roster.models.filter(versatileModel), [roster.models])
-  const keywordPool = useMemo(() => roster.models.filter((m) => !versatileModel(m)), [roster.models])
+  // Sorted by cost and labelled in soulstones, matching the creation step's
+  // picker. The two disagreed — one sorted and wrote "5ss", the other did
+  // neither — which made the same list read differently on two screens
+  // (audit L7).
+  const byCost = (models) => [...models].sort((a, b) => a.cost - b.cost)
+  const versatilePool = useMemo(() => byCost(roster.models.filter(versatileModel)), [roster.models])
+  const keywordPool = useMemo(() => byCost(roster.models.filter((m) => !versatileModel(m))), [roster.models])
 
   const hiredThisWeek = hiresInWeek(arsenal, week)
   const isFirstOfWeek = hiredThisWeek.length === 0
@@ -111,13 +116,13 @@ export default function WeeklyHire({ arsenal, week, houseRules, mustHire, roster
             <option value="">Choose from the register…</option>
             <optgroup label="From your keywords">
               {keywordPool.map((m) => (
-                <option key={m.slug} value={m.slug}>{m.name} — {m.cost}</option>
+                <option key={m.slug} value={m.slug}>{m.name} — {m.cost}ss</option>
               ))}
             </optgroup>
             {versatilePool.length > 0 && (
               <optgroup label={`Versatile — ${factionLabel(arsenal.faction)}`}>
                 {versatilePool.map((m) => (
-                  <option key={m.slug} value={m.slug}>{m.name} — {m.cost}</option>
+                  <option key={m.slug} value={m.slug}>{m.name} — {m.cost}ss</option>
                 ))}
               </optgroup>
             )}

@@ -4,7 +4,7 @@
 
 ---
 
-## Current Version: 0.12.0
+## Current Version: 0.13.0
 
 ## Last Updated: 2026-08-31
 
@@ -118,9 +118,10 @@ Shipped and live:
 ### Audits
 
 `docs/audits/audit-v0.11.0.md` is the current one (Session 29), and it now
-carries a status block. **Both print findings, all three highs, all five
-mediums and five of the lows are fixed** in v0.12.0. Eight lows remain open and
-are listed there.
+carries a status block. **Every finding is closed** — both print findings, all
+three highs, all five mediums and all fourteen lows, across v0.12.0 and
+v0.13.0. Two lows (L6, L13) are closed as *documented rather than changed*,
+with the reasoning written into the code.
 
 The one worth carrying in your head: **the shelf is scoped by account, not by
 browser.** Campaigns carry `ownerUserId`, and `belongsTo` decides what a signed‑in

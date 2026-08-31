@@ -137,9 +137,14 @@ export default function ArsenalSheet({ arsenal, leader, archetype, campaign, rul
       {/* ── page one — the crew ─────────────────────────────────── */}
       <article className="sheet__page">
         <header className="sheet__head">
-          <div>
-            <div className="sheet__eyebrow">Malifaux Fourth Edition · campaign</div>
-            <h1 className="sheet__title">Arsenal Sheet</h1>
+          <div className="sheet__head-id">
+            {leader.portrait && (
+              <img className="sheet__portrait" src={leader.portrait} alt="" />
+            )}
+            <div>
+              <div className="sheet__eyebrow">Malifaux Fourth Edition · campaign</div>
+              <h1 className="sheet__title">Arsenal Sheet</h1>
+            </div>
           </div>
           <div className="sheet__tallies">
             <Field label="Games won" value={gamesWon || ' '} />

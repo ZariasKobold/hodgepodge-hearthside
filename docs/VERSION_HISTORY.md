@@ -1875,3 +1875,57 @@ audit's status block.
 `belongsTo` has four cases, and a new `validation.test.js` covers `checkSource`
 — including that the cost message no longer names totems, which is the wording
 that was false for eight versions.
+
+---
+
+### Session 32 — v0.13.0
+Date: 2026-08-31
+
+**fix: the print split, measured this time; every remaining low; a wood grain**
+
+**P2 was not fixed in v0.12.0, and the second export proved it** — page 3 came
+back byte-identical, still holding only a crew card's tail. The v0.12.0 attempt
+pinned `.record__section` with `break-inside: avoid`, which turned out to be
+*causing* the near-empty page: the whole Abilities block jumped to the next
+sheet rather than letting two of its entries follow the others.
+
+The real cause was headroom, and this time it was measured rather than reasoned
+about. Switching the `@media print` block to screen media in the browser and
+rendering a representative card at the printable width (711px — which matches
+the 711-unit rectangles visible in the PDF, so the harness agrees with reality)
+gave **921px against 950px of printable height. Twenty-nine pixels of slack**,
+which one extra trigger line eats.
+
+Crew-card print typography is tightened, and only there: the same card now
+measures **761px, with 189px spare**. A section may flow; an entry may not. A
+genuinely enormous card still will not fit one page — measured at 1054px — but
+its spill is now a few entries rather than a whole section.
+
+**P1 is confirmed fixed by the same export:** zero dark page-sized rectangles,
+where every page previously carried one.
+
+**All fourteen lows are closed.** Two of them — L6 and L13 — are closed as
+*documented rather than changed*, because both flagged code that behaves that
+way for a reason: L6 depends on storage keeping one injury row per titled
+group, and L13's ref is assigned during render because an effect would leave
+the first save of the session unmirrored. The reasoning is in the code now
+instead of waiting to be rediscovered.
+
+The substantive ones: **L2** wires `VITE_REGISTRY_MODE=local`, so `npm run seed`
+finally writes something the app can read — which also means the wizard can be
+worked on without touching a donation-funded register. **L3** removes three
+indexed fields and one exported callback that nothing read, all of which were
+riding into localStorage on every roster cache. **L12** puts the portrait on the
+record, the arsenal sheet and the canvas PNG; it had been on the shelf card and
+nowhere that leaves the app.
+
+**A wood grain, by owner request.** Drawn in gradients rather than shipped as
+an image: no request, no bytes, no cache, crisp at any zoom. Three horizontal
+layers at deliberately mismatched frequencies so they never line up into a
+visible repeat, plus a lateral shading so the field does not read as wallpaper.
+The strongest alpha in the grain itself is 0.055 on near-black. It should be
+felt rather than seen.
+
+**Verified:** 175 tests, build clean. The print change measured in the browser
+against the real print stylesheet; the PNG portrait exercised end to end with
+the anchor click stubbed so nothing downloaded.

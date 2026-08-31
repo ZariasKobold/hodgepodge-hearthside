@@ -113,9 +113,25 @@ export const registry = {
   schemes: (opts) => request('/schemes', opts).then((j) => j.data || []),
 }
 
-/** Reads a seeded file from public/ instead of the network. */
+/**
+ * Reads the seeded file from public/ instead of the network.
+ *
+ * Reached when `VITE_REGISTRY_MODE=local`. That flag was documented in
+ * `.env.example` and wired to nothing for eleven versions, so `npm run seed`
+ * wrote a file the app could not read (audit L2). `useRoster` consults it now.
+ *
+ * The payload is `{ generatedAt, source, count, models }`, and the models are
+ * register records with their descriptions stripped — the same shape
+ * `toIndexedModel` takes from the network, which is why this needs no
+ * translation layer.
+ */
+let localRegister = null
 export async function loadLocalRegister() {
+  if (localRegister) return localRegister
   const res = await fetch('/register.json')
-  if (!res.ok) throw new RegistryError('No seeded register found. Run `npm run seed` first.')
-  return res.json()
+  if (!res.ok) {
+    throw new RegistryError('No seeded register found. Run `npm run seed` first, or set VITE_REGISTRY_MODE=remote.')
+  }
+  localRegister = await res.json()
+  return localRegister
 }

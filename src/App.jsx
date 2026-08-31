@@ -69,6 +69,16 @@ export default function App() {
    * on first sign-in, pushes up everything built while signed out.
    */
   const sync = useSync({ user: auth.user, available: auth.available, onChanged: refresh })
+  /**
+   * Assigned during render rather than in an effect, deliberately (audit L13).
+   *
+   * `useCampaign` writes to localStorage in an effect and calls `onSaved`
+   * straight after, and effects run child-first — so a ref populated in an
+   * effect here would still be the no-op placeholder on the first save of the
+   * session, and that save would never be mirrored. The assignment is
+   * idempotent and touches nothing outside this component, which is the case
+   * where a render-phase write to a ref is safe.
+   */
   syncRef.current = sync
 
   // Play is gated behind an account (CLAUDE.md §12). The one escape hatch is

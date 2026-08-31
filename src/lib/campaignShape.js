@@ -229,7 +229,16 @@ export function modelIsAnnihilated(arsenal, model) {
   return isAnnihilated(injuryCountForModel(arsenal, model))
 }
 
-/** Every live injury in the crew, counted once per titled group. */
+/**
+ * Every live injury in the crew.
+ *
+ * Counted as rows, which is once per titled group **only because storage keeps
+ * one row per group** — `injuriesFor` files a titled model's injury against
+ * `titleGroup` rather than against each version. That is an invariant this
+ * function depends on and does not enforce (audit L6); if injuries ever gain a
+ * second row per group, this becomes an overcount and the campaign rating goes
+ * with it.
+ */
 export function activeInjuryCount(arsenal) {
   return arsenal.injuries.filter((inj) => !inj.removedAt).length
 }

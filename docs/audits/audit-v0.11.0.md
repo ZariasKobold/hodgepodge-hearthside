@@ -19,12 +19,12 @@ reading only the client would have got that wrong.
 
 ---
 
-## Status — fixed in v0.12.0, same session
+## Status — closed across v0.12.0 and v0.13.0
 
 | Finding | Outcome |
 |---|---|
 | P1 shadows on paper | **Fixed.** `box-shadow` and `text-shadow` cleared for print. |
-| P2 crew card split | **Fixed.** The card may split; its tail may not be orphaned. Headings cannot end a page, the foot cannot be separated from what it closes, and `orphans`/`widows` are set. |
+| P2 crew card split | **Fixed in v0.13.0, after the first attempt failed.** v0.12.0 pinned the tail, and a second export showed byte-identical output — pinning the whole `.record__section` was *causing* the near-empty page. The real cause was headroom: a representative card measured 921px against 950px of printable height. Crew-card print type is tightened (same card now 761px, 189px spare) and a section may now flow while an entry may not. |
 | H1 cross-account shelf | **Fixed.** Campaigns carry `ownerUserId`; the shelf, `open`, and sync all scope to it. Nothing is deleted — an unsynced campaign belonging to someone else stays on disk, it simply is not shown. The push loop no longer stops at the first failure. |
 | H2 unimportable exports | **Fixed.** All three buttons export the campaign. |
 | H3 dead rescue | **Fixed.** The gate reads the shelf, exports a bundle when there is more than one, and `adopt` now accepts a bundle so the rescue can actually come back. |
@@ -34,7 +34,12 @@ reading only the client would have got that wrong.
 | M4 totems not excluded | **Fixed.** `totemSlugs` is wired: `useRoster` marks `isTotem`, `checkSource` rejects it, `candidatesFor` drops it. The roster cache key is versioned, or existing browsers would never see the change. |
 | M5 over-claiming message | **Fixed.** The cost message no longer names totems; the totem rule has its own message and its own test. |
 | L1, L4, L5, L11, L14 | **Fixed.** |
-| L2, L3, L6, L7, L9, L10, L12, L13 | Open. |
+| L2 | **Fixed.** `VITE_REGISTRY_MODE=local` is wired — `useRoster` reads the seeded file, so `npm run seed` finally produces something the app can use. |
+| L3 | **Fixed.** `secondFaction`, `keywordNames`, `hasTotem` and `addManual` removed; `totemSlugs` and `loadLocalRegister` are both live now. |
+| L6, L13 | **Closed as documented, not changed.** Both flagged code that behaves that way for a reason; the reason is now written down rather than left to be rediscovered. L6 names the storage invariant it depends on; L13 explains why the ref is assigned during render — an effect would leave the first save of the session unmirrored. |
+| L7, L9, L10, L12 | **Fixed.** The two hire pickers agree; inline icons stop shouting; one way to total an arsenal; and the portrait now appears on the record, the arsenal sheet and the PNG. |
+
+**Every finding in this audit is now closed.**
 
 `totemSlugs` is no longer dead, so L3 is now only `loadLocalRegister` and
 `useRoster.addManual`.

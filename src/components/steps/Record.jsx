@@ -3,7 +3,7 @@ import { SLOTS, slotLabel } from '../../data/archetypes.js'
 import { getEffect } from '../../data/crewCards.js'
 import { factionLabel } from '../../data/factions.js'
 import { arsenalTotal, startingScrip, STARTING_SOULSTONES } from '../../lib/campaign.js'
-import { createModel, STARTING_ARSENAL_WEEK } from '../../lib/campaignShape.js'
+import { createModel, liveModels, STARTING_ARSENAL_WEEK } from '../../lib/campaignShape.js'
 import { exportJSON } from '../../lib/storage.js'
 import { isVersatile } from '../../lib/indexing.js'
 import { buildSheet, sheetToPNG, printSheet } from '../../lib/recordImage.js'
@@ -24,7 +24,10 @@ const byCost = (models) => [...models].sort((a, b) => a.cost - b.cost)
  * the two cannot drift into different documents.
  */
 export default function Record({ campaign, leader, set, archetype, roster, rules, fileNumber, onDone }) {
-  const spent = arsenalTotal(leader.arsenal)
+  // Through `liveModels`, like every other total in the app — `arsenalTotal`
+  // on the raw list counted annihilated models, which is harmless only until
+  // Aftermath exists to annihilate one (audit L10).
+  const spent = arsenalTotal(liveModels({ models: leader.arsenal }))
   const scrip = startingScrip(spent)
   const over = spent > STARTING_SOULSTONES
   const effect = getEffect(leader.crewCard.effect)

@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react'
-import { registry, throttledMap, RegistryError } from '../lib/api.js'
+import { registry, throttledMap, RegistryError, loadLocalRegister } from '../lib/api.js'
 import { toIndexedModel, isSelectionSource, isVersatile, totemSlugs } from '../lib/indexing.js'
 import { registerFaction } from '../data/factions.js'
 import { save, load } from '../lib/storage.js'
@@ -37,6 +37,44 @@ export function useRoster() {
     setLoading(true)
     setError(null)
     setProgress(null)
+
+    /**
+     * The seeded file, when asked for it.
+     *
+     * One read serves both pools, so there is no network at all — which is the
+     * point: the register is donation-funded, and working on the wizard should
+     * not mean hammering it. Everything after this is the same indexing the
+     * network path uses.
+     */
+    if (registry.mode === 'local') {
+      try {
+        const { models: records = [] } = await loadLocalRegister()
+        const indexed = records.map(toIndexedModel)
+        const totems = totemSlugs(indexed)
+        const mark = (m) => ({ ...m, isTotem: totems.has(m.slug) })
+        const collected = new Map()
+
+        for (const keyword of wanted) {
+          indexed
+            .filter((m) => m.keywords.includes(keyword) && isSelectionSource(m))
+            .forEach((m) => collected.set(m.slug, mark(m)))
+        }
+        if (faction) {
+          const registerSlug = registerFaction(faction)
+          indexed
+            .filter((m) => m.faction === registerSlug && isVersatile(m) && isSelectionSource(m))
+            .forEach((m) => { if (!collected.has(m.slug)) collected.set(m.slug, mark(m)) })
+        }
+
+        setModels([...collected.values()])
+      } catch (err) {
+        setError(err instanceof RegistryError ? err.message : String(err.message || err))
+      } finally {
+        setLoading(false)
+        setProgress(null)
+      }
+      return
+    }
 
     try {
       const collected = new Map()
@@ -106,11 +144,7 @@ export function useRoster() {
     }
   }, [])
 
-  const addManual = useCallback((model) => {
-    setModels((prev) => [...prev, model])
-  }, [])
-
-  return { models, loading, progress, error, load: load_, addManual }
+  return { models, loading, progress, error, load: load_ }
 }
 
 /**

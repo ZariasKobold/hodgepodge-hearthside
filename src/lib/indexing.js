@@ -12,14 +12,15 @@ export function toIndexedModel(record) {
     name: record.display_name || record.name,
     cost: record.cost,
     faction: record.faction,
-    secondFaction: record.second_faction || null,
     station: record.station || null,
     keywords: (record.keywords || []).map((k) => k.slug),
-    keywordNames: (record.keywords || []).map((k) => k.name),
     characteristics: record.characteristics || [],
     isUnhirable: Boolean(record.is_unhirable),
     isBeta: Boolean(record.is_beta),
-    hasTotem: record.has_totem_id != null,
+    /* `secondFaction`, `keywordNames` and `hasTotem` used to be indexed here
+       and were read by nothing, while riding into localStorage on every roster
+       cache (audit L3). The second-faction label the crew card shows comes
+       from `rules.js`, which is the display path and keeps its own copy. */
     totemSlug: record.totem_slug || null,
     actions: (record.actions || []).map((a) => ({
       name: a.name,
