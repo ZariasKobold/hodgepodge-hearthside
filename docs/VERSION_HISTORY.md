@@ -1929,3 +1929,45 @@ felt rather than seen.
 **Verified:** 175 tests, build clean. The print change measured in the browser
 against the real print stylesheet; the PNG portrait exercised end to end with
 the anchor click stubbed so nothing downloaded.
+
+---
+
+### Session 33 — v0.13.1
+Date: 2026-08-31
+
+**fix: the ownership check ran before auth had answered**
+
+Owner report: after loading the site, the masthead showed only **Leaders** —
+every other tab gone, with a campaign plainly on the shelf.
+
+A regression from v0.12.0's H1 fix, and an instructive one. `useAuth` reports
+`user: null` while its first `/api/auth/me` is still in flight, so for the
+length of that request `userId` is null. The ownership effect could not tell
+that apart from *signed out*, decided the open campaign — stamped with the
+owner's Discord id the moment they last saved — belonged to somebody else, and
+closed it.
+
+The damaging part was not the close but that it **persisted**:
+`setActiveCampaignId(null)` writes to localStorage, so when auth resolved a
+moment later there was no longer an active campaign to restore. Transient
+state that writes itself down stops being transient.
+
+Fixed by giving the hook `userReady` alongside `userId`, so it can tell "nobody
+is signed in" from "we have not asked yet", and by extracting the decision into
+`shouldRelease(campaign, userId, userReady)` — a pure function with six tests,
+the first of which is this exact regression. The condition that mattered was
+the one that was missing, so it is now a named thing that can be asserted
+rather than a line inside an effect.
+
+The shelf filter takes the same guard: while auth is unresolved every campaign
+is shown, because hiding them for the length of a request produced a visible
+flicker on every load.
+
+**One consequence for anyone who loaded the site while v0.13.0 was live:** the
+bug cleared `campaigns:active`, so the app opens on the shelf rather than on
+the campaign that was last open. Clicking **View arsenal** once restores it,
+and it persists again from there. Nothing was lost — the closure only ever
+touched which campaign was open, never a campaign.
+
+**Verified:** 181 tests, build clean, and the five tabs confirmed present on
+load and after opening a campaign.

@@ -4,7 +4,7 @@
 
 ---
 
-## Current Version: 0.13.0
+## Current Version: 0.13.1
 
 ## Last Updated: 2026-08-31
 
@@ -672,7 +672,7 @@ every session. `docs/VERSION_HISTORY.md` holds how it got this way.
 npm install
 cp .env.example .env
 npm run dev      # Vite only — NO Functions, NO database. useAuth degrades to signed out.
-npm run test     # 175 tests; `functions/` is in the run too, for the authz tests
+npm run test     # 181 tests; `functions/` is in the run too, for the authz tests
 npm run build    # production bundle — the dev proxy does NOT exist here
 npm run seed     # optional local register file; ask BiggerHat's maintainer first
 

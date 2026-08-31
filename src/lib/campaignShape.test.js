@@ -6,7 +6,7 @@ import {
   injuriesFor, injuryCountForModel, modelIsAnnihilated, activeInjuryCount,
   ratingForGame, mustHireThisWeek, gamesInWeek,
   migrateLeaderToCampaign, migrate, SCHEMA_VERSION, DEFAULT_HOUSE_RULES,
-  hireRules, isOutOfKeyword, hiresInWeek, belongsTo,
+  hireRules, isOutOfKeyword, hiresInWeek, belongsTo, shouldRelease,
 } from './campaignShape.js'
 
 const DAY = 86400000
@@ -333,5 +333,43 @@ describe('belongsTo', () => {
   it('says no to nothing at all rather than throwing', () => {
     expect(belongsTo(null, 'user-a')).toBe(false)
     expect(belongsTo(undefined, 'user-a')).toBe(false)
+  })
+})
+
+describe('shouldRelease', () => {
+  const mine = createCampaign({ ownerUserId: 'user-a' })
+
+  /**
+   * The regression this exists to prevent. `useAuth` reports `user: null`
+   * while its first /api/auth/me is in flight, so during that window the
+   * signed-in user's own campaign looked foreign, was closed, and the closure
+   * was written to storage — leaving the masthead with only the Leaders tab
+   * after sign-in resolved.
+   */
+  it('releases nothing while the answer about who is signed in has not arrived', () => {
+    expect(shouldRelease(mine, null, false)).toBe(false)
+    expect(shouldRelease(mine, 'user-b', false)).toBe(false)
+  })
+
+  it('releases a campaign belonging to another account once auth has settled', () => {
+    expect(shouldRelease(mine, 'user-b', true)).toBe(true)
+  })
+
+  it('keeps the account its own campaign', () => {
+    expect(shouldRelease(mine, 'user-a', true)).toBe(false)
+  })
+
+  it('releases a claimed campaign when nobody is signed in', () => {
+    expect(shouldRelease(mine, null, true)).toBe(true)
+  })
+
+  it('keeps an unclaimed campaign for anyone, signed in or not', () => {
+    const loose = createCampaign()
+    expect(shouldRelease(loose, null, true)).toBe(false)
+    expect(shouldRelease(loose, 'user-a', true)).toBe(false)
+  })
+
+  it('has nothing to release when nothing is open', () => {
+    expect(shouldRelease(null, 'user-a', true)).toBe(false)
   })
 })

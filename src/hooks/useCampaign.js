@@ -7,7 +7,7 @@ import {
 import {
   createCampaign, createModel, migrate, migrateLeaderToCampaign,
   myArsenal as selectMyArsenal, currentWeek, totalFor, mustHireThisWeek,
-  belongsTo,
+  belongsTo, shouldRelease,
 } from '../lib/campaignShape.js'
 
 const LEGACY_LEADER_KEY = 'leader:current'
@@ -29,7 +29,7 @@ const LEGACY_LEADER_KEY = 'leader:current'
  * keep working. Permission from Wyrd is revocable, so a campaign must survive
  * this app disappearing.
  */
-export function useCampaign({ userId = null, onSaved, onRemoved } = {}) {
+export function useCampaign({ userId = null, userReady = true, onSaved, onRemoved } = {}) {
   const [ids, setIds] = useState(() => {
     // One-time lifts, oldest first: the v0.1 single leader, then the
     // single-campaign key everything before the shelf wrote to.
@@ -57,26 +57,41 @@ export function useCampaign({ userId = null, onSaved, onRemoved } = {}) {
 
   // Every campaign on the shelf, for rendering it. Re-read whenever the shelf
   // or the open campaign changes, so a rename shows immediately.
+  /**
+   * Scoped to the account — but only once there is an answer about who that is.
+   *
+   * `useAuth` reports `user: null` while its first /api/auth/me is in flight,
+   * and "nobody is signed in" and "we have not asked yet" are different
+   * answers. Treating the first as the second hid every claimed campaign for
+   * the length of that request.
+   */
   const shelf = useMemo(
     () => ids
       .map((id) => (id === openId && campaign ? campaign : migrate(loadCampaign(id))))
       .filter(Boolean)
-      .filter((c) => belongsTo(c, userId)),
-    [ids, openId, campaign, userId]
+      .filter((c) => (userReady ? belongsTo(c, userId) : true)),
+    [ids, openId, campaign, userId, userReady]
   )
 
   /**
    * A campaign belonging to another account must not stay open across a
    * sign-in. Closing rather than deleting: their work is still theirs and is
    * still on the disk, it simply is not this account's to look at.
+   *
+   * **Waits for auth to settle.** Without the guard this ran during the first
+   * /api/auth/me, when `userId` is null because the answer has not arrived —
+   * so a campaign claimed by the signed-in user looked foreign, was closed, and
+   * `setActiveCampaignId(null)` wrote that closure to storage. The campaign
+   * then stayed shut after sign-in resolved, and the masthead lost every tab
+   * except Leaders. Transient state that persists itself is the dangerous
+   * kind.
    */
   useEffect(() => {
-    if (campaign && !belongsTo(campaign, userId)) {
-      setCampaign(null)
-      setOpenId(null)
-      setActiveCampaignId(null)
-    }
-  }, [campaign, userId])
+    if (!shouldRelease(campaign, userId, userReady)) return
+    setCampaign(null)
+    setOpenId(null)
+    setActiveCampaignId(null)
+  }, [campaign, userId, userReady])
 
   // Skip the write on the render that merely opened a campaign — it would be
   // writing back exactly what it just read.

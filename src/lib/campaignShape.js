@@ -186,6 +186,22 @@ export function belongsTo(campaign, userId) {
   return campaign.ownerUserId === userId
 }
 
+/**
+ * Should an open campaign be closed because it is not this account's?
+ *
+ * A function rather than a condition inline in the hook, because the condition
+ * that mattered was the one that was missing. `userReady` distinguishes "nobody
+ * is signed in" from "we have not asked yet": `useAuth` reports `user: null`
+ * while its first request is in flight, and treating that as signed-out closed
+ * the campaign the user had open and wrote the closure to storage, so it stayed
+ * closed after sign-in resolved.
+ */
+export function shouldRelease(campaign, userId, userReady) {
+  if (!userReady) return false
+  if (!campaign) return false
+  return !belongsTo(campaign, userId)
+}
+
 export function getArsenal(campaign, arsenalId) {
   return campaign.arsenals.find((a) => a.id === arsenalId) || null
 }

@@ -54,7 +54,12 @@ export default function App() {
     // The shelf is scoped to the account, not the browser. Without this a
     // second person signing in on a shared machine sees the first one's
     // leaders (audit v0.11.0, H1).
+    //
+    // `userReady` matters as much as `userId`: while auth is still loading the
+    // id is null, which is indistinguishable from signed out unless the hook
+    // is told the difference.
     userId: auth.user?.id ?? null,
+    userReady: !auth.loading,
     onSaved: (c) => syncRef.current.mirror(c),
     onRemoved: (id) => syncRef.current.forget(id),
   })
