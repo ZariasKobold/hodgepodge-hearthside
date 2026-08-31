@@ -2086,3 +2086,36 @@ server and reloading cleared the remembered session, because the backend
 answered "nobody is signed in" — the authoritative case, working.
 
 187 tests, build clean.
+
+---
+
+### Session 36 — v0.15.1
+Date: 2026-08-31
+
+**feat: the background props come back, at a tenth**
+
+Owner request. The props were built at 90% in v0.10.1 and removed the same day
+as "way too much"; the opacity turns out to have been the whole argument. At
+.9 the hero and the background competed for the same job. At **.10** the props
+stop competing and become texture — the lantern and the steer skull register
+as shape, the wanted poster and the signposts only if you go looking.
+
+Structurally it is the v0.10.1 arrangement again: two fixed layers,
+`body::before` for the objects and `body::after` for the firelight, in that
+order, because the fire has to fall *on* the objects and the objects must not
+breathe with its animation. The wood grain stays where it is, on `body` itself,
+below both.
+
+What did **not** come back, because at a tenth it is not needed: the soft plate
+under the reading column. It existed only to keep bare labels off the wanted
+poster, and at this strength nothing is competing with the text.
+
+Still not loaded below 900px — `cover` crops the props out of frame on a phone,
+so it would be 250 KB nobody sees. Both layers are hidden in print.
+
+`docs/ART_BRIEF.md` records the outcome of having run this both ways: a second
+full scene cannot share a page with the hero at any strength where it reads as
+a picture. If it is raised again, raise it in small steps and stop at the point
+where you notice it without looking.
+
+187 tests, build clean.

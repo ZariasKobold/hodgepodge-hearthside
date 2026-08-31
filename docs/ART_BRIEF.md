@@ -92,18 +92,19 @@ the middle third. Nothing important can sit within 15% of either edge. It sits
 heaviest top and bottom where type sits, thinnest across the middle so the fire
 still reads. Supply at full strength; the scrim is CSS.
 
-## 2b. The page background — `background-1536.webp` ❌ BUILT, THEN REMOVED
+## 2b. The page background — `background-1536.webp` ✅ BACK, AT A TENTH
 
-**Removed by owner decision in v0.10.2, after seeing it live: "This is way too
-much."** The art is good; there was simply too much of it at once, with the
-hero already carrying the scene. The files are kept and nothing references
-them. Everything below is the spec as built, so it can be restored without
-re-deriving any of it.
+**Built at 90% in v0.10.1, removed the same day — "This is way too much" —
+and restored at 10% in v0.15.1 by owner decision.** The opacity was the whole
+argument. At .9 the hero and the background competed for the same job and every
+part of the page asked to be looked at; at .10 the props stop competing and
+become texture. The wanted poster and the signposts are legible only if you go
+looking for them, which is the point.
 
-The obvious lesson for a future attempt: **the hero and a full background are
-competing for the same job.** If the props come back they probably need to be
-much quieter — lower opacity, or confined to a narrow margin strip rather than
-scaled to `cover` — and the hero may need to shrink to make room.
+The lesson, now that it has been run both ways: **a second full scene cannot
+share a page with the hero at any strength where it reads as a picture.** If it
+is ever raised again, raise it in small steps and stop at the point where you
+notice it without looking.
 
 Owner-drawn props at the table's edges: steer skull, wanted poster, lantern,
 strongbox, signposts, whiskey, contract, skull. The signposts read Sable Ridge,

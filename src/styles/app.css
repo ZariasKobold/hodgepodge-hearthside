@@ -64,7 +64,32 @@ body {
    the art is good and there was simply too much of it at once, with the hero
    already carrying the scene. `public/art/website-background.png` and its
    WebP derivative are kept; nothing references them. */
+/* Hank's things at the edges of the table, at a tenth.
+   Built in v0.10.1, removed the same day at ninety percent — "way too much",
+   and it was: the hero already carries a whole scene, so a second one behind
+   the reading column meant every part of the page asking to be looked at. At
+   .10 it stops competing and becomes what it should have been, which is
+   texture. The wanted poster and the signposts are legible only if you go
+   looking for them.
+
+   Two layers rather than one, in this order, because the fire has to fall ON
+   the objects rather than under them and the objects must not breathe with its
+   animation. Still not loaded below 900px: cover crops the props out of frame
+   on a phone, so it would be 250 KB nobody sees. */
 body::before {
+  content: '';
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background: transparent;
+}
+@media (min-width: 900px) {
+  body::before {
+    background: url('/art/background-1536.webp') 50% 0 / cover no-repeat;
+    opacity: .10;
+  }
+}
+
+/* The one light source, over them. */
+body::after {
   content: '';
   position: fixed; inset: 0; z-index: 0; pointer-events: none;
   background:
@@ -801,7 +826,7 @@ body::before {
   .hank, .hank-toggle, .gate, .account { display: none !important; }
 
   body { background: #fff; color: #000; }
-  body::before { display: none !important; }
+  body::before, body::after { display: none !important; }
   .shell { padding: 0; }
   .wrap { max-width: none; padding: 0; }
 

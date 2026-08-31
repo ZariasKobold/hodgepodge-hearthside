@@ -4,7 +4,7 @@
 
 ---
 
-## Current Version: 0.15.0
+## Current Version: 0.15.1
 
 ## Last Updated: 2026-08-31
 
