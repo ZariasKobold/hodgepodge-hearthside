@@ -91,6 +91,24 @@ Save to `docs/audits/audit-vX.Y.Z.md`.
 
 ## ⚠️ NEXT SESSION — pending
 
+### Where things stand — v0.8.0
+
+Sessions 14–22 took this from a local-only leader builder to a synced,
+multi-leader campaign tracker. Shipped and live:
+
+| | |
+|---|---|
+| **Rules text** | Fetched live from BiggerHat and shown on the record, on loadout hovers, and on crew cards. Never persisted (§4). |
+| **Exports** | JSON, PNG (canvas), PDF (print stylesheet). Wyrd's disclaimer rides on all three. |
+| **Versatile hiring** | The declared faction's Versatile models are hirable, grouped apart in both pickers. |
+| **The shelf** | Many leaders, one campaign each. Import files a new one; nothing is overwritten. |
+| **Arsenal view** | Leader record, ledger, roster grouped by the week each model arrived, crew cards. |
+| **Arsenal sheet** | Every field of the official sheet, in this app's own type and palette. |
+| **D1 sync** | Local-first, D1 mirrors. Signing in adopts anything built signed out. **Confirmed working across the owner's phone and computer.** |
+| **Security** | Ownership gate, `requireSubject`, same-origin writes, 16 authorization tests, account erasure. |
+
+134 tests. The audit's high and all mediums are closed.
+
 ### Audit v0.5.2 — high and all mediums fixed in v0.6.0
 
 `docs/audits/audit-v0.5.2.md` holds the catalogue and now carries a status
@@ -130,13 +148,77 @@ Two facts from that setup worth keeping, because both cost time to learn:
 
 ### Next feature work, in order
 
-1. **Aftermath.** Six ordered phases; see `AFTERMATH_PHASES`. Must be ONE
-   stateful flow, not six screens — the fate deck isn't reshuffled between
-   phases. When it lands, widen the D1 projection: `injuries`, `equipment` and
-   `games` have tables in 0001 and are currently carried only inside `doc`.
-2. **Visual design pass.** Functional but plain. Tokens are in
-   `src/styles/tokens.css`; the records-office direction is deliberate and
-   documented in the file header.
+#### 1. Campaign membership — invitations and the shared arsenal page
+
+Owner-requested, v0.8.0. Two halves:
+
+**Invitations.** `join_code` exists in migration 0001 and is unused. Do **not**
+ship a bare join code: it is a capability URL, anyone holding it is in, and
+being in means seeing other players' Discord display names. The owner's words
+were "so random people don't just decide to join your campaign and gain
+information about your discord."
+
+Build **owner-issued invites** instead: single-use, expiring, revocable, and
+the owner approves who lands in the campaign. That needs a new table (0003,
+append-only) — invite id, campaign, issuer, expires_at, redeemed_by,
+redeemed_at, revoked_at.
+
+**The shared page.** Arsenals are public information by the rules, so every
+member sees every participant's arsenal on one page — read-only. Render them
+with `ArsenalSheet`, which already exists and is the format people will want.
+
+**The authorization change is the risky part.** Today every query scopes to
+`owner_user_id`. This widens *read* from owner to member while *write* stays
+owner-only. That is precisely the change that created the `arsenal_models` hole
+in v0.7.0, so it lands with its own attack tests in
+`functions/lib/campaignStore.test.js`:
+
+- a non-member reading a shared campaign → refused
+- a member writing another member's arsenal → refused
+- a member deleting a campaign they do not own → refused
+- a revoked or expired invite → refused
+- a redeemed invite being reused → refused
+
+The rule, stated before it exists in code:
+
+> **Read** an arsenal if you are a member of its campaign. **Write** only your
+> own. **Delete** only your own campaign.
+
+Note this is the first time this app shows one user's data to another. Members
+will see each other's display names; that is unavoidable if the page says whose
+arsenal is whose, but it should be said on screen rather than discovered.
+
+#### 2. Aftermath
+
+Six ordered phases; see `AFTERMATH_PHASES`. Must be ONE stateful flow, not six
+screens — the fate deck isn't reshuffled between phases, so a black joker spent
+on barter can't reappear on injuries.
+
+It is also what unblocks most of the arsenal sheet's blank boxes. Currently
+ruled-and-empty because nothing tracks them: **games won, crew rating,
+equipment (10 slots), per-model injuries, the leadership experience track, and
+totems.** `ArsenalSheet.jsx` prints them blank on purpose — wire them as each
+lands rather than in one pass.
+
+When it lands, widen the D1 projection: `injuries`, `equipment` and `games`
+have tables in 0001 and currently ride only inside `doc`.
+
+#### 3. Visual design pass
+
+Functional but plain. Tokens are in `src/styles/tokens.css`; the records-office
+direction is deliberate and documented in the file header.
+
+#### Smaller, any time
+
+- **The dialogue counter script.** `scripts/` still has no counter, and §5's
+  dialogue check depends on whoever runs it inventing a correct regex. The
+  v0.5.2 audit's M6 was a false positive for exactly that reason. A generator
+  that writes `hank-dialogue.md` from `hank.js` would retire the dual-file rule
+  entirely.
+- **Ten low audit findings**, catalogued in `docs/audits/audit-v0.5.2.md`. The
+  most substantive is L2: `VITE_REGISTRY_MODE=local` is documented in
+  `.env.example` and wired to nothing, so `npm run seed` writes a file the app
+  cannot read.
 
 ### Never verified
 
@@ -188,7 +270,20 @@ Two facts from that setup worth keeping, because both cost time to learn:
   `<hash>.` subdomains. Harmless until the remote storage adapter, at which
   point testing signed-in writes would otherwise mean using the live database;
   `docs/SETUP_D1_AUTH.md` has the three steps to enable it.
+- ~~**D1 sync.**~~ **Verified in production 2026-08-22** — the owner confirmed
+  the same arsenals showing on phone and computer. The adoption path (signed-out
+  work pushed up on first sign-in) and the cross-device pull were both proven
+  against a local D1 with a forged session first, since Discord has no preview
+  redirect URI.
+- **Account erasure in production.** `DELETE /api/account` is proven against a
+  local D1 — every count to zero, a second account untouched, the dead session
+  refused — but deliberately never run against the live database, because the
+  only real account on it is the owner's.
 - **`migrateLeaderToCampaign`.** Tested against a synthetic record only.
+- **The corrected PDF.** The three v0.6.0 print fixes are CSS and `.noprint`
+  classes verified in the DOM; no print dialogue has ever been opened from this
+  environment. The owner's next export is the proof. Same for the new arsenal
+  sheet's two-page break.
 
 ### Written but not wired
 
@@ -201,17 +296,27 @@ in `src/data/hank.js`. Missing piece is UI plus the `Campaign` object.
 **High:** none currently.
 
 **Medium:**
-- The app now has two top-level views, Creation and Campaign, switched in the
-  masthead. Creation is a one-off and Campaign repeats weekly, so they are not
-  more wizard steps. Aftermath, barter, healing and advancement belong in the
-  Campaign view beside the hire.
+- **Five views now**, and the rule that keeps them coherent: `library` (the
+  shelf) → `arsenal` (the standing view of one campaign) → `sheet`, `create`,
+  `campaign`. Leaders is a *view*, not an exit — switching to it must never
+  close the open campaign, or the other tabs vanish and it reads as losing your
+  place. Opening a different leader is the only close. Aftermath, barter,
+  healing and advancement belong in the Campaign view beside the hire.
+- **The arsenal sheet has six ruled-but-empty sections** — games won, crew
+  rating, equipment, per-model injuries, the experience track, totems. That is
+  deliberate (a pencil beats a missing box) but each is a promise Aftermath has
+  to keep.
 - `hank.js` and `hank-dialogue.md` are kept in sync by hand. A generator script
   in `scripts/` would make the code the single source. Not written.
 - `useCampaign` exposes a flat `leader` adapter so the four wizard steps didn't
   need rewriting. Fine now; retire it once the wizard reads the arsenal
   directly, or it becomes a second shape to keep in sync.
 - Totem advancements are hardcoded to 0 in `ratingForGame` — totems aren't
-  modelled yet.
+  modelled yet, and the sheet's totem stat card is blank for the same reason.
+- **`updatedAt` decides which copy of a campaign survives a sync**, and it is a
+  client clock. Two devices with badly skewed clocks could let an older edit
+  win. Acceptable for one player on two devices; revisit before a campaign has
+  several people writing.
 - Project lives inside OneDrive. Usually fine, but OneDrive syncing
   `node_modules` mid-install can cause file-lock errors. First suspect for any
   inexplicable build failure.
@@ -240,14 +345,22 @@ hodgepodge-hearthside/
 ├── wrangler.toml           D1 binding — for the CLI *and* the deployed site
 ├── migrations/             D1 schema, append-only
 ├── functions/              Cloudflare Pages Functions — edge, never bundled
-│   ├── lib/auth.js         OAuth + sessions; may hold secrets
+│   ├── lib/
+│   │   ├── auth.js         OAuth, sessions, sameOrigin; may hold secrets
+│   │   ├── campaignStore.js  ALL authorization lives here — read the header
+│   │   └── campaignStore.test.js  16 attack tests; the most important here
 │   └── api/
 │       ├── v1/[[path]].js  BiggerHat proxy (scoped to /v1 so it can't eat /auth)
+│       ├── campaigns/      list, read, upsert, delete — scoped to the caller
+│       ├── account.js      DELETE — erases the account and everything on it
 │       └── auth/           sign-in, callback, me, logout
 ├── src/                    the browser app
 │   ├── data/               facts from the book + all of Hank's dialogue
 │   ├── lib/                pure logic, imports nothing from React
-│   ├── hooks/              useCampaign, useRoster, useAuth, useHank, useSync
+│   │   ├── rules.js        live rules text, memory-only (§4)
+│   │   ├── remote.js       the D1 client + planSync, the merge that can lose data
+│   │   └── recordImage.js  canvas PNG + the LEGAL constant
+│   ├── hooks/              useCampaign, useRoster, useRules, useAuth, useHank, useSync
 │   ├── components/         wizard steps and shared UI
 │   │   ├── ArsenalLibrary.jsx  the shelf — one card per leader
 │   │   ├── ArsenalSheet.jsx    the official sheet's fields, our look
