@@ -1424,3 +1424,47 @@ is the proof.
 **New:** `docs/ART_BRIEF.md`. The placeholder art is drawn in code and is meant
 to be replaced; the brief gives exact render sizes, the 48px legibility floor,
 the palette, and the §8 constraints, so the real art gets made once.
+
+---
+
+### Session 24 — v0.9.1
+Date: 2026-08-31
+
+**feat: Hank's real portrait**
+
+The owner supplied `public/art/16-bit-hank.png` — a 16-bit pixel-art medallion
+of Hank on the road with Henrietta under a full load, desert sunset behind,
+already circular with its own metal rim and transparent corners — and asked for
+it in place of the code-drawn placeholder.
+
+**Key decisions and why:**
+
+- **Served as a 288px WebP, not the 1254px master.** The original is 1.9 MB
+  rendering into a ~96px circle, roughly 170× more pixels than any display
+  needs. The derivative is 33 KB, a 58× reduction, on an element that appears
+  beside every line of narration.
+- **Lossy WebP, and lossless was measured rather than assumed.** PNG at 288px
+  is 191 KB; lossy WebP is 33 KB; *lossless* WebP is 109 KB — worse, because
+  downscaling resampled away the flat colour blocks that make pixel art
+  compress well. Lossless is the instinct for pixel art and it was wrong here.
+- **No PNG fallback.** Any browser that can run this React app supports WebP,
+  and a `<picture>` element would break the one-file swap property that
+  `docs/ART_BRIEF.md` documents. Noted there as a reversible bet.
+- **The display size grew from 66px to 96px because of the art.** The
+  placeholder was a flat silhouette that read fine when tiny. This is a full
+  scene — sky, mesas, cacti, saddlebags, a plaid bedroll — and at 66px all of
+  it collapsed into a brown smudge. Verified legible at 72px on a 375px
+  viewport. The size can come back down if a future portrait is simpler.
+- **`hank-portrait.svg` deleted rather than kept beside it.** It was superseded,
+  and a dead placeholder next to the real asset is the kind of thing a later
+  session wires up by mistake. It remains in git history.
+
+**Trap worth recording:** `sharp-cli` names its output after the *input* file,
+so `-o public/art/` would have silently overwritten the master with a 288px
+version. The regeneration command in `docs/ART_BRIEF.md` writes to a scratch
+directory and copies, and says why.
+
+**Left alone deliberately:** the 1.9 MB master still sits in `public/`, so
+Cloudflare serves it publicly even though no page requests it. It costs nothing
+at page load and it is the owner's file in the owner's chosen location; logged
+under Known issues rather than moved.

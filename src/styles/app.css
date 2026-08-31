@@ -257,7 +257,7 @@ body::before {
   .masthead__title { font-size: 29px; }
   .views__item, .steps__item { font-size: 14px; padding: 6px 12px; }
   .hank { gap: 12px; padding: 13px 15px 13px 13px; }
-  .hank__portrait { width: 54px; height: 54px; }
+  .hank__portrait { width: 72px; height: 72px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -267,8 +267,8 @@ body::before {
 /* Hank ---------------------------------------------------------------- */
 /* He used to be a tinted paragraph with a stripe down its side. He is the
    reason this app exists, so he gets a face and a seat at the fire. The
-   portrait is a placeholder asset at public/art/hank-portrait.svg — swap the
-   file and nothing here needs to change. */
+   portrait is public/art/hank-portrait.webp, a 288px derivative of the 1254px
+   master kept beside it. Swap the file; nothing here needs to change. */
 .hank {
   display: flex; align-items: flex-start; gap: 15px;
   font-family: var(--body);
@@ -285,13 +285,13 @@ body::before {
   box-shadow: var(--shadow-1), var(--firelight);
 }
 .hank__portrait {
-  flex: none; display: block; width: 66px; height: 66px;
+  flex: none; display: block; width: 96px; height: 96px;
   border-radius: 50%;
   box-shadow: 0 2px 9px rgba(0,0,0,.55);
 }
 .hank__line { margin: 0; font-style: italic; }
 .hank--quiet { font-size: 15px; }
-.hank--quiet .hank__portrait { width: 48px; height: 48px; }
+.hank--quiet .hank__portrait { width: 68px; height: 68px; }
 .hank--grave {
   color: #f2c8b4;
   background:

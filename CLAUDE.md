@@ -4,9 +4,9 @@
 
 ---
 
-## Current Version: 0.9.0
+## Current Version: 0.9.1
 
-## Last Updated: 2026-08-30
+## Last Updated: 2026-08-31
 
 **Live at hodgepodgehearthside.com** (Cloudflare Pages, auto-deploys on push to
 `main`). Repo: `ZariasKobold/hodgepodge-hearthside`.
@@ -110,7 +110,8 @@ Shipped and live:
 | **Arsenal sheet** | Every field of the official sheet, in this app's own type and palette. |
 | **D1 sync** | Local-first, D1 mirrors. Signing in adopts anything built signed out. **Confirmed working across the owner's phone and computer.** |
 | **Security** | Ownership gate, `requireSubject`, same-origin writes, 16 authorization tests, account erasure. |
-| **The look** | v0.9.0. A camp at dusk, not a records office — warm ground, one firelight source, Rye on the wordmark, Alegreya everywhere else, and Hank with a face. See `docs/ART_BRIEF.md`. |
+| **The look** | v0.9.0. A camp at dusk, not a records office — warm ground, one firelight source, Rye on the wordmark, Alegreya everywhere else. |
+| **Hank has a face** | v0.9.1. Owner-drawn 16-bit medallion, served as a 33 KB WebP beside every line he speaks. See `docs/ART_BRIEF.md`. |
 
 134 tests. The audit's high and all mediums are closed.
 
@@ -214,9 +215,9 @@ The records-office direction is **retired**. `src/styles/tokens.css` now opens
 with the campfire rationale; read it before changing a colour, and do not
 "restore" the old greys — they were replaced on purpose, by owner decision.
 
-What is left of this item is **art, not code**. Everything in `public/art/` is
-a placeholder drawn in code, and the slots that would hold better art are
-specified in `docs/ART_BRIEF.md`. The highest-value thing on that list is a
+What is left of this item is **art, not code**. The portrait is real as of
+v0.9.1; `road-horizon.svg` is still a placeholder drawn in code. The remaining
+slots are specified in `docs/ART_BRIEF.md`, and the highest-value one is a
 second and third Hank portrait keyed to `HankSays`'s existing `tone` prop, so
 he visibly changes when a leader dies — it costs one line of code.
 
@@ -308,11 +309,15 @@ in `src/data/hank.js`. Missing piece is UI plus the `Campaign` object.
 **High:** none currently.
 
 **Medium:**
-- **The art in `public/art/` is placeholder**, drawn in code as silhouettes so
-  it reads as deliberate rather than broken. It is not finished art and the
-  owner is making the real thing; `docs/ART_BRIEF.md` holds the render sizes,
-  the 48px legibility floor and the §8 constraints. Swapping is overwriting a
-  file — no component change.
+- **`road-horizon.svg` is still placeholder art**, drawn in code as a
+  silhouette so it reads as deliberate rather than broken. Hank's portrait is
+  real as of v0.9.1. `docs/ART_BRIEF.md` holds the render sizes and the §8
+  constraints for whatever replaces the horizon.
+- **The 1.9 MB `16-bit-hank.png` master is inside `public/`**, so Cloudflare
+  serves it publicly even though no page requests it — only the 33 KB WebP
+  derivative is ever loaded. Harmless for page weight, but if `public/` should
+  hold only what ships, move the master to a non-served folder and update the
+  regeneration command in `docs/ART_BRIEF.md`.
 - **The print output has never been seen since the redesign.** Two print-only
   fixes shipped in v0.9.0 (hiding the firelight pseudo-element, which would
   otherwise wash every printed page) and both are CSS asserted in the source

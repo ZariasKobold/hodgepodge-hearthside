@@ -22,7 +22,7 @@ export default function HankSays({ children, tone = 'normal' }) {
 
   return (
     <div className={`hank hank--${tone}`} aria-hidden="true">
-      <img className="hank__portrait" src="/art/hank-portrait.svg" alt="" width="66" height="66" />
+      <img className="hank__portrait" src="/art/hank-portrait.webp" alt="" width="96" height="96" />
       <p className="hank__line">{children}</p>
     </div>
   )

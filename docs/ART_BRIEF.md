@@ -18,8 +18,9 @@ one, overwrite the file. No component changes, no rebuild step, no cache
 busting — Cloudflare Pages serves `public/` verbatim.
 
 ```
-public/art/hank-portrait.svg     ← the face beside every line he speaks
-public/art/road-horizon.svg      ← the band behind the masthead
+public/art/hank-portrait.webp    ← the face beside every line he speaks (REAL ART)
+public/art/16-bit-hank.png       ← the 1254px master it was derived from
+public/art/road-horizon.svg      ← the band behind the masthead (still placeholder)
 ```
 
 If a raster file is supplied instead of vector, keep the same basename and
@@ -28,26 +29,45 @@ change the one `src` in the component (`HankSays.jsx`) or the one `url()` in
 
 ---
 
-## 1. Hank's portrait — `hank-portrait.svg`
+## 1. Hank's portrait — `hank-portrait.webp` ✅ DONE
 
-**The single highest-value asset in the project.** It appears beside every line
-of narration, which is the most frequently rendered element in the app.
+**The single highest-value asset in the project**, and as of v0.9.1 it is real
+art rather than a placeholder: a 16-bit pixel-art medallion of Hank on the road
+with Henrietta under a full load, desert sunset behind, already circular with
+its own metal rim and transparent corners.
 
 | | |
 |---|---|
-| Shape | Square canvas, circular crop. The CSS applies `border-radius: 50%`, so anything in the corners is discarded. |
-| Rendered at | **66 × 66 px** normally, **48 × 48 px** in `tone="quiet"`, **54 × 54 px** below 520 px wide. |
-| Supply at | Vector (SVG) ideally. If raster, **264 × 264 px** so it stays sharp on a 2× display at the largest size. |
-| Must read at | 48 px. This is the hard constraint and it is much smaller than it sounds. |
+| Master | `16-bit-hank.png`, 1254 × 1254, 1.9 MB. Kept in the repo as the archival original. |
+| Served | `hank-portrait.webp`, 288 × 288, **33 KB** — a 58× reduction. |
+| Rendered at | **96 × 96 px** normally, **68 × 68 px** in `tone="quiet"`, **72 × 72 px** below 520 px wide. |
 
-**What has to survive at 48 px:** the wide hat brim, and the fact that a second
-creature is behind him. Nothing else will. Facial features, buckles, the texture
-of the pack — all of it turns to mud. The current placeholder is a backlit
-silhouette for exactly this reason, and that approach is worth keeping even in
-finished art: **rim-lit against the fire** rather than lit from the front.
+**The display size grew from 66px to 96px because of this art.** The placeholder
+was a flat silhouette that read fine when tiny; this is a full scene — sky,
+mesas, cacti, saddlebags, a plaid bedroll — and at 66px all of that collapsed
+into a brown smudge. At 96px it holds together. If a future portrait is
+simpler, the size can come back down.
 
-Henrietta should stay in frame. She is established character (§7) and she is
-the difference between "a man" and "Hank".
+**Why WebP and not PNG.** The same 288px frame is 191 KB as PNG and 33 KB as
+lossy WebP. Lossless WebP was tried and is *worse* (109 KB): downscaling
+resampled the flat colour blocks that make pixel art compress well, so there is
+nothing left for lossless to exploit. There is deliberately **no PNG fallback**
+— any browser that can run this React app supports WebP — which keeps the
+"swap one file" property above true. Add a `<picture>` element if that ever
+stops being an acceptable bet.
+
+**Regenerating the derivative** after editing the master:
+
+```bash
+npx sharp-cli -i public/art/16-bit-hank.png -o /tmp/out -f webp --quality 88 resize 288 288
+```
+
+Then copy the result over `public/art/hank-portrait.webp`. Note `sharp-cli`
+names its output after the *input* file, so never point `-o` at `public/art/` —
+it will overwrite the master.
+
+Henrietta must stay in frame in any replacement. She is established character
+(§7) and she is the difference between "a man" and "Hank".
 
 ## 2. The road horizon — `road-horizon.svg`
 
