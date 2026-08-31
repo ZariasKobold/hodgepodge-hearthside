@@ -92,23 +92,40 @@ the middle third. Nothing important can sit within 15% of either edge. It sits
 heaviest top and bottom where type sits, thinnest across the middle so the fire
 still reads. Supply at full strength; the scrim is CSS.
 
-## 2b. The page background — `background-1536.webp` ⏸ ON HOLD
+## 2b. The page background — `background-1536.webp` ✅ DONE
 
-Owner-drawn props and an ornate frame: steer skull, wanted poster, lantern,
-signposts, whiskey, contract. Optimised to 255 KB and sitting in `public/art/`,
-but **not wired up**, for two reasons:
+Owner-drawn props at the table's edges: steer skull, wanted poster, lantern,
+strongbox, signposts, whiskey, contract, skull. The signposts read Sable Ridge,
+Ironhollow, Gravewatch and Duskmoor — invented places, which is what keeps this
+clear of §8.
 
-1. **It carries the Wyrd wordmark** on the `MALIFAUX` signpost. §8 forbids
-   copying Wyrd's trade dress, and the permission this project runs on is
-   revocable at any time. Awaiting a regenerated version without it.
-2. **The ornate frame cannot be part of a flat background image.** The content
-   panel's height varies enormously — one leader versus eight, or the arsenal
-   sheet, which runs to pages — and a baked frame cannot stretch. It needs
-   supplying as a **separate asset from the props**, so it can become a CSS
-   `border-image` 9-slice: four corners that stay crisp, four edges that tile.
+| | |
+|---|---|
+| Master | `website-background.png`, 1536 × 1024, 2.66 MB. |
+| Served | `background-1536.webp`, **250 KB**, at 90% opacity. |
+| Rendered at | `body::before`, fixed, `cover`, anchored `50% 0`. |
 
-The side props also need a breakpoint below which they are hidden, or on a
-phone they sit directly behind the text.
+**It is not loaded below 900px.** `cover` crops the props out of frame entirely
+on a phone, so loading it there would spend 250 KB on pixels nobody sees — and
+any prop that did survive would sit behind the text.
+
+**The props and the firelight are separate fixed layers**, `body::before` and
+`body::after` in that order, because the fire has to fall *on* the objects
+rather than under them, and the objects must not breathe with the fire's
+animation.
+
+**A soft-edged plate sits under the reading column** above 900px. Without it,
+bare text — labels, notes, the colophon — lands directly on the wanted poster
+and the signposts.
+
+### If the frame ever comes back
+
+The owner's mockup had an ornate border around the content panel and it was
+dropped for now. If it returns, **it cannot be part of a flat background
+image**: the panel's height swings from one leader to the arsenal sheet's
+several pages, and a baked frame cannot stretch. Supply it as a **separate
+asset from the props** so it can become a CSS `border-image` 9-slice — four
+corners that stay crisp, four edges that tile.
 
 ## 3. Assets there is currently no slot for
 

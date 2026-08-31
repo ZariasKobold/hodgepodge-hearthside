@@ -1549,3 +1549,56 @@ store, render on the shelf — at both desktop and mobile widths.
 **Not covered by tests:** `renderPortrait`, `loadImage` and `releaseImage` touch
 canvas and object URLs, the same licence `storage.js` takes. Everything above
 them in the module is pure and tested.
+
+---
+
+### Session 26 — v0.10.1
+Date: 2026-08-31
+
+**feat: the props go on the table, and Hank keeps his head**
+
+The owner regenerated `website-background.png` without the Wyrd wordmark — the
+`MALIFAUX` signpost is now Sable Ridge, Ironhollow, Gravewatch and Duskmoor,
+all invented, and the winged emblem is gone. The ornate border was dropped by
+owner decision. That cleared the §8 block from v0.10.0 and the background is
+now live at 250 KB.
+
+The owner also reported the masthead cutting Hank's head off, with permission
+to make it taller.
+
+**Key decisions and why:**
+
+- **The hero's height is in `vw`, not pixels, and that is the actual fix.**
+  With `cover` on an image wider than its box, the fraction of the picture on
+  show is `height x 2.5 / width` — so a fixed pixel height crops *harder the
+  wider the monitor*. At the owner's ~2000px screen the old 268px showed 33% of
+  the image and beheaded Hank; at 1280px the same rule showed 52%. Tying height
+  to width holds the crop constant at ~57.5% everywhere. Measured identical at
+  1600px and 2000px: band 28.7%–86.5%, hat at 34% and boots at 83% both inside.
+- **The scrim became a pool behind the type instead of a band across the
+  picture.** The wordmark is centred; Hank is at 22–40% from the left and
+  Henrietta further right. A uniform 82% scrim at the top was burying both of
+  them to keep one heading legible. Now a radial pool sits under the wordmark
+  and the flat layer is much weaker. The nav was unaffected either way — it
+  carries its own translucent plate and clears 5.24:1 against the brightest
+  pixel of the sunset.
+- **Mobile needed the opposite fix, on the other axis.** Below ~960px the box
+  is taller-ratio than the image, so `cover` scales by *height* and crops
+  horizontally instead. Centred, that cut Hank out and left mostly sky. The
+  anchor is `36% 60%` there, which frames him with the fire. Above 960px the
+  image scales by width and that x value does nothing.
+- **The props and the firelight are separate fixed layers.** `body::before`
+  holds the objects, `body::after` the fire, in that paint order — the fire has
+  to fall *on* them, and they must not breathe with its animation.
+- **The background is not loaded below 900px at all.** `cover` crops the props
+  out of frame on a phone, so it would be 250 KB of pixels nobody sees, and any
+  prop that did survive would sit behind the text. Verified: the computed
+  `background-image` on `body::before` carries no file at 375px.
+- **A soft-edged plate under the reading column.** The content column is 820px
+  and the props reach further in than that on a wide screen, so bare text —
+  labels, notes, the colophon — was landing on the wanted poster. Soft-edged
+  rather than a box, since the frame that would have justified a hard edge was
+  dropped.
+
+**Verified:** 158 tests, build clean, detector clean. Crop geometry measured at
+1280, 1600 and 2000px and confirmed identical; mobile checked separately.

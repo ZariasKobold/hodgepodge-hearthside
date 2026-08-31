@@ -22,11 +22,31 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Hank's things, laid out at the edges of the table.
+   Two fixed layers rather than one: the objects do not breathe, and the fire
+   has to fall on top of them rather than under them. ::after paints after
+   ::before, so the order here is the lighting order.
+
+   Loaded only above 900px. Below that the props are cropped out of frame
+   entirely by `cover`, so a phone would be paying 250 KB for pixels it never
+   sees — and any prop that did survive the crop would sit behind the text. */
+body::before {
+  content: '';
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background: var(--night);
+}
+@media (min-width: 900px) {
+  body::before {
+    background: url('/art/background-1536.webp') 50% 0 / cover no-repeat, var(--night);
+    opacity: .9;
+  }
+}
+
 /* The one light source. It sits low and centre, the way a fire does, and its
    slow rise and fall is the single authored moment of motion in the app —
    everything else that moves is affordance. Fixed rather than scrolled: you
    do not leave the campsite by scrolling down a page. */
-body::before {
+body::after {
   content: '';
   position: fixed; inset: 0; z-index: 0; pointer-events: none;
   background:
@@ -35,6 +55,19 @@ body::before {
   animation: hearth 7s cubic-bezier(.4,0,.5,1) infinite alternate;
 }
 @keyframes hearth { from { opacity: .8 } to { opacity: 1 } }
+
+/* A plate under the reading column, soft-edged so it reads as light falling on
+   the table rather than as a box. Without it, bare text — labels, notes, the
+   colophon — sits directly on the wanted poster and the signposts. */
+@media (min-width: 900px) {
+  .wrap {
+    background: linear-gradient(90deg,
+      rgba(20, 14, 9, 0) 0%,
+      rgba(20, 14, 9, .90) 7%,
+      rgba(20, 14, 9, .90) 93%,
+      rgba(20, 14, 9, 0) 100%);
+  }
+}
 
 /* Browser surfaces belong to the design too. Left alone they ship as system
    defaults that belong to no palette at all. */
@@ -65,16 +98,27 @@ body::before {
 .masthead {
   position: relative;
   overflow: hidden;
-  background: #100b06 url('/art/hero-960.webp') 50% 76% / cover no-repeat;
-  min-height: 208px;
+  /* On a narrow screen the box is taller-ratio than the image, so `cover`
+     scales by HEIGHT and crops horizontally instead of vertically. Centred, that
+     cuts Hank out and leaves mostly sky. 36% frames him with the fire beside
+     him. Above 960px the image scales by width and this x value does nothing. */
+  background: #100b06 url('/art/hero-960.webp') 36% 60% / cover no-repeat;
+  min-height: 250px;
   border-bottom: 1px solid var(--line);
   padding: 34px 20px 22px;
 }
 @media (min-width: 961px) {
   .masthead {
     background-image: url('/art/hero-1600.webp');
-    background-position: 50% 72%;
-    min-height: 268px;
+    /* Hank's hat starts around 34% down the image and his boots end near 83%,
+       so the visible band has to run from roughly 29% to 86%. */
+    background-position: 50% 68%;
+    /* Height in vw, not px. With `cover` on an image wider than the box, the
+       fraction of the picture on show is (height x 2.5 / width) — so a fixed
+       pixel height crops harder the wider the monitor, which is exactly how
+       Hank lost his head on a 2000px screen. Tying height to width holds the
+       crop constant at ~57% at every size. */
+    min-height: clamp(250px, 23vw, 520px);
     padding: 46px 20px 24px;
   }
 }
@@ -84,11 +128,17 @@ body::before {
 .masthead::after {
   content: '';
   position: absolute; inset: 0; z-index: 0; pointer-events: none;
-  background: linear-gradient(180deg,
-    rgba(16, 11, 6, .82) 0%,
-    rgba(16, 11, 6, .34) 34%,
-    rgba(16, 11, 6, .52) 66%,
-    rgba(23, 17, 12, .95) 100%);
+  background:
+    /* A pool behind the type rather than a flat band across the picture. The
+       wordmark is centred; Hank is at 22-40% from the left and Henrietta is
+       further right still, so a uniform scrim buried both of them to keep one
+       heading legible. */
+    radial-gradient(ellipse 44% 78% at 50% 38%, rgba(16,11,6,.84) 0%, rgba(16,11,6,.46) 58%, rgba(16,11,6,0) 100%),
+    linear-gradient(180deg,
+      rgba(16, 11, 6, .56) 0%,
+      rgba(16, 11, 6, .22) 34%,
+      rgba(16, 11, 6, .42) 66%,
+      rgba(23, 17, 12, .95) 100%);
 }
 .masthead__top, .masthead .views, .masthead .steps { position: relative; z-index: 1; }
 
@@ -605,7 +655,8 @@ body::before {
   .hank, .hank-toggle, .gate, .account { display: none !important; }
 
   body { background: #fff; color: #000; }
-  body::before { display: none !important; }
+  body::before, body::after { display: none !important; }
+  .wrap { background: none !important; }
   .shell { padding: 0; }
   .wrap { max-width: none; padding: 0; }
 
