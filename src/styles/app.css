@@ -68,32 +68,88 @@ body::before {
    960w for phones, 1600w above that — because this is the largest image on
    the site and it loads on every page. The PNG master is 2.4 MB; these are
    99 KB and 215 KB. */
+/* The expanded height, read by the bar AND by the spacer that holds its place
+   in the flow. One property so the two can never drift apart. */
+:root { --hero-h: 250px; }
+@media (min-width: 961px) {
+  /* Height in vw, not px. With `cover` on an image wider than the box, the
+     fraction of the picture on show is (height x 2.5 / width) — so a fixed
+     pixel height crops harder the wider the monitor, which is exactly how Hank
+     lost his head on a 2000px screen. Tying height to width holds the crop
+     constant at ~57% at every size. */
+  :root { --hero-h: clamp(250px, 23vw, 520px); }
+}
+
 .masthead {
-  position: relative;
+  /* Fixed, not sticky. A sticky bar that shrinks changes the document height,
+     so every time it shrank the content below would jump up by exactly the
+     amount it lost. Fixed takes it out of the flow entirely and
+     .masthead__spacer holds the full height open in its place. */
+  position: fixed; top: 0; left: 0; right: 0; z-index: 20;
   overflow: hidden;
   /* On a narrow screen the box is taller-ratio than the image, so `cover`
      scales by HEIGHT and crops horizontally instead of vertically. Centred, that
      cuts Hank out and leaves mostly sky. 36% frames him with the fire beside
      him. Above 960px the image scales by width and this x value does nothing. */
   background: #100b06 url('/art/hero-960.webp') 36% 60% / cover no-repeat;
-  min-height: 250px;
+  min-height: var(--hero-h);
   border-bottom: 1px solid var(--line);
   padding: 34px 20px 22px;
+  transition:
+    min-height .3s cubic-bezier(.2, .7, .3, 1),
+    padding .3s cubic-bezier(.2, .7, .3, 1),
+    background-position .3s cubic-bezier(.2, .7, .3, 1);
 }
+.masthead__spacer { height: var(--hero-h); }
+
 @media (min-width: 961px) {
   .masthead {
     background-image: url('/art/hero-1600.webp');
     /* Hank's hat starts around 34% down the image and his boots end near 83%,
        so the visible band has to run from roughly 29% to 86%. */
     background-position: 50% 68%;
-    /* Height in vw, not px. With `cover` on an image wider than the box, the
-       fraction of the picture on show is (height x 2.5 / width) — so a fixed
-       pixel height crops harder the wider the monitor, which is exactly how
-       Hank lost his head on a 2000px screen. Tying height to width holds the
-       crop constant at ~57% at every size. */
-    min-height: clamp(250px, 23vw, 520px);
     padding: 46px 20px 24px;
   }
+}
+
+/* Scrolled past the camp: the picture has been looked at, and what is wanted
+   from here on is the navigation. The bar keeps a sliver of the fire as
+   texture and gets out of the way. */
+.masthead--compact {
+  min-height: 0;
+  padding: 11px 20px 13px;
+  background-position: 50% 62%;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .55);
+}
+@media (min-width: 961px) {
+  .masthead--compact { padding: 12px 20px 14px; }
+}
+.masthead--compact .masthead__sub { display: none; }
+.masthead--compact .masthead__title { font-size: 23px; }
+.masthead__title { transition: font-size .3s cubic-bezier(.2, .7, .3, 1); }
+/* Nearly opaque once compact — at this height the image is a 15% sliver and
+   would otherwise read as mud behind the type rather than as a picture. */
+.masthead--compact::after {
+  background: linear-gradient(180deg, rgba(16, 11, 6, .88) 0%, rgba(23, 17, 12, .94) 100%);
+}
+
+@media (max-width: 899px) {
+  /* A phone cannot spare two wrapped rows of navigation plus an account row
+     for a bar that is meant to be out of the way. The nav becomes one
+     scrolling row, and the account chrome — which is still a scroll away at
+     the top — steps out. */
+  .masthead--compact .masthead__chrome { display: none; }
+  .masthead--compact .views,
+  .masthead--compact .steps {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    justify-content: flex-start;
+    scrollbar-width: none;
+  }
+  .masthead--compact .views::-webkit-scrollbar,
+  .masthead--compact .steps::-webkit-scrollbar { display: none; }
+  .masthead--compact .views__item,
+  .masthead--compact .steps__item { flex: none; }
 }
 /* A scrim, not a flat tint. Heaviest at the two edges where type sits and
    thinnest across the middle, so the fire and the sunset still read as a
@@ -624,7 +680,7 @@ body::before {
 .legal-print { display: none; }
 
 @media print {
-  .masthead, .steps, .views, .nav, .colophon, .noprint,
+  .masthead, .masthead__spacer, .steps, .views, .nav, .colophon, .noprint,
   .hank, .hank-toggle, .gate, .account { display: none !important; }
 
   body { background: #fff; color: #000; }

@@ -1641,3 +1641,57 @@ The hero, its vw-based height and both crop anchors are untouched.
 
 **Verified:** 158 tests, build clean, and `background-1536` appears zero times
 in the built stylesheet.
+
+---
+
+### Session 28 — v0.10.3
+Date: 2026-08-31
+
+**feat: the masthead pins and shrinks on scroll**
+
+Owner request: the hero should lock in place and shrink so the navigation stays
+reachable without the picture staying obnoxiously large.
+
+**Key decisions and why:**
+
+- **Fixed, not sticky, and this is the whole trick.** A *sticky* bar stays in
+  the flow, so shrinking it shortens the document — and every time it shrank,
+  the content below would jump up by exactly the height it lost. `position:
+  fixed` takes it out of the flow and `.masthead__spacer` holds the full height
+  open in its place, so the document height never changes. Verified: 1150px
+  before and after the shrink.
+- **One `--hero-h` custom property feeds both the bar's `min-height` and the
+  spacer's `height`.** Two hard-coded copies of a `clamp()` would drift the
+  first time either was touched, and the failure mode is a gap or an overlap at
+  the top of the page.
+- **Two thresholds, not one.** Shrinks past 150px, re-expands below 60px. A
+  single threshold can sit exactly on the boundary and flip back and forth.
+- **The compact bar is ~103px** (101px narrow) — roughly the height the header
+  was before the hero existed. Title drops to 23px, the subtitle goes, and the
+  scrim goes nearly opaque because at that height the image is a 15% sliver
+  that would read as mud behind the type rather than as a picture.
+- **Narrow screens get a different compact treatment.** Two wrapped rows of
+  navigation plus an account row is not "out of the way" on a phone, so below
+  900px the nav becomes a single horizontally scrolling row and the account
+  chrome steps out — it is one scroll from the top, where it still sits.
+
+**A long detour worth recording, because it will happen again:** almost every
+attempt to verify this in the preview pane reported the feature broken when it
+was not.
+
+- `window.scrollTo` in the pane **does not emit scroll events at all** — proven
+  by attaching a fresh listener that also recorded zero.
+- `requestAnimationFrame` is throttled when the pane is not compositing, so
+  even a hand-dispatched `scroll` event left the rAF-throttled handler pending
+  and every reading looked stale.
+- Screenshots **mis-composite fixed elements**, painting a large black band
+  above a bar that `getBoundingClientRect` and `elementFromPoint` both place at
+  `top: 0`.
+
+The reliable technique: dispatch the event, force a paint by taking a
+screenshot, *then* read the DOM. And trust `elementFromPoint` over the picture.
+
+**Verified:** 1280px 368→103px; 880px 250→101px with the nav on one scrolling
+row and the chrome hidden; document height unchanged across the transition;
+re-expands on the way back up; no ancestor creating a containing block that
+would break `fixed`. 158 tests, build clean.
