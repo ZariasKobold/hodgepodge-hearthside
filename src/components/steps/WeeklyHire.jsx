@@ -59,7 +59,12 @@ export default function WeeklyHire({ arsenal, week, houseRules, mustHire, roster
 
   function confirm() {
     if (!picked || !affordable) return
-    onHire(picked, cost)
+    // Four fields, the same four `Record` writes for the starting arsenal.
+    // Passing `picked` whole put the entire register record — actions,
+    // triggers, abilities, characteristics — into the stored campaign, into
+    // every sync push and into the JSON export, and left two different shapes
+    // in the arsenal again (audit v0.11.0, M1).
+    onHire({ slug: picked.slug, name: picked.name, cost: picked.cost }, cost)
     setSlug('')
     setManual({ name: '', cost: '' })
     setVersatileOverride(null)

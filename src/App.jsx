@@ -37,14 +37,24 @@ export default function App() {
   // save fires. The two are deliberately one-way: campaigns push into sync,
   // sync never reaches back into campaign state except through `refresh`.
   const syncRef = useRef({ mirror: () => {}, forget: () => {} })
-  // Three views now. `library` is the shelf of leaders; the other two are only
-  // reachable with a campaign open, because they edit one.
+  // Five views. `library` is the shelf of leaders; the other four are only
+  // reachable with a campaign open, because they all edit or read one.
   const [view, setView] = useState('library')
+  // Held here rather than inside the badge so there is exactly one /api/auth/me
+  // per load, and so the storage adapter has it to hand when it lands.
+  //
+  // Declared before useCampaign because the shelf is scoped by account: the
+  // hook needs the id, and a const cannot be read above its own declaration.
+  const auth = useAuth()
   const {
     shelf, openId, open, close, startNew, discard, adopt, refresh,
     leader, set, setPick,
     campaign, arsenal, week, mustHire, addModel, spendScrip,
   } = useCampaign({
+    // The shelf is scoped to the account, not the browser. Without this a
+    // second person signing in on a shared machine sees the first one's
+    // leaders (audit v0.11.0, H1).
+    userId: auth.user?.id ?? null,
     onSaved: (c) => syncRef.current.mirror(c),
     onRemoved: (id) => syncRef.current.forget(id),
   })
@@ -53,9 +63,6 @@ export default function App() {
   // the whole tree so the loadout's hover lookups and the record's writeout
   // share the same in-flight requests instead of racing each other.
   const rules = useRules()
-  // Held here rather than inside the badge so there is exactly one /api/auth/me
-  // per load, and so the storage adapter has it to hand when it lands.
-  const auth = useAuth()
 
   /**
    * Local storage stays the working copy; this mirrors it to the account and,
@@ -169,6 +176,7 @@ export default function App() {
 
         {admitted && inCampaign && view === 'arsenal' && archetype && (
           <Arsenal
+            campaign={campaign}
             arsenal={arsenal}
             leader={leader}
             archetype={archetype}
@@ -192,9 +200,12 @@ export default function App() {
         )}
 
         {/* A campaign whose leader has no archetype yet cannot render an
-            arsenal, so send them back to finish building instead of showing a
-            blank screen. */}
-        {admitted && inCampaign && view === 'arsenal' && !archetype && (
+            arsenal, a sheet, or the record step, so send them back to finish
+            building instead of showing a blank screen. Only the arsenal was
+            covered, and the other two rendered a page containing nothing but
+            the Back button and the legal line (audit v0.11.0, M2). */}
+        {admitted && inCampaign && !archetype &&
+          (view === 'arsenal' || view === 'sheet' || (view === 'create' && step === 3)) && (
           <div className="empty">
             This leader isn't finished yet — no archetype chosen.{' '}
             <button className="gate__link" onClick={() => { setStep(0); setView('create') }}>
@@ -224,6 +235,7 @@ export default function App() {
         )}
         {admitted && inCampaign && view === 'create' && step === 3 && archetype && (
           <Record
+            campaign={campaign}
             leader={leader}
             set={set}
             archetype={archetype}

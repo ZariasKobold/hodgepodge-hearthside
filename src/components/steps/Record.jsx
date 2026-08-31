@@ -23,7 +23,7 @@ const byCost = (models) => [...models].sort((a, b) => a.cost - b.cost)
  * The record itself is `LeaderRecord`, shared with the standing arsenal view so
  * the two cannot drift into different documents.
  */
-export default function Record({ leader, set, archetype, roster, rules, fileNumber, onDone }) {
+export default function Record({ campaign, leader, set, archetype, roster, rules, fileNumber, onDone }) {
   const spent = arsenalTotal(leader.arsenal)
   const scrip = startingScrip(spent)
   const over = spent > STARTING_SOULSTONES
@@ -91,7 +91,8 @@ export default function Record({ leader, set, archetype, roster, rules, fileNumb
       <LeaderRecord leader={leader} archetype={archetype} fileNumber={fileNumber} rules={rules} />
 
       <div className="export noprint">
-        <Button ghost onClick={() => exportJSON(leader, `${stem}.json`)}>Export JSON</Button>
+        {/* The campaign, not the flat wizard adapter — see audit v0.11.0 H2. */}
+        <Button ghost onClick={() => exportJSON(campaign, `${stem}.json`)}>Export JSON</Button>
         <Button ghost onClick={saveImage} disabled={imaging === 'working'}>
           {imaging === 'working' ? 'Drawing…' : 'Export image'}
         </Button>

@@ -36,8 +36,15 @@ export function checkSource(model, slot, archetypeId, leaderKeywords) {
   if (!archetype) return { ok: false, problems: ['No archetype chosen.'] }
 
   const cap = archetype.slots[slot].cap
+  // Totems are checked separately from cost because they HAVE costs — the
+  // cost test never caught them, while this message claimed it did, so a
+  // player could take a totem's action and be told totems were barred
+  // (audit v0.11.0, M4/M5).
+  if (model.isTotem) {
+    problems.push(`${model.name} is a totem, and totems cannot be a source.`)
+  }
   if (model.cost == null || model.cost <= 0) {
-    problems.push('Masters, totems and costless models cannot be used as a source.')
+    problems.push('Masters and costless models cannot be used as a source.')
   } else if (model.cost > cap) {
     problems.push(`${model.name} costs ${model.cost}, over the ${cap} ceiling.`)
   }

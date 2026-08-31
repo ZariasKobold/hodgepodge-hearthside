@@ -7,6 +7,7 @@ import {
 import {
   createCampaign, createModel, migrate, migrateLeaderToCampaign,
   myArsenal as selectMyArsenal, currentWeek, totalFor, mustHireThisWeek,
+  belongsTo,
 } from '../lib/campaignShape.js'
 
 const LEGACY_LEADER_KEY = 'leader:current'
@@ -28,7 +29,7 @@ const LEGACY_LEADER_KEY = 'leader:current'
  * keep working. Permission from Wyrd is revocable, so a campaign must survive
  * this app disappearing.
  */
-export function useCampaign({ onSaved, onRemoved } = {}) {
+export function useCampaign({ userId = null, onSaved, onRemoved } = {}) {
   const [ids, setIds] = useState(() => {
     // One-time lifts, oldest first: the v0.1 single leader, then the
     // single-campaign key everything before the shelf wrote to.
@@ -57,9 +58,25 @@ export function useCampaign({ onSaved, onRemoved } = {}) {
   // Every campaign on the shelf, for rendering it. Re-read whenever the shelf
   // or the open campaign changes, so a rename shows immediately.
   const shelf = useMemo(
-    () => ids.map((id) => (id === openId && campaign ? campaign : migrate(loadCampaign(id)))).filter(Boolean),
-    [ids, openId, campaign]
+    () => ids
+      .map((id) => (id === openId && campaign ? campaign : migrate(loadCampaign(id))))
+      .filter(Boolean)
+      .filter((c) => belongsTo(c, userId)),
+    [ids, openId, campaign, userId]
   )
+
+  /**
+   * A campaign belonging to another account must not stay open across a
+   * sign-in. Closing rather than deleting: their work is still theirs and is
+   * still on the disk, it simply is not this account's to look at.
+   */
+  useEffect(() => {
+    if (campaign && !belongsTo(campaign, userId)) {
+      setCampaign(null)
+      setOpenId(null)
+      setActiveCampaignId(null)
+    }
+  }, [campaign, userId])
 
   // Skip the write on the render that merely opened a campaign — it would be
   // writing back exactly what it just read.
@@ -71,7 +88,11 @@ export function useCampaign({ onSaved, onRemoved } = {}) {
     // Local first and synchronously; the mirror upward is best-effort and
     // never gates the write. `saveCampaign` returns the stamped copy, which is
     // what must go to the server — the unstamped one would lose every merge.
-    const stamped = saveCampaign(campaign)
+    // Claim it on first save while signed in. Only ever set on an unclaimed
+    // campaign — re-stamping one that already carries an id would be one
+    // account taking another's work rather than adopting loose work.
+    const claimed = userId && !campaign.ownerUserId ? { ...campaign, ownerUserId: userId } : campaign
+    const stamped = saveCampaign(claimed)
     if (stamped) onSaved?.(stamped)
   }, [campaign, onSaved])
 
@@ -86,10 +107,11 @@ export function useCampaign({ onSaved, onRemoved } = {}) {
   const open = useCallback((id) => {
     const found = migrate(loadCampaign(id))
     if (!found) return
+    if (!belongsTo(found, userId)) return
     setCampaign(found)
     setOpenId(id)
     setActiveCampaignId(id)
-  }, [])
+  }, [userId])
 
   const close = useCallback(() => {
     setCampaign(null)
@@ -123,21 +145,41 @@ export function useCampaign({ onSaved, onRemoved } = {}) {
    * Nothing already on the shelf can be lost by importing.
    */
   const adopt = useCallback((data) => {
-    const incoming = migrate(data)
-    if (!incoming?.arsenals?.length) {
+    /**
+     * One campaign, or a bundle of them.
+     *
+     * The bundle shape exists because the sign-in gate's rescue has to be able
+     * to export a whole shelf — and an export this app cannot read back is not
+     * a rescue (audit v0.11.0, H2/H3). Accepting a bare campaign keeps every
+     * file exported before this change importable.
+     */
+    const list = Array.isArray(data)
+      ? data
+      : Array.isArray(data?.campaigns) ? data.campaigns : [data]
+
+    const filed = []
+    for (const one of list) {
+      const incoming = migrate(one)
+      if (!incoming?.arsenals?.length) continue
+      // `createCampaign` spreads its patch last, so passing `id: undefined`
+      // overwrites the id it just minted and the save silently no-ops. Strip
+      // the key instead of blanking it. The owner is stripped too: an imported
+      // file is this account's now, whoever exported it.
+      const { id: _discarded, ownerUserId: _wasTheirs, ...rest } = incoming
+      const one2 = createCampaign(rest)
+      saveCampaign(one2)
+      filed.push(one2)
+    }
+
+    if (filed.length === 0) {
       throw new Error('That file does not look like a campaign — no arsenals in it.')
     }
-    // `createCampaign` spreads its patch last, so passing `id: undefined`
-    // overwrites the id it just minted and the save silently no-ops. Strip the
-    // key instead of blanking it.
-    const { id: _discarded, ...rest } = incoming
-    const filed = createCampaign(rest)
-    saveCampaign(filed)
+
     setIds(campaignIds())
-    setCampaign(filed)
-    setOpenId(filed.id)
-    setActiveCampaignId(filed.id)
-    return filed.id
+    setCampaign(filed[0])
+    setOpenId(filed[0].id)
+    setActiveCampaignId(filed[0].id)
+    return filed[0].id
   }, [])
 
   /* ── the open campaign ────────────────────────────────────────── */

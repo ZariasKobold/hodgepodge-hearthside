@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from 'react'
 import { registry, throttledMap, RegistryError } from '../lib/api.js'
-import { toIndexedModel, isSelectionSource, isVersatile } from '../lib/indexing.js'
+import { toIndexedModel, isSelectionSource, isVersatile, totemSlugs } from '../lib/indexing.js'
 import { registerFaction } from '../data/factions.js'
 import { save, load } from '../lib/storage.js'
 
@@ -42,7 +42,10 @@ export function useRoster() {
       const collected = new Map()
 
       for (const keyword of wanted) {
-        const cacheKey = `roster:${keyword}`
+        // Version in the key: the cached shape gained `isTotem`, and without a
+        // bump every browser holding an old cache would keep offering totems as
+        // selection sources forever, since nothing expires these.
+        const cacheKey = `roster:2:${keyword}`
         const cached = load(cacheKey)
         if (cached) {
           cached.forEach((m) => collected.set(m.slug, m))
@@ -50,7 +53,11 @@ export function useRoster() {
         }
 
         const data = await registry.keyword(keyword, { signal: controller.signal })
-        let roster = (data.characters || []).map(toIndexedModel).filter(isSelectionSource)
+        const indexed = (data.characters || []).map(toIndexedModel)
+        // Built from the UNFILTERED list: a totem is named by the character
+        // that owns it, and that owner has to still be present to name it.
+        const totems = totemSlugs(indexed)
+        let roster = indexed.filter(isSelectionSource)
 
         // The keyword endpoint may return thin records without actions.
         const thin = roster.filter((m) => !m.hasDetail)
@@ -71,6 +78,10 @@ export function useRoster() {
           const byslug = new Map(filled.map((m) => [m.slug, m]))
           roster = roster.map((m) => byslug.get(m.slug) || m)
         }
+
+        // After the detail refill, which replaces whole records and would
+        // otherwise drop the mark.
+        roster = roster.map((m) => ({ ...m, isTotem: totems.has(m.slug) }))
 
         save(cacheKey, roster)
         roster.forEach((m) => collected.set(m.slug, m))
@@ -110,7 +121,7 @@ export function useRoster() {
  * register would answer with zero rows.
  */
 async function loadVersatileFor(faction, signal, setProgress) {
-  const cacheKey = `versatile:${faction}`
+  const cacheKey = `versatile:2:${faction}`
   const cached = load(cacheKey)
   if (cached) return cached
 
@@ -122,9 +133,11 @@ async function loadVersatileFor(faction, signal, setProgress) {
     onProgress: (done, total) => setProgress({ keyword: 'versatile models', done, total }),
   })
 
-  const roster = records
-    .map(toIndexedModel)
+  const indexed = records.map(toIndexedModel)
+  const totems = totemSlugs(indexed)
+  const roster = indexed
     .filter((m) => isVersatile(m) && isSelectionSource(m))
+    .map((m) => ({ ...m, isTotem: totems.has(m.slug) }))
 
   save(cacheKey, roster)
   return roster

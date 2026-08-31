@@ -62,11 +62,6 @@
   --body: 'Alegreya', Georgia, 'Times New Roman', serif;
   --data: 'Courier Prime', 'Courier New', monospace;
 
-  /* Hank is no longer a separate warmth bolted onto a cold interface — the
-     whole camp is warm now. These stay as names so his call sites read
-     clearly, but they point at the fire. */
-  --ember-dim: var(--ember-wash);
-
   /* rhythm ---------------------------------------------------------------- */
   --step: 4px;
   --r-sm: 2px;

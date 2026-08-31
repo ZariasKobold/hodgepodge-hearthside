@@ -1,4 +1,4 @@
-import { load, exportJSON } from '../lib/storage.js'
+import { load, exportJSON, campaignIds, loadCampaign } from '../lib/storage.js'
 import { Button } from './ui.jsx'
 
 /**
@@ -16,21 +16,38 @@ import { Button } from './ui.jsx'
  * closed.
  */
 export default function SignInGate({ auth }) {
-  // Whatever the browser already holds. Someone who built a leader before the
-  // gate existed must not be locked away from it.
-  const local = load('campaign:current') ?? load('leader:current')
+  /**
+   * Whatever the browser actually holds.
+   *
+   * This read the two legacy keys only — `campaign:current` and
+   * `leader:current` — which have not been where campaigns live since v0.6.0.
+   * So the rescue silently rendered nothing for every browser using the shelf,
+   * which is all of them, in precisely the situation §12b wrote it for: the
+   * backend down, the player locked out, and their twelve weeks sitting in
+   * localStorage (audit v0.11.0, H3).
+   */
+  const shelf = campaignIds().map((id) => loadCampaign(id)).filter(Boolean)
+  const legacy = load('campaign:current') ?? load('leader:current')
+  const count = shelf.length || (legacy ? 1 : 0)
 
-  const rescue = local && (
+  // A bundle when there are several, a bare campaign when there is one, and
+  // `adopt` reads both — an export that cannot be imported is not a rescue.
+  const payload = shelf.length > 1
+    ? { exportedAt: Date.now(), campaigns: shelf }
+    : shelf[0] || legacy
+
+  const rescue = count > 0 && (
     <p className="gate__rescue">
-      This browser still holds an unsaved campaign.{' '}
+      This browser holds {count === 1 ? 'a campaign' : `${count} campaigns`} that
+      {count === 1 ? ' is' : ' are'} not on an account yet.{' '}
       <button
         className="gate__link"
-        onClick={() => exportJSON(local, 'hodgepodge-campaign.json')}
+        onClick={() => exportJSON(payload, 'hodgepodge-campaigns.json')}
       >
-        Export it to JSON
+        Export {count === 1 ? 'it' : 'them'} to JSON
       </button>{' '}
       — once you're signed in, <strong>Import from JSON</strong> on the leaders
-      screen files it back.
+      screen files {count === 1 ? 'it' : 'them'} back.
     </p>
   )
 

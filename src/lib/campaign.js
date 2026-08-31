@@ -135,7 +135,15 @@ export const AFTERMATH_PHASES = [
 /** Phase 5 costs 1 scrip per attempt, and the doctor keeps it either way. */
 export const DOCTOR_FEE_PER_ATTEMPT = 1
 
-/** Maximum three experience points from a single game. */
+/**
+ * Experience from one game.
+ *
+ * The comment here used to claim a maximum of three. The reachable maximum is
+ * **two** — the advancement-path bonus and the loss bonus — and nothing caps
+ * anything, so the number was describing a rule that is not implemented and
+ * may not exist (audit L1). Stated as what the code does; if the book really
+ * does allow a third, it is missing rather than uncapped.
+ */
 export function experienceEarned({ path, killedNonPeon, interactedNearEnemyDeployment, lost }) {
   let xp = 0
   if (path === 'bruiser' && killedNonPeon) xp += 1

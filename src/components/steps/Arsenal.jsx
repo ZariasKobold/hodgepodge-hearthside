@@ -21,7 +21,7 @@ import CrewCards from '../CrewCards.jsx'
  * arsenal (creation) or the weekly hire (campaign), and leave by annihilation.
  * A delete button here would imply a fourth route that the rules do not have.
  */
-export default function Arsenal({ arsenal, leader, archetype, week, rules, fileNumber, onEditLeader, onHire, onSheet }) {
+export default function Arsenal({ campaign, arsenal, leader, archetype, week, rules, fileNumber, onEditLeader, onHire, onSheet }) {
   const [imaging, setImaging] = useState(null)
 
   const models = liveModels(arsenal)
@@ -67,7 +67,10 @@ export default function Arsenal({ arsenal, leader, archetype, week, rules, fileN
         <Button onClick={onEditLeader}>Edit this leader</Button>
         {onSheet && <Button ghost onClick={onSheet}>Arsenal sheet</Button>}
         <Button ghost onClick={onHire}>Weekly hire</Button>
-        <Button ghost onClick={() => exportJSON(arsenal, `${stem}.json`)}>Export JSON</Button>
+        {/* The campaign, not the arsenal. An arsenal has no `arsenals` array,
+            so `adopt` refused every file this button used to produce — a backup
+            the app itself could not read (audit v0.11.0, H2). */}
+        <Button ghost onClick={() => exportJSON(campaign, `${stem}.json`)}>Export JSON</Button>
         <Button ghost onClick={saveImage} disabled={imaging === 'working'}>
           {imaging === 'working' ? 'Drawing…' : 'Export image'}
         </Button>
@@ -115,7 +118,7 @@ export default function Arsenal({ arsenal, leader, archetype, week, rules, fileN
           <div style={{ marginTop: 10 }}>
             <Label>Annihilated — no longer hirable</Label>
             {lost.map((m) => (
-              <div className="pick" key={m.id} style={{ borderColor: 'var(--oxide-dim)', background: 'var(--panel)', opacity: 0.7 }}>
+              <div className="pick" key={m.id} style={{ borderColor: 'var(--coal-wash)', background: 'var(--panel)', opacity: 0.7 }}>
                 <span className="pick__meta" style={{ fontSize: 13 }}>{m.name}</span>
                 <span className="pick__meta">{m.cost}ss</span>
               </div>

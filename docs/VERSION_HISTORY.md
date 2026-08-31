@@ -1804,3 +1804,74 @@ real export would be worth more than another pass over the CSS.
 
 Of the eight findings that are not carried over from v0.5.2, **four were
 introduced during the nine sessions the audit was late.**
+
+---
+
+### Session 31 — v0.12.0
+Date: 2026-08-31
+
+**fix: the audit's findings, and the print export that closed the last gap**
+
+The owner supplied a real PDF export, which the audit had named as the one
+thing it could not check. Read by inflating the content streams and decoding
+the subset fonts through their ToUnicode maps. **The v0.9.0 firelight fix
+works** — no full-viewport wash, records print on white. Two new defects fell
+out of it, and both are fixed here along with everything else in the catalogue.
+
+**P1 — every card printed its drop shadow.** Chrome renders `box-shadow` as an
+alpha-blended black rectangle; on paper that is a grey smear down two edges of
+every card. `--shadow-2` exists to lift a card off a dark ground and paper has
+none. All shadows are now cleared for print.
+
+**P2 — a crew card split and orphaned its tail.** `.crewcard` asked for
+`break-inside: avoid` while also taking `break-before: page`, and the card is
+taller than a page — so the request could not be honoured and Chrome broke it
+at the worst available point. L8 recorded exactly this for `.record` in the
+last audit and it was never carried across. The card may now split; what is
+pinned instead is the tail — a heading may not end a page, the foot may not be
+separated from what it closes, and orphans/widows are set.
+
+**H1 — the shelf is scoped by account, not by browser.** Signing out clears
+nothing from localStorage, so the next person to sign in on a shared machine
+was shown the previous account's leaders under a heading saying they were
+theirs — and their own campaigns then stopped syncing, because `planSync`
+pushed the stale ones, the ownership gate correctly refused, and the push loop
+broke on the first failure every time.
+
+Fixed by ownership rather than by deletion. Campaigns carry `ownerUserId`;
+`belongsTo` decides visibility; an unclaimed campaign is visible to anyone,
+which preserves the adoption path §12 describes, and a claimed one is visible
+only to its owner. **Nothing is deleted** — someone else's campaign stays on
+disk, hidden, because the alternative is throwing away work that may not have
+finished syncing. The push loop now continues past a failure instead of
+stopping at it.
+
+**H2 — all three *Export JSON* buttons emit a campaign.** The Arsenal view was
+exporting an arsenal and creation's Record step the flat wizard adapter,
+neither of which `adopt` accepts. `Record` also had to gain `campaign` in its
+signature; without it the button would have exported `undefined`, which the
+build would not have caught.
+
+**H3 — the gate's rescue reads the shelf.** It was reading two pre-v0.6.0 keys
+and so offered nothing to any browser using the shelf, in exactly the situation
+§12b wrote it for. It now exports a bundle when there is more than one campaign,
+and `adopt` accepts a bundle — an export this app cannot read back is not a
+rescue, which is the same lesson as H2.
+
+**M1** the weekly hire passes four fields rather than the whole register
+record. **M2** Sheet and Creation step 4 no longer render a blank page for an
+unfinished leader; verified in the browser, since that blank page was seen live
+earlier in the session. **M3** a retired token still referenced from a JSX
+inline style — the v0.9.0 rename was scripted over `app.css` and never looked
+at inline styles. **M4/M5** totems: `totemSlugs` is finally wired, `useRoster`
+marks `isTotem`, `checkSource` rejects it, and the cost message stops claiming
+a rule it never enforced. The roster cache key is versioned, or no existing
+browser would ever see the change.
+
+Lows fixed: L1, L4, L5, L11, L14. Eight remain open and are listed in the
+audit's status block.
+
+**Tests 158 → 175.** Both new rules are asserted rather than described:
+`belongsTo` has four cases, and a new `validation.test.js` covers `checkSource`
+— including that the cost message no longer names totems, which is the wording
+that was false for eight versions.

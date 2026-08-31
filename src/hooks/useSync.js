@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { remote, planSync, SyncError } from '../lib/remote.js'
-import { saveCampaign, loadCampaign, campaignIds, removeCampaign } from '../lib/storage.js'
+import { saveCampaign, loadCampaign, campaignIds } from '../lib/storage.js'
+import { belongsTo } from '../lib/campaignShape.js'
 
 /**
  * Keeps the local shelf and the account's shelf in step.
@@ -38,7 +39,18 @@ export function useSync({ user, available, onChanged }) {
   const reconcile = useCallback(async () => {
     setState((s) => ({ ...s, status: 'syncing', error: null }))
 
-    const mine = campaignIds().map((id) => loadCampaign(id)).filter(Boolean)
+    /**
+     * This account's campaigns, not this browser's.
+     *
+     * Signing out clears nothing from localStorage, so without this filter the
+     * next account to sign in would try to push the previous one's campaigns,
+     * be refused by the ownership gate — correctly — and see its own work fail
+     * to sync behind them (audit v0.11.0, H1).
+     */
+    const mine = campaignIds()
+      .map((id) => loadCampaign(id))
+      .filter(Boolean)
+      .filter((c) => belongsTo(c, user?.id))
 
     let theirs
     try {
@@ -58,8 +70,10 @@ export function useSync({ user, available, onChanged }) {
 
     // Pull first. If the push half fails, the browser has still gained whatever
     // the account held, and nothing local was thrown away to get it.
+    // Anything the server hands back is this account's by definition — it was
+    // fetched with their session — so stamp it on the way in.
     for (const campaign of pull) {
-      saveCampaign(campaign, { keepTimestamp: true })
+      saveCampaign({ ...campaign, ownerUserId: user.id }, { keepTimestamp: true })
     }
 
     let pushed = 0
@@ -67,10 +81,14 @@ export function useSync({ user, available, onChanged }) {
     for (const campaign of push) {
       try {
         await remote.put(campaign)
+        // Claimed now that the account has actually accepted it.
+        saveCampaign({ ...campaign, ownerUserId: user.id }, { keepTimestamp: true })
         pushed += 1
       } catch (err) {
-        failure = err.message
-        break
+        // Carry on rather than stop. An earlier version broke out of this loop
+        // on the first failure, so a single unpushable campaign kept every
+        // campaign behind it from ever reaching the account (audit v0.11.0, H1).
+        failure = failure || err.message
       }
     }
 

@@ -34,12 +34,17 @@ export function toIndexedModel(record) {
 }
 
 /**
- * Can this model ever be a source for a leader selection?
+ * Is this model hirable at all?
  *
- * The rule bars masters, totems and models without a cost. Masters have no
- * cost at all, so the cost check catches two of those three categories on its
- * own — which matters, because `station` comes back null on records that
- * clearly should have one.
+ * Masters have no cost, so the cost check catches them regardless of
+ * `station`, which the register returns as null on records that clearly should
+ * have one.
+ *
+ * **Totems are deliberately not filtered here.** They are perfectly hirable —
+ * they are only barred as a *source for a leader selection*, which is
+ * `checkSource`'s business. Stripping them from the roster would bar the
+ * weekly hire from buying one. `useRoster` marks them `isTotem` instead, using
+ * `totemSlugs` below, and the rule reads that flag.
  */
 export function isSelectionSource(model) {
   return (

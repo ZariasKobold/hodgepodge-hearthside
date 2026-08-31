@@ -6,7 +6,7 @@ import {
   injuriesFor, injuryCountForModel, modelIsAnnihilated, activeInjuryCount,
   ratingForGame, mustHireThisWeek, gamesInWeek,
   migrateLeaderToCampaign, migrate, SCHEMA_VERSION, DEFAULT_HOUSE_RULES,
-  hireRules, isOutOfKeyword, hiresInWeek,
+  hireRules, isOutOfKeyword, hiresInWeek, belongsTo,
 } from './campaignShape.js'
 
 const DAY = 86400000
@@ -303,5 +303,35 @@ describe('migrate — v1 to v2 model repair (audit M1)', () => {
 
   it('still returns null for nothing', () => {
     expect(migrate(null)).toBeNull()
+  })
+})
+
+describe('belongsTo', () => {
+  /**
+   * Signing out clears nothing from localStorage, so the shelf has to be
+   * scoped by account rather than by browser — otherwise the next person to
+   * sign in on a shared machine is shown the previous account's leaders under
+   * a heading saying they are theirs (audit v0.11.0, H1).
+   */
+  it('shows an unclaimed campaign to anyone, because that is the adoption path', () => {
+    const fresh = createCampaign()
+    expect(fresh.ownerUserId).toBe(null)
+    expect(belongsTo(fresh, 'user-a')).toBe(true)
+    expect(belongsTo(fresh, null)).toBe(true)
+  })
+
+  it('shows a claimed campaign only to the account that claimed it', () => {
+    const mine = createCampaign({ ownerUserId: 'user-a' })
+    expect(belongsTo(mine, 'user-a')).toBe(true)
+    expect(belongsTo(mine, 'user-b')).toBe(false)
+  })
+
+  it('hides a claimed campaign once its owner signs out', () => {
+    expect(belongsTo(createCampaign({ ownerUserId: 'user-a' }), null)).toBe(false)
+  })
+
+  it('says no to nothing at all rather than throwing', () => {
+    expect(belongsTo(null, 'user-a')).toBe(false)
+    expect(belongsTo(undefined, 'user-a')).toBe(false)
   })
 })

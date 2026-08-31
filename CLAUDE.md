@@ -4,7 +4,7 @@
 
 ---
 
-## Current Version: 0.11.1
+## Current Version: 0.12.0
 
 ## Last Updated: 2026-08-31
 
@@ -113,17 +113,21 @@ Shipped and live:
 | **The look** | v0.11.0. A camp at dusk. Owner-drawn hero across the masthead, pinned and shrinking on scroll; a 1024px reading column; a bottom navbar on phones. One firelight source, Rye on the wordmark, Alegreya everywhere else. The page behind the column is deliberately plain — a background of props was built and removed by owner decision. |
 | **Hank has a face** | v0.9.1. Owner-drawn 16-bit medallion, served as a 33 KB WebP beside every line he speaks. See `docs/ART_BRIEF.md`. |
 
-158 tests.
+175 tests.
 
 ### Audits
 
-`docs/audits/audit-v0.11.0.md` is the current one (Session 29). **Three highs,
-five mediums, fourteen lows, none fixed yet** — §5 requires the catalogue
-before the fix code, and the fixes are the next piece of work. The three highs:
-signing out leaves the previous account's campaigns on the shelf and breaks the
-next account's sync; two of the three *Export JSON* buttons produce files the
-importer rejects; and the sign-in gate's rescue export cannot see any campaign
-created since v0.6.0.
+`docs/audits/audit-v0.11.0.md` is the current one (Session 29), and it now
+carries a status block. **Both print findings, all three highs, all five
+mediums and five of the lows are fixed** in v0.12.0. Eight lows remain open and
+are listed there.
+
+The one worth carrying in your head: **the shelf is scoped by account, not by
+browser.** Campaigns carry `ownerUserId`, and `belongsTo` decides what a signed‑in
+user may see. An unclaimed campaign is visible to anyone — that is the adoption
+path §12 describes — but a claimed one is visible only to its owner, and
+signing out hides rather than deletes, because deleting would throw away work
+that may not have finished syncing.
 
 `docs/audits/audit-v0.5.2.md` is the first one. **H1, M1, M2, M3, M4, M5, M7
 and L8 are done.** M6 was **retracted** — a measurement error, not drift.
@@ -667,7 +671,7 @@ every session. `docs/VERSION_HISTORY.md` holds how it got this way.
 npm install
 cp .env.example .env
 npm run dev      # Vite only — NO Functions, NO database. useAuth degrades to signed out.
-npm run test     # 158 tests; `functions/` is in the run too, for the authz tests
+npm run test     # 175 tests; `functions/` is in the run too, for the authz tests
 npm run build    # production bundle — the dev proxy does NOT exist here
 npm run seed     # optional local register file; ask BiggerHat's maintainer first
 
@@ -691,7 +695,7 @@ catch-all at `/api/` would swallow `/api/auth/*`. Keep new API surfaces in
 their own namespace.
 
 `vite.config.js` proxies `/api` in **development only**. In production that job
-belongs to `functions/api/[[path]].js`, a Cloudflare Pages Function that fetches
+belongs to `functions/api/v1/[[path]].js`, a Cloudflare Pages Function that fetches
 upstream at the edge and caches for an hour.
 
 **If you change the API base path, change it in both.** A mismatch works

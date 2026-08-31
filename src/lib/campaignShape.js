@@ -90,6 +90,19 @@ export function createCampaign(patch = {}) {
     weekOffset: 0,
     houseRules: { ...DEFAULT_HOUSE_RULES },
     joinCode: null,
+    /**
+     * Which account this campaign belongs to, once it belongs to one.
+     *
+     * null means unclaimed — built before signing in, or created before this
+     * field existed — and the first account to sync adopts it, which is the
+     * behaviour CLAUDE.md §12 describes. Once set it is never reassigned
+     * locally; only the account that owns it may see it on this browser.
+     *
+     * Added because signing out cleared nothing, so the next person to sign in
+     * on a shared browser was shown the previous account's leaders under a
+     * heading saying they were theirs (audit v0.11.0, H1).
+     */
+    ownerUserId: null,
     members: [],
     arsenals: [arsenal],
     games: [],
@@ -156,6 +169,21 @@ export function isCampaignOver(campaign, now = Date.now()) {
 
 export function weeksRemaining(campaign, now = Date.now()) {
   return Math.max(0, campaign.weeksTotal - currentWeek(campaign, now))
+}
+
+/**
+ * May this user see this campaign on this browser?
+ *
+ * Unclaimed campaigns are visible to everyone, because that is the adoption
+ * path: work built before signing in has to survive signing in. A campaign
+ * already stamped with someone else's id is visible to nobody else — it stays
+ * in storage rather than being deleted, because the alternative is throwing
+ * away work that may not have finished syncing.
+ */
+export function belongsTo(campaign, userId) {
+  if (!campaign) return false
+  if (!campaign.ownerUserId) return true
+  return campaign.ownerUserId === userId
 }
 
 export function getArsenal(campaign, arsenalId) {

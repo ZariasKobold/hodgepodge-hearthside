@@ -739,11 +739,17 @@ body::before {
   .shell { padding: 0; }
   .wrap { max-width: none; padding: 0; }
 
+  /* No shadows on paper. They exist to lift a card off a dark ground, and
+     paper has none — Chrome prints them as a grey smear along two edges of
+     every card. Found by reading a real export (audit v0.11.0, P1). */
+  * { box-shadow: none !important; text-shadow: none !important; }
+
   .record, .crewcard {
     background: #fff; border: 1px solid #999;
-    break-inside: avoid; page-break-inside: avoid;
     margin: 0 0 10mm;
   }
+  /* Kept unsplittable only while it fits. See the note below. */
+  .record, .crewcard { break-inside: auto; page-break-inside: auto; }
   .crewcard { break-before: page; page-break-before: always; }
   .record__section, .crewcard__entry { break-inside: avoid; page-break-inside: avoid; }
 
@@ -752,10 +758,25 @@ body::before {
      legal notice (audit M5). */
   .record__foot { break-inside: avoid; page-break-inside: avoid; }
 
-  /* A record longer than a page cannot honour break-inside and would push a
-     blank page ahead of itself, so only ask it of the crew cards, which are
-     reliably short (audit L8). */
-  .record { break-inside: auto; page-break-inside: auto; }
+  /* Neither a record nor a crew card can honour `break-inside: avoid` once it
+     is taller than a page — the browser breaks it anyway, and asking first only
+     makes it choose a worse point. L8 recorded this for `.record`; a real
+     export then showed a crew card splitting immediately before an empty
+     ABILITIES heading, leaving a page holding that heading, the card's note and
+     the legal line and nothing else (audit v0.11.0, P2).
+
+     So the card may split, and what is pinned instead is its tail: a heading
+     may not be the last thing on a page, and the foot may not be separated
+     from whatever it is closing. */
+  .crewcard__entry, .record__section { break-inside: avoid; page-break-inside: avoid; }
+  .record__section-k, .crewcard__entry > .label {
+    break-after: avoid; page-break-after: avoid;
+  }
+  .record__foot {
+    break-before: avoid; page-break-before: avoid;
+  }
+  /* Two lines is the least that may be left behind or carried over. */
+  .record, .crewcard, .sheet__page { orphans: 2; widows: 2; }
 
   .legal-print {
     display: block; margin: 10px 0 0;

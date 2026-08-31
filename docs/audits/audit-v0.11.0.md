@@ -15,7 +15,36 @@ past `src/` in one place: `functions/lib/campaignStore.js`, because the first
 finding turns on what the server does when two accounts share a browser, and
 reading only the client would have got that wrong.
 
-**Written as findings only.** No fixes applied.
+**Written as findings only.** Status added afterwards — see below.
+
+---
+
+## Status — fixed in v0.12.0, same session
+
+| Finding | Outcome |
+|---|---|
+| P1 shadows on paper | **Fixed.** `box-shadow` and `text-shadow` cleared for print. |
+| P2 crew card split | **Fixed.** The card may split; its tail may not be orphaned. Headings cannot end a page, the foot cannot be separated from what it closes, and `orphans`/`widows` are set. |
+| H1 cross-account shelf | **Fixed.** Campaigns carry `ownerUserId`; the shelf, `open`, and sync all scope to it. Nothing is deleted — an unsynced campaign belonging to someone else stays on disk, it simply is not shown. The push loop no longer stops at the first failure. |
+| H2 unimportable exports | **Fixed.** All three buttons export the campaign. |
+| H3 dead rescue | **Fixed.** The gate reads the shelf, exports a bundle when there is more than one, and `adopt` now accepts a bundle so the rescue can actually come back. |
+| M1 two model shapes | **Fixed.** The weekly hire passes the same four fields the starting arsenal does. |
+| M2 blank screens | **Fixed** and verified in the browser — Sheet and Creation step 4 both show the "not finished yet" route out. |
+| M3 retired token | **Fixed.** Also removed the now-unused `--ember-dim` alias. |
+| M4 totems not excluded | **Fixed.** `totemSlugs` is wired: `useRoster` marks `isTotem`, `checkSource` rejects it, `candidatesFor` drops it. The roster cache key is versioned, or existing browsers would never see the change. |
+| M5 over-claiming message | **Fixed.** The cost message no longer names totems; the totem rule has its own message and its own test. |
+| L1, L4, L5, L11, L14 | **Fixed.** |
+| L2, L3, L6, L7, L9, L10, L12, L13 | Open. |
+
+`totemSlugs` is no longer dead, so L3 is now only `loadLocalRegister` and
+`useRoster.addManual`.
+
+**Tests went from 158 to 175.** The two new rules are asserted rather than
+described: `belongsTo` has four cases in `campaignShape.test.js`, and a new
+`validation.test.js` covers `checkSource` — including that the cost message no
+longer claims to bar totems, which is the wording that was false for eight
+versions.
+
 
 ---
 
@@ -45,6 +74,7 @@ in the status block ever since.
 
 | Priority | Count | Theme |
 |---|---|---|
+| Print | 2 | shadows on paper; a card split across a page boundary |
 | High | 3 | one account's data shown to another; two broken portability promises |
 | Medium | 5 | one shape bug, one blank screen, one dead token, two stale claims |
 | Low | 14 | carried-over dead code, stale comments, cosmetic drift |
@@ -333,6 +363,58 @@ Recorded so a future audit does not re-litigate them. All verified this pass.
   exercises it and it refuses correctly.
 - **Aftermath arithmetic is still unwired** and still referenced only by its
   own tests. Documented state, not rot.
+
+## Print — checked after the fact
+
+The owner supplied a real export the same session this audit was written, so
+the gap named below was closed within hours of being named. Six pages, read by
+inflating the content streams and decoding the subset fonts through their
+ToUnicode maps.
+
+**The v0.9.0 firelight fix works.** No full-viewport wash on any page; the
+record and the crew cards print on white. The two print-only rules added blind
+in v0.9.0 do what they were written to do.
+
+### P1 — Every card prints its drop shadow
+
+Each page paints a full-width black rectangle, alpha-blended, clipped to a
+rounded rectangle: Chrome's rendering of `box-shadow`. The print block
+overrides `background` and `border` on `.record` and `.crewcard` and never
+touches `box-shadow`, so `--shadow-2` — a screen affordance for lifting a card
+off a dark ground — is being sprayed onto paper. On a mono printer it is a grey
+smear down two edges of every card.
+
+Introduced in v0.9.0, when shadows were added to surfaces that had none.
+
+`src/styles/app.css` print block
+
+### P2 — A crew card splits and leaves its tail alone on a page
+
+**Page 3 holds only the tail of the card that began on page 2** — its
+`ABILITIES` section, the "read live from BiggerHat" note, and the legal
+notice.
+
+(An earlier draft of this finding said the heading had nothing under it. That
+was the decoder, not the PDF: the ToUnicode map recovered only 108 glyphs and
+dropped the ability names. `CrewCards` renders a section only when
+`entries.length > 0`, so they were there. The split is real; the emptiness was
+not.)
+
+`.crewcard` carries `break-inside: avoid`, but it also carries
+`break-before: page`, so every card starts its own page — and this one is
+taller than a page, which makes `break-inside: avoid` impossible to honour.
+Chrome then splits it wherever it likes, which was immediately before an empty
+section heading.
+
+This is v0.5.2's M5 one level up. That finding was the *foot* splitting away
+from the record, and the fix pinned the foot. Here the whole card splits and
+the foot travels with the fragment. The lesson L8 recorded for `.record` — an
+element taller than a page cannot honour `break-inside: avoid`, and asking it
+to only makes the break worse — was never carried across to `.crewcard`.
+
+`src/components/CrewCards.jsx`, `src/styles/app.css` print block
+
+---
 
 ### One thing that could not be checked
 

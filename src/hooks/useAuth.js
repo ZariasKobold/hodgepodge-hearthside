@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { forgetCards } from '../lib/rules.js'
 
 /**
  * Who's signed in, if anyone.
@@ -47,6 +48,11 @@ export function useAuth() {
   const signOut = useCallback(async () => {
     await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
     setUser(null)
+    // Drop the rules text held in memory for their models. forgetCards has
+    // documented itself as being "for sign-out" since it was written and was
+    // never called from one (audit L4) — which mattered more once H1 showed
+    // sign-out was cleaning up nothing at all.
+    forgetCards()
   }, [])
 
   return { user, loading, available, signIn, signOut, refresh }
