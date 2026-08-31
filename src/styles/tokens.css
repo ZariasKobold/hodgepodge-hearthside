@@ -1,40 +1,84 @@
 /*
-  A records office, not a fantasy character sheet.
-  The book's own fiction opens on a document laid out like a fingerprint
-  register — two rows of five boxes, no header, no explanation. So a leader
-  here is a filed record with a case number, and the palette is filing-cabinet
-  iron and stamp ink rather than parchment.
+  A camp at dusk, on the open road — not a records office.
+
+  Until v0.9.0 this file described a filing cabinet: iron greys, stamp ink, and
+  a deliberate coldness borrowed from the book's fingerprint-register fiction.
+  That direction was coherent and it was also the wrong one for this app. The
+  product is Hank — a peddler who talks to you while you plan your week — and
+  an interface built like municipal paperwork kept arguing with him.
+
+  So the ground is now the dark around a fire rather than the dark of a
+  basement archive. Every neutral carries brown in it; there is no blue
+  anywhere. The one true light source is the fire, and it falls off with
+  distance: things near Hank are lit, things at the edge of camp are not.
+
+  Materials, in the order you meet them:
+    night      the air outside the firelight
+    canvas     Hank's tarp and packs — the panels and controls
+    brass      lantern hardware, buckles, the pot over the fire
+    ember      the fire itself; the only thing allowed to be bright
+    coal       banked embers, and the colour of something going wrong
+    handbill   warm cream stock — records, crew cards, the arsenal sheet
+
+  Keep the paper warm. It is the same page whether it is on screen or coming
+  out of a printer, and §8 requires it look like this app rather than Wyrd's.
 */
 :root {
-  --ink: #15181d;
-  --slate: #1e232b;
-  --panel: #232932;
-  --panel-hover: #2a313b;
-  --line: #333c47;
-  --line-soft: #2a323c;
+  /* the night around the fire ---------------------------------------- */
+  --night: #17110c;
+  --ground: #1d1610;
+  --panel: #241b14;
+  --panel-hover: #2f241a;
+  --line: #3d2e22;
+  --line-soft: #2f241b;
 
-  --card: #e7e2d4;
-  --card-line: #c3bca8;
-  --card-ink: #221d16;
-  --card-mute: #6f665a;
+  /* handbill stock ---------------------------------------------------- */
+  --card: #f0e4cb;
+  --card-line: #cbbb99;
+  --card-ink: #2a1e12;
+  --card-mute: #6d5c46;
+  --card-faint: #8d7c63;
 
-  --oxide: #a8342a;
-  --oxide-dim: #4a2320;
-  --brass: #b8913f;
-  --brass-bg: #2b2921;
+  /* fire and hardware -------------------------------------------------- */
+  --ember: #f0a04b;
+  --ember-deep: #c9722c;
+  --ember-wash: #33240f;
+  --coal: #a33f2a;
+  --coal-lit: #e2704f;
+  --coal-wash: #2c1710;
+  --brass: #d9ab52;
+  --brass-wash: #2d2413;
 
-  --text: #d5d9de;
-  --mute: #828c99;
-  --faint: #5a626c;
+  /* text ---------------------------------------------------------------- */
+  --text: #f0e3d2;
+  --mute: #b9a288;
+  --faint: #9a8369;
 
-  --display: 'Bodoni Moda', Georgia, serif;
+  /* voices --------------------------------------------------------------
+     Rye is the signboard and belongs to the wordmark alone. Giving it to
+     leader names turns every model into a saloon poster. */
+  --sign: 'Rye', 'Bodoni Moda', Georgia, serif;
+  --display: 'Alegreya', Georgia, 'Times New Roman', serif;
+  --body: 'Alegreya', Georgia, 'Times New Roman', serif;
   --data: 'Courier Prime', 'Courier New', monospace;
-  --body: Georgia, 'Times New Roman', serif;
 
-  /* Hank's voice — warmer than the rest of the interface on purpose.
-     The UI is a filing cabinet; he's the fire next to it. */
-  --ember: #c98a4b;
-  --ember-dim: #2e2519;
+  /* Hank is no longer a separate warmth bolted onto a cold interface — the
+     whole camp is warm now. These stay as names so his call sites read
+     clearly, but they point at the fire. */
+  --ember-dim: var(--ember-wash);
 
+  /* rhythm ---------------------------------------------------------------- */
   --step: 4px;
+  --r-sm: 2px;
+  --r: 4px;
+  --r-lg: 10px;
+
+  /* depth — every shadow has an offset and a soft blur; a glow with no
+     offset is decoration and is not used as depth. */
+  --shadow-1: 0 2px 6px rgba(0, 0, 0, .45);
+  --shadow-2: 0 10px 30px rgba(0, 0, 0, .55);
+  --shadow-3: 0 18px 44px rgba(0, 0, 0, .6);
+
+  /* firelight, used as light rather than as depth */
+  --firelight: 0 0 44px rgba(240, 160, 75, .12);
 }

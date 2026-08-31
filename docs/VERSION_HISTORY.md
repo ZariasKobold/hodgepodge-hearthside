@@ -1348,3 +1348,79 @@ public information by the rules. That widens read access from **owner** to
 **member** — the exact change that reintroduces the v0.7.0 bug class — so it
 lands with its own attack tests. `campaign_members` and `join_code` are already
 in migration 0001, unused.
+
+---
+
+### Session 23 — v0.9.0
+Date: 2026-08-30
+
+**feat: the records office becomes a camp at dusk**
+
+Owner direction, given mid-session: "The style of hodgepodge hearthside is very
+plain right now. I want to make it a lot more warm and fun... shift it towards
+the themes of cozy campfire on the open road, but with a fantasy vibe," with
+Hank given "a more visible presence" through imagery the owner will draw.
+
+This is a **redesign, not a polish.** The previous direction was not sloppy —
+it was a deliberate, documented records-office aesthetic, and `tokens.css`
+opened with a paragraph defending it. That paragraph is now wrong, and has been
+rewritten rather than deleted, because a future session reading the old one
+would "fix" the warmth back out.
+
+**Key decisions and why:**
+
+- **The old look was evidence, not a base to build on.** Impeccable's detector
+  found only three anti-patterns in all of `src/`, all the same rule (a 3px
+  coloured `border-left` on cards, on `.hank`, `.gap-note` and `.hire__quote`).
+  Confirmation that the interface was cold by intent rather than by accident,
+  so the fix was a new world, not a tidy-up. All three are gone; the detector
+  now reports zero across `src/`, `public/` and `index.html`.
+- **Every neutral carries brown now; there is no blue anywhere.** The old
+  greys (`#15181d`, `#232932`) were blue-leaning, which is what made the app
+  read as institutional even before you got to the typography.
+- **One light source, and it falls off.** `body::before` is a fixed radial
+  gradient low and centre, and it is the only authored motion in the app — a
+  seven-second rise and fall. Everything else that moves is affordance.
+- **Rye is the signboard and belongs to the wordmark alone.** It is a wood-type
+  western showbill face, which suits a travelling peddler and — importantly for
+  §8 — is nothing like Wyrd's gothic trade dress. Giving it to leader names
+  would turn every model into a saloon poster, so `--sign` and `--display` are
+  separate tokens. Alegreya replaced both Bodoni Moda and Georgia.
+- **Courier stays only where it is measuring something.** Scrip, costs, week
+  numbers, case numbers. It came off the navigation, the field labels, the
+  account chrome and the Hank toggle, where it was a costume rather than data.
+  Those went to Alegreya and got noticeably larger.
+- **Hank got a face.** `HankSays` now renders a portrait beside the line. It is
+  a plain `<img>` pointed at `public/art/hank-portrait.svg` rather than an
+  inline SVG, so the artwork can be replaced by overwriting one file. It sits
+  inside the existing `aria-hidden` wrapper, so it costs a screen reader user
+  nothing (§5 unchanged).
+
+**Two bugs found and fixed during the pass, both introduced by this work:**
+
+- **`*` does not match pseudo-elements.** The existing reduced-motion rule was
+  `* { animation: none !important }`, which the new `body::before` animation
+  ignored completely. Now `*, *::before, *::after`. Anyone who asks for reduced
+  motion was going to get a pulsing fire regardless.
+- **The firelight would have printed on every page.** A fixed, full-viewport
+  gradient pseudo-element renders behind the record and every crew card.
+  `body::before { display: none }` added to the print block. The printed sheet
+  is the artefact that leaves the app, so this would have been found by a
+  player and not by us.
+
+A third was caught on the mobile pass: the view nav grew from 10px uppercase
+monospace to 15px Alegreya and stopped fitting 375px, clipping "Campaign".
+`.views` now wraps like `.steps` always has.
+
+**Verified:** 134 tests pass, production build clean. All thirteen changed
+foreground/background pairs measured against WCAG AA — lowest is 5.05:1, and
+that is coal on paper. Desktop and mobile inspected.
+
+**Not verified:** the print output. The two print fixes are CSS asserted in the
+source, and no print dialogue has ever been opened from this environment — the
+same standing gap CLAUDE.md records for the PDF export. The owner's next export
+is the proof.
+
+**New:** `docs/ART_BRIEF.md`. The placeholder art is drawn in code and is meant
+to be replaced; the brief gives exact render sizes, the 48px legibility floor,
+the palette, and the §8 constraints, so the real art gets made once.

@@ -4,9 +4,9 @@
 
 ---
 
-## Current Version: 0.8.0
+## Current Version: 0.9.0
 
-## Last Updated: 2026-08-22
+## Last Updated: 2026-08-30
 
 **Live at hodgepodgehearthside.com** (Cloudflare Pages, auto-deploys on push to
 `main`). Repo: `ZariasKobold/hodgepodge-hearthside`.
@@ -72,8 +72,11 @@ a crash because nobody notices it.
 Feature sessions ship features and miss cross-file drift. Audit whenever any
 of these fire:
 
-- Every 10 sessions, counted from the numbered entries in `docs/VERSION_HISTORY.md`
-  (next scheduled: **Session 20**). Sessions are counted rather than version
+- Every 10 sessions, counted from the numbered entries in `docs/VERSION_HISTORY.md`.
+  **The Session 20 audit was missed** — sessions 20, 21, 22 and 23 all shipped
+  features without one, and v0.7.0's `arsenal_models` hole is the kind of thing
+  that catches. Treat it as **overdue: run it next session (24).** Sessions are
+  counted rather than version
   numbers because a minor bump skips a patch series and makes a version-based
   target unreachable — which is exactly what happened to the old v0.3.10 target.
 - Before any milestone that widens blast radius: first D1 write, first
@@ -91,10 +94,11 @@ Save to `docs/audits/audit-vX.Y.Z.md`.
 
 ## ⚠️ NEXT SESSION — pending
 
-### Where things stand — v0.8.0
+### Where things stand — v0.9.0
 
-Sessions 14–22 took this from a local-only leader builder to a synced,
-multi-leader campaign tracker. Shipped and live:
+Sessions 14–23 took this from a local-only leader builder to a synced,
+multi-leader campaign tracker that no longer looks like municipal paperwork.
+Shipped and live:
 
 | | |
 |---|---|
@@ -106,6 +110,7 @@ multi-leader campaign tracker. Shipped and live:
 | **Arsenal sheet** | Every field of the official sheet, in this app's own type and palette. |
 | **D1 sync** | Local-first, D1 mirrors. Signing in adopts anything built signed out. **Confirmed working across the owner's phone and computer.** |
 | **Security** | Ownership gate, `requireSubject`, same-origin writes, 16 authorization tests, account erasure. |
+| **The look** | v0.9.0. A camp at dusk, not a records office — warm ground, one firelight source, Rye on the wordmark, Alegreya everywhere else, and Hank with a face. See `docs/ART_BRIEF.md`. |
 
 134 tests. The audit's high and all mediums are closed.
 
@@ -203,10 +208,17 @@ lands rather than in one pass.
 When it lands, widen the D1 projection: `injuries`, `equipment` and `games`
 have tables in 0001 and currently ride only inside `doc`.
 
-#### 3. Visual design pass
+#### 3. ~~Visual design pass~~ — shipped v0.9.0
 
-Functional but plain. Tokens are in `src/styles/tokens.css`; the records-office
-direction is deliberate and documented in the file header.
+The records-office direction is **retired**. `src/styles/tokens.css` now opens
+with the campfire rationale; read it before changing a colour, and do not
+"restore" the old greys — they were replaced on purpose, by owner decision.
+
+What is left of this item is **art, not code**. Everything in `public/art/` is
+a placeholder drawn in code, and the slots that would hold better art are
+specified in `docs/ART_BRIEF.md`. The highest-value thing on that list is a
+second and third Hank portrait keyed to `HankSays`'s existing `tone` prop, so
+he visibly changes when a leader dies — it costs one line of code.
 
 #### Smaller, any time
 
@@ -296,6 +308,15 @@ in `src/data/hank.js`. Missing piece is UI plus the `Campaign` object.
 **High:** none currently.
 
 **Medium:**
+- **The art in `public/art/` is placeholder**, drawn in code as silhouettes so
+  it reads as deliberate rather than broken. It is not finished art and the
+  owner is making the real thing; `docs/ART_BRIEF.md` holds the render sizes,
+  the 48px legibility floor and the §8 constraints. Swapping is overwriting a
+  file — no component change.
+- **The print output has never been seen since the redesign.** Two print-only
+  fixes shipped in v0.9.0 (hiding the firelight pseudo-element, which would
+  otherwise wash every printed page) and both are CSS asserted in the source
+  rather than observed. Same standing gap as the PDF export.
 - **Five views now**, and the rule that keeps them coherent: `library` (the
   shelf) → `arsenal` (the standing view of one campaign) → `sheet`, `create`,
   `campaign`. Leaders is a *view*, not an exit — switching to it must never

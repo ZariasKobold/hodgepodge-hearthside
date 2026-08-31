@@ -4,3 +4,9 @@ dist
 public/register.json
 .wrangler
 .dev.vars
+
+# Impeccable installs a 3.5MB vendored skill and a machine-local hooks file.
+# Both are reproducible with `npx impeccable install`, so they stay out of the
+# repo. Design decisions live in CLAUDE.md and docs/, not in the tool.
+.claude/skills/
+.claude/settings.local.json
