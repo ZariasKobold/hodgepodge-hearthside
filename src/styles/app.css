@@ -217,8 +217,23 @@ body::before {
 }
 .masthead .views, .masthead .steps { justify-content: center; }
 @media (min-width: 900px) {
-  .masthead__top { position: relative; }
-  .masthead__chrome { position: absolute; top: 0; right: 0; }
+  /* Three columns so the wordmark is centred by the layout rather than by
+     being the only thing in it. The chrome used to be absolutely positioned,
+     which meant a wide title and a wide account row simply overlapped — nothing
+     reserved space for either. Adding an "offline" chip made that visible; the
+     collision was always possible. */
+  /* Selector deliberately more specific than the base `.masthead__top` rule,
+     which is defined further down the file and would otherwise win on source
+     order at equal specificity — the same trap that left the wordmark
+     left-aligned for four versions. */
+  .masthead .masthead__top {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: start;
+    column-gap: 16px;
+  }
+  .masthead .masthead__name { grid-column: 2; }
+  .masthead .masthead__chrome { grid-column: 3; justify-content: flex-end; }
 }
 .masthead__top {
   /* Centred, not space-between. Above 900px the account chrome is absolutely
@@ -536,6 +551,13 @@ body::before {
   font-family: var(--body); font-size: 14px; font-weight: 600; color: var(--text);
   max-width: 16ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+.account__offline {
+  font-family: var(--data); font-size: 10px; letter-spacing: 1.5px;
+  text-transform: uppercase; color: var(--ember);
+  border: 1px solid var(--ember-deep); border-radius: var(--r);
+  padding: 2px 6px; background: var(--ember-wash);
+}
+
 .account__btn {
   font-family: var(--body); font-size: 13px; font-weight: 600; letter-spacing: .2px;
   padding: 5px 11px; border-radius: var(--r);

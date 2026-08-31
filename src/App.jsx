@@ -186,6 +186,7 @@ export default function App() {
             onDiscard={discard}
             sync={sync}
             signedIn={Boolean(auth.user)}
+            offlineSession={Boolean(auth.offline)}
           />
         )}
 

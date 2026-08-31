@@ -2026,3 +2026,63 @@ opens to "Sign-in is unreachable". The install is still worth having — own
 window, instant launch, no browser chrome — but "installable" and "usable on a
 train" are not the same thing yet, and closing that gap means changing a
 documented rule rather than adding code.
+
+---
+
+### Session 35 — v0.15.0
+Date: 2026-08-31
+
+**feat: a remembered session, so an installed app opens without a signal**
+
+Owner decision, following v0.14.0: making the app installable made §12b's
+accepted cost unacceptable. "A backend outage blocks play entirely" was a
+defensible trade for a website; for something on a home screen it means an icon
+that opens to "Sign-in is unreachable" over twelve weeks of local campaigns.
+
+A successful sign-in is now remembered on the device and stands in when
+`/api/auth/me` cannot be reached.
+
+**The distinction the whole thing turns on**, and the reason `decideSession` is
+a tested pure function rather than a branch inside the hook:
+
+> An answer of "nobody is signed in" is authoritative and clears the remembered
+> session. **No answer at all** is what the fallback is for.
+
+Conflating those would either lock a signed-in player out on a train, or keep
+admitting someone who had signed out. Six tests cover it, including both of
+those failure modes.
+
+**`available` stays false while offline**, deliberately. It is what stops
+`useSync` pushing into the void and what makes the shelf state honest — it now
+says "Working offline… will sync to your account when the service is reachable
+again" rather than the signed-out warning, which said the opposite of the
+truth. Local edits ride the normal reconcile when `available` flips back, which
+an `online` listener provokes; `planSync` already handled the merge, newer
+`updatedAt` winning with ties keeping local.
+
+**What the remembered session grants: nothing on the server.** It decides
+whether the wizard opens and which local campaigns are visible. Every D1 read
+and write still needs the real cookie, and `campaignStore.js` still takes the
+owner from the session. Forging it would show you campaigns already sitting
+unencrypted in the same browser's localStorage. It is cleared on sign-out and
+on account deletion.
+
+**A latent bug found while writing it:** `signOut` awaited the logout request
+before clearing local state, so signing out with no connection threw and never
+reached `setUser(null)` — the session stayed on screen and, once remembered
+existed, on disk. Sign-out that only works with a signal is not sign-out. The
+local half now always runs.
+
+**A second one, exposed rather than caused:** the masthead's account chrome was
+absolutely positioned, so nothing reserved space for it and a wide title simply
+overlapped it. The offline chip made it visible. It is a three-column grid now,
+and the fix needed a more specific selector than the base rule — the same
+source-order trap that left the wordmark left-aligned for four versions.
+
+**Verified with the server stopped outright**, not simulated: admitted from the
+remembered session, the account's own campaign on the shelf, the offline chip
+in the badge, and the shelf's line saying the work will sync. Restarting the
+server and reloading cleared the remembered session, because the backend
+answered "nobody is signed in" — the authoritative case, working.
+
+187 tests, build clean.

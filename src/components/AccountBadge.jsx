@@ -17,11 +17,17 @@
  * no control.
  */
 export default function AccountBadge({ auth }) {
-  const { user, loading, available, signIn, signOut } = auth
+  const { user, loading, available, offline, signIn, signOut } = auth
 
   // Nothing during the first check either — a control that says "Sign in" and
   // then flips to a name a moment later reads as a glitch.
-  if (loading || !available) return null
+  if (loading) return null
+
+  // No backend and nobody remembered: a sign-in button here could not work,
+  // and a dead control is worse than no control. But a remembered session is
+  // still a session, and hiding whose it is would be worse still — the shelf
+  // beside it is being filtered by exactly that identity.
+  if (!available && !user) return null
 
   if (!user) {
     return (
@@ -36,6 +42,7 @@ export default function AccountBadge({ auth }) {
       {/* Decorative: the name beside it already says who this is. */}
       {user.avatarUrl && <img className="account__avatar" src={user.avatarUrl} alt="" />}
       <span className="account__name">{user.displayName}</span>
+      {offline && <span className="account__offline" title="The sync service is unreachable; changes are kept on this device">offline</span>}
       <button className="account__btn" onClick={signOut}>
         Sign out
       </button>

@@ -4,7 +4,7 @@
 
 ---
 
-## Current Version: 0.14.0
+## Current Version: 0.15.0
 
 ## Last Updated: 2026-08-31
 
@@ -690,7 +690,7 @@ every session. `docs/VERSION_HISTORY.md` holds how it got this way.
 npm install
 cp .env.example .env
 npm run dev      # Vite only — NO Functions, NO database. useAuth degrades to signed out.
-npm run test     # 181 tests; `functions/` is in the run too, for the authz tests
+npm run test     # 187 tests; `functions/` is in the run too, for the authz tests
 npm run build    # production bundle — the dev proxy does NOT exist here
 npm run seed     # optional local register file; ask BiggerHat's maintainer first
 
@@ -798,10 +798,35 @@ Two rules it establishes that are easy to violate:
   the JSON export stays reachable from the gate itself, so existing local work
   can always be rescued; the legal disclaimer renders on the gate screen like
   every other page (§8); and when the backend is unreachable the screen says so
-  plainly instead of offering a button that cannot work. **A backend outage now
-  blocks play entirely** — that is the accepted cost of the decision, and it is
-  why the remote adapter must still degrade rather than hard-fail once a user
-  is admitted.
+  plainly instead of offering a button that cannot work.
+
+  **A backend outage no longer blocks play for a device that has signed in
+  before** — changed in v0.15.0 by owner decision, when the app became
+  installable. "A backend outage blocks play entirely" was the accepted cost of
+  gating, and an app you can put on a home screen and then cannot open without
+  a signal is a worse promise than a bookmark had been.
+
+  So a successful sign-in is remembered on the device (`src/lib/session.js`)
+  and stands in when `/api/auth/me` cannot be reached. The rule it turns on:
+
+  > An answer of "nobody is signed in" is authoritative and clears the
+  > remembered session. **No answer at all** is what the fallback is for.
+
+  `available` stays false throughout, so `useSync` still refuses to push and
+  the shelf still says where the data is — it just says "working offline, this
+  will sync" rather than "not signed in". Local edits are pushed by the normal
+  reconcile when `available` flips back to true, which an `online` listener
+  now provokes.
+
+  The remembered session grants nothing on the server. It decides two things:
+  whether the wizard opens, and which local campaigns are visible. Every D1
+  read and write still needs the real cookie, and `campaignStore.js` still
+  takes the owner from the session rather than the payload. It is cleared on
+  sign-out and on account deletion — so signing out still means the next person
+  sees nothing.
+
+  The gate still stands, unchanged, for a browser that has never seen anyone
+  sign in.
 
   Local development uses `VITE_ALLOW_UNAUTHENTICATED=true` in `.env`, which
   opens the wizard **only** when the backend is genuinely absent. It cannot

@@ -4,14 +4,31 @@ import { getArchetype } from '../data/archetypes.js'
 import { myArsenal, currentWeek, totalFor, liveModels } from '../lib/campaignShape.js'
 import { importJSON, exportJSON } from '../lib/storage.js'
 import { deleteAccount } from '../lib/remote.js'
+import { forgetUser } from '../lib/session.js'
 import { Button, Label } from './ui.jsx'
 import HankSays from '../components/HankSays.jsx'
 import { CREATION } from '../data/hank.js'
 
 /** Where the data actually is — see the note in the shelf below. */
-function SyncLine({ sync, count }) {
+function SyncLine({ sync, count, offlineSession }) {
   if (sync.status === 'syncing') {
     return <p className="note">Checking your account for campaigns…</p>
+  }
+
+  /**
+   * Signed in, but working from a remembered session because the service
+   * cannot be reached. Distinct from being signed out, and it has to say so —
+   * the work is safe and will sync, which is the opposite of the warning
+   * below it.
+   */
+  if (sync.status === 'offline' && offlineSession) {
+    return (
+      <p className="note">
+        Working offline. {count === 1 ? 'This campaign is' : `These ${count} campaigns are`}{' '}
+        saved on this device and will sync to your account when the service is
+        reachable again.
+      </p>
+    )
   }
 
   if (sync.status === 'offline') {
@@ -112,7 +129,7 @@ function LeaderCard({ campaign, onOpen, onExport, onDiscard }) {
  * into an index, so renaming a leader shows here immediately rather than after
  * whatever would have refreshed the copy.
  */
-export default function ArsenalLibrary({ shelf, onOpen, onNew, onImport, onDiscard, sync, signedIn }) {
+export default function ArsenalLibrary({ shelf, onOpen, onNew, onImport, onDiscard, sync, signedIn, offlineSession }) {
   const [error, setError] = useState(null)
   const [pendingDiscard, setPendingDiscard] = useState(null)
   const [erasing, setErasing] = useState(false)
@@ -128,6 +145,9 @@ export default function ArsenalLibrary({ shelf, onOpen, onNew, onImport, onDisca
       for (const key of Object.keys(localStorage)) {
         if (key.startsWith('hodgepodge:campaign')) localStorage.removeItem(key)
       }
+      // Including the remembered session, or the next load would let the
+      // deleted account back in offline.
+      forgetUser()
       window.location.href = '/'
     } catch (err) {
       setErasing(false)
@@ -167,7 +187,7 @@ export default function ArsenalLibrary({ shelf, onOpen, onNew, onImport, onDisca
           campaign was "filed against an account" while it sat only in this
           browser; the cure for that is not quieter wording, it is telling the
           truth on the screen where the campaigns are. */}
-      {sync && <SyncLine sync={sync} count={shelf.length} />}
+      {sync && <SyncLine sync={sync} count={shelf.length} offlineSession={offlineSession} />}
 
       {shelf.length === 0 && (
         <div className="empty" style={{ marginBottom: 18 }}>

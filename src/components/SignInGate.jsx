@@ -38,8 +38,7 @@ export default function SignInGate({ auth }) {
 
   const rescue = count > 0 && (
     <p className="gate__rescue">
-      This browser holds {count === 1 ? 'a campaign' : `${count} campaigns`} that
-      {count === 1 ? ' is' : ' are'} not on an account yet.{' '}
+      This browser holds {count === 1 ? 'a campaign' : `${count} campaigns`}.{' '}
       <button
         className="gate__link"
         onClick={() => exportJSON(payload, 'hodgepodge-campaigns.json')}
