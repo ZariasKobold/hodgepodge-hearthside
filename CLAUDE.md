@@ -4,7 +4,7 @@
 
 ---
 
-## Current Version: 0.11.0
+## Current Version: 0.11.1
 
 ## Last Updated: 2026-08-31
 
@@ -72,12 +72,11 @@ a crash because nobody notices it.
 Feature sessions ship features and miss cross-file drift. Audit whenever any
 of these fire:
 
-- Every 10 sessions, counted from the numbered entries in `docs/VERSION_HISTORY.md`.
-  **The Session 20 audit was missed** — every session since has shipped
-  features without one, and v0.7.0's `arsenal_models` hole is the kind of thing
-  that catches. Treat it as **overdue: run it before any further feature
-  work**, rather than pinning it to a session number that keeps slipping. Sessions are
-  counted rather than version
+- Every 10 sessions, counted from the numbered entries in `docs/VERSION_HISTORY.md`
+  (next scheduled: **Session 39**). The Session 20 audit was missed and finally
+  ran at Session 29; four of that audit's findings were introduced during the
+  nine sessions it was late, which is the argument for treating "audit due" as
+  blocking rather than as a queue item. Sessions are counted rather than version
   numbers because a minor bump skips a patch series and makes a version-based
   target unreachable — which is exactly what happened to the old v0.3.10 target.
 - Before any milestone that widens blast radius: first D1 write, first
@@ -114,14 +113,23 @@ Shipped and live:
 | **The look** | v0.11.0. A camp at dusk. Owner-drawn hero across the masthead, pinned and shrinking on scroll; a 1024px reading column; a bottom navbar on phones. One firelight source, Rye on the wordmark, Alegreya everywhere else. The page behind the column is deliberately plain — a background of props was built and removed by owner decision. |
 | **Hank has a face** | v0.9.1. Owner-drawn 16-bit medallion, served as a 33 KB WebP beside every line he speaks. See `docs/ART_BRIEF.md`. |
 
-134 tests. The audit's high and all mediums are closed.
+158 tests.
 
-### Audit v0.5.2 — high and all mediums fixed in v0.6.0
+### Audits
 
-`docs/audits/audit-v0.5.2.md` holds the catalogue and now carries a status
-block. **H1, M1, M2, M3, M4, M5, M7 and L8 are done.** M6 was **retracted** —
-it was a measurement error, not drift; `hank.js` and `hank-dialogue.md` agree
-exactly at 241 lines. The ten lows are still open.
+`docs/audits/audit-v0.11.0.md` is the current one (Session 29). **Three highs,
+five mediums, fourteen lows, none fixed yet** — §5 requires the catalogue
+before the fix code, and the fixes are the next piece of work. The three highs:
+signing out leaves the previous account's campaigns on the shelf and breaks the
+next account's sync; two of the three *Export JSON* buttons produce files the
+importer rejects; and the sign-in gate's rescue export cannot see any campaign
+created since v0.6.0.
+
+`docs/audits/audit-v0.5.2.md` is the first one. **H1, M1, M2, M3, M4, M5, M7
+and L8 are done.** M6 was **retracted** — a measurement error, not drift.
+**M8 is still open**, and this file claimed for eight versions that it was not:
+totems are named in the legality message and not excluded by the check. The
+ten lows are all still open too.
 
 Two things from that work worth keeping:
 
@@ -659,7 +667,7 @@ every session. `docs/VERSION_HISTORY.md` holds how it got this way.
 npm install
 cp .env.example .env
 npm run dev      # Vite only — NO Functions, NO database. useAuth degrades to signed out.
-npm run test     # 134 tests; `functions/` is in the run too, for the authz tests
+npm run test     # 158 tests; `functions/` is in the run too, for the authz tests
 npm run build    # production bundle — the dev proxy does NOT exist here
 npm run seed     # optional local register file; ask BiggerHat's maintainer first
 

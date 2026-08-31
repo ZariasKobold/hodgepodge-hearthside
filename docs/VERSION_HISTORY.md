@@ -1750,3 +1750,57 @@ source.
 midpoint; footer 984px against a 984px inner column; shelf now shrinks at its
 109px maximum scroll; phone header 71px with a 48px bottom bar carrying all
 five labels untruncated. 158 tests, build clean.
+
+---
+
+### Session 30 — v0.11.1
+Date: 2026-08-31
+
+**audit: the overdue §5 pass, nine sessions late**
+
+`docs/audits/audit-v0.11.0.md`. Three highs, five mediums, fourteen lows.
+**No fix code** — §5 requires the catalogue first, and this session produced
+only the catalogue and the corrections to this file's own claims.
+
+The three highs, all about data crossing a boundary it should not:
+
+- **Signing out clears nothing locally.** The next account to sign in on that
+  browser sees the previous one's campaigns on a shelf labelled "your leaders",
+  can open and export them — and its own campaigns then stop syncing, because
+  `planSync` tries to push the stale ones, `putCampaign` correctly refuses, the
+  endpoint renders that as 404, and `reconcile`'s push loop `break`s on it
+  every time. The D1 ownership gate held perfectly; this is entirely a
+  client-side lifecycle problem.
+- **Two of three *Export JSON* buttons emit files `adopt()` rejects.** The
+  shelf exports a campaign; the Arsenal view exports an arsenal; creation's
+  Record step exports the flat wizard adapter. §8 calls portability a
+  requirement, and the previous audit's H1 was this same promise broken in the
+  other direction.
+- **The gate's rescue export reads only pre-v0.6.0 keys.** It offers nothing
+  to any browser whose campaigns live on the shelf — which is all of them —
+  and it renders exactly when the backend is down, which is the scenario §12b
+  wrote the obligation for.
+
+**Two corrections to this file, both of which it had been asserting for
+versions.** It claimed the v0.5.2 audit's "high and all mediums are closed";
+M8 is a medium and is untouched, so a real finding had been recorded as fixed
+since v0.6.0. And the test count still read 134 against an actual 158.
+
+**The dialogue check passed, and the way it passed is worth keeping.**
+`hank.js` and `hank-dialogue.md` agree at 241 lines. The code side was counted
+by importing the module and walking every exported value — no regex — because
+a fresh scan of the *doc* returned 235 and would have reported drift for the
+second audit running. The six missing entries are `H1-01`…`H1-06`: a prefix
+containing a digit, which M6's three-format table does not cover. There are
+four formats. Counting the doc by pattern has now produced a wrong answer
+twice; the durable fix is still to generate the doc from the code.
+
+**Named as uncheckable:** the print output. Three of the last audit's findings
+came from reading an exported PDF, and the print path has since been through a
+full redesign — new palette, a fixed masthead, a full-viewport firelight
+pseudo-element, and two print-only rules written to suppress it, none rendered
+to paper. Every print assertion in this audit is source-reading only, and one
+real export would be worth more than another pass over the CSS.
+
+Of the eight findings that are not carried over from v0.5.2, **four were
+introduced during the nine sessions the audit was late.**
