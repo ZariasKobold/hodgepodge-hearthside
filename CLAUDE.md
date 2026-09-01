@@ -4,7 +4,7 @@
 
 ---
 
-## Current Version: 0.18.2
+## Current Version: 0.18.3
 
 ## Last Updated: 2026-08-31
 
@@ -464,6 +464,11 @@ with a real "you paid nothing" moment could use it.
   answer is, and where `isVersatile` and `isTotem` already read from. Reading it
   at hire time is a small change and would close this. Until then a peon can be
   ticked as killed on the game log and asked to flip, which the book forbids.
+- **The totem gets no characteristics.** The book grants a totem "up to two
+  characteristics... in the same manner as for your leader" (p.32). `createTotem`
+  carries the field and `ArsenalSheet` prints it; nothing sets it. The leader's
+  picker became `characteristicOptions` in v0.18.3 and is a component away from
+  being reusable there.
 - `hank.js` and `hank-dialogue.md` are kept in sync by hand. A generator script
   in `scripts/` would make the code the single source. Not written.
 - `useCampaign` exposes a flat `leader` adapter so the four wizard steps didn't

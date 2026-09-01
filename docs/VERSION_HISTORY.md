@@ -2735,3 +2735,108 @@ open campaign with another present moves the active id from the discarded one to
 the survivor with the navigation intact.
 
 331 tests, build clean.
+
+---
+
+### Session 39d — v0.18.3
+Date: 2026-08-31
+
+**fix: the leader's characteristics were eight, three of which do not exist**
+
+The owner found a complete list of the game's characteristics and asked for it
+on the leader creation screen. What was there was eight hard-coded chips —
+Living, Undead, Construct, Nightmare, Beast, Spirit, Puppet, Mimic — carrying
+the comment "Common characteristics a player might give a leader. Free text is
+also allowed." Both halves of that comment were wrong: there is no free-text
+field, and three of the eight are not characteristics.
+
+#### Go and look
+
+CLAUDE.md §6's rule — *if you find yourself reasoning about what the register
+returns, fetch it instead* — is what settled this, and it is the third time now
+that one API call has retired an argument.
+
+Every character in all eight factions was fetched and its `characteristics`
+tallied: **798 characters, 23 distinct values.** Exactly the 23 in the owner's
+screenshots, which also proves nothing was hidden behind the scrollbar in them.
+The counts are recorded in `src/data/characteristics.js` so a future reader can
+tell an odd entry from a typo — `plant` really does appear once.
+
+The same pass condemned three of the eight:
+
+- **Nightmare** is a *keyword*, not a characteristic — `/keywords?search=`
+  returns it.
+- **Spirit** and **Mimic** are neither, in Fourth Edition. They are Second and
+  Third Edition vocabulary that survived in this file by memory.
+
+#### The book does not restrict the list, so neither does this
+
+p.17: "Your leader automatically gains the master characteristic. In addition,
+you may choose up to two characteristics (such as living or construct)." It
+names no list, gives two examples, and forbids nothing — the mode
+"unapologetically leaned into creativity and freedom" by its own introduction.
+The existing label, *up to two, master is automatic*, was checked against that
+sentence and is right.
+
+Four of the 23 nonetheless sit oddly on a leader, and narrowing the game's own
+list is the owner's call rather than the app's. It was put to them and three
+were cut — **Totem**, **Versatile** and **Henchman**, now `NOT_ON_A_LEADER`.
+Each contradicts a rule this project already holds rather than merely reading
+oddly:
+
+- **Totem** — a totem is a separate model with its own section on the arsenal
+  sheet, reached only through the tier-3 advancement table. Offering it on the
+  leader would say the leader is its own totem.
+- **Versatile** — it means "hirable regardless of keyword", and the leader is
+  never hired: "Players do not spend any soulstones to add their leader into
+  their arsenal."
+- **Henchman** — a station, and the leader's is master, which `ArsenalSheet`
+  appends without asking. Both cannot be true.
+
+**Unique was deliberately kept.** It is true of a leader either way, so spending
+one of the two saying so is a waste rather than a contradiction — and that is
+the player's waste to choose.
+
+The two lists are kept apart in the file on purpose. `CHARACTERISTICS` is a fact
+about Malifaux, verified against the register; `LEADER_CHARACTERISTICS` is a
+house rule derived from it. A later reader has to be able to tell which is
+which, and a test asserts that every excluded name is a real characteristic —
+a typo there would silently exclude nothing.
+
+#### The part that would have bitten
+
+Deleting Nightmare, Spirit and Mimic from the array is not sufficient, and the
+failure is silent. A leader created before this change may **hold** one — and
+the same is true of the three exclusions, which can arrive on an imported JSON,
+a file this app does not get to vet. Drawing only the offered list would leave
+that value on the leader and off the screen: still printed on the record and the
+arsenal sheet, still counting against the limit of two, and with no chip to
+switch it off. A stuck characteristic is worse than a disallowed one.
+
+`characteristicOptions(selected)` is the whole fix — the 20 on offer plus
+anything already selected, sorted. Switch the stranger off and it leaves the
+list, because it is not on offer and there is no route back. A one-way door,
+deliberately. **Nothing rewrites the stored value**; quietly editing somebody's
+leader to tidy a list is not a thing this app does.
+
+Sixteen tests, and they assert the *shape* rather than the contents. A test
+re-listing all 23 names would be transcribed from the same source as the list
+and would agree with it however wrong both were — the trap CLAUDE.md names about
+the book's data files. What is pinned instead is what a hand edit could break:
+the count, the sort order, the absence of duplicates, Title Case, the three
+retired names staying gone, the three excluded ones being real characteristics,
+and the one-way door.
+
+347 tests, build clean. Verified in the browser against a real leader: the chips
+render in two rows at 1200px with no horizontal overflow; picking two disables
+the rest; and with a value injected into storage that the list does not offer,
+it draws in alphabetical position already selected, one click removes it, the
+list returns to its normal length and storage returns to `[]`.
+
+#### Noticed, not built
+
+The book grants the **totem** "up to two characteristics… in the same manner as
+for your leader" (p.32). `createTotem` carries the field, `ArsenalSheet` prints
+it, and nothing anywhere sets it. `characteristicOptions` takes a `base` for
+exactly this — a totem's excluded set is not the leader's, since a totem plainly
+may be a Totem — so what is left is the component.

@@ -1,5 +1,5 @@
 import { ARCHETYPES, SLOTS } from '../../data/archetypes.js'
-import { CHARACTERISTICS } from '../../data/characteristics.js'
+import { characteristicOptions } from '../../data/characteristics.js'
 import { Label, Field, Chip, Select } from '../ui.jsx'
 import HankSays from '../HankSays.jsx'
 import { archetypeGreeting, archetypePathReaction } from '../../data/hank.js'
@@ -15,6 +15,12 @@ export default function Archetype({ leader, set }) {
   }
 
   const pathLine = archetypePathReaction({ path: leader.advancementPath })
+
+  // Built from what the leader already holds, not from the offered list alone.
+  // A leader may carry a characteristic that is no longer on offer — retired
+  // from the game, or excluded from leaders and arrived in an imported JSON —
+  // and it still needs a chip to switch off.
+  const options = characteristicOptions(leader.characteristics)
 
   return (
     <>
@@ -68,7 +74,7 @@ export default function Archetype({ leader, set }) {
       <Field>
         <Label>Characteristics — up to two, master is automatic</Label>
         <div className="chips">
-          {CHARACTERISTICS.map((c) => {
+          {options.map((c) => {
             const on = leader.characteristics.includes(c)
             return (
               <Chip
