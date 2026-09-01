@@ -2690,3 +2690,48 @@ deadlock, because every test started from a device that had just pulled. The
 untested state was the one every real device was actually in: holding work the
 server had not seen. When adding a precondition, the case to test first is the
 population that already exists, not the one the happy path creates.
+
+---
+
+### Session 39c — v0.18.2
+Date: 2026-08-31
+
+**fix: a shelf with campaigns and none open stripped the masthead to Leaders**
+
+The owner reported the navigation reduced to a single "Leaders" tab and asked
+why it kept happening, having seen the same symptom before.
+
+It was **not** the earlier bug returning. v0.15.x fixed `shouldRelease` closing
+an open campaign while auth was still loading, and that fix is intact. This was
+a different, never-fixed gap with the same symptom — worth recording precisely
+because the two look identical from outside.
+
+`inCampaign` is `openId && leader`, and every tab but Leaders is gated on it. So
+the navigation collapses whenever nothing is *open*, which is not the same as
+having nothing. And **no code path ever opened a campaign automatically**:
+`openId` only became non-null by clicking View arsenal, building a leader,
+importing JSON, or reloading with `campaigns:active` already set.
+
+Two ordinary routes therefore left a populated shelf with nothing open:
+
+- a campaign that **arrived by sync** — `refresh` re-reads the shelf and
+  deliberately opens nothing, and never sets `campaigns:active`
+- **discarding the open campaign** while others remained — `discard` nulls
+  `openId` without falling through to what is left
+
+§12b's rule covered only the first half of this: "switching to the shelf must
+not close the open campaign." Nothing said what should happen when none is open,
+and the answer turned out to matter just as much.
+
+`App` now opens the most recently updated campaign when the shelf has settled
+with something on it and nothing open. **It does not navigate** — the view stays
+put, so the change is invisible except that the tabs are there. Picking a
+campaign for somebody is only presumptuous if it also moves them, and opening a
+different leader from the shelf still replaces it, which remains the only close.
+
+Verified against a local D1: a fresh device whose campaigns arrive purely by
+sync lands with all five tabs and the view still on Leaders; and discarding the
+open campaign with another present moves the active id from the discarded one to
+the survivor with the navigation intact.
+
+331 tests, build clean.

@@ -145,6 +145,32 @@ export default function App() {
       startNew()
       setStep(0)
       setView('create')
+      return
+    }
+
+    /**
+     * Something on the shelf, nothing open: open the most recent one.
+     *
+     * Not cosmetic. `inCampaign` gates every tab except Leaders, so with
+     * nothing open the masthead collapses to a single item and the app looks
+     * like it has lost the campaign that is visibly sitting on the screen. That
+     * is the complaint §12b already names — "doing so made the other tabs
+     * vanish, which reads as losing your place" — and the rule written there
+     * only covered *closing* one. Nothing ever opened one.
+     *
+     * Two ordinary routes led here and neither was a mistake: a campaign that
+     * arrived by sync is written to storage by `refresh`, which re-reads the
+     * shelf and deliberately opens nothing; and discarding the open campaign
+     * nulls `openId` without falling through to whatever is left.
+     *
+     * **It does not navigate.** The view stays where it is, so this is
+     * invisible except that the tabs are there — picking a campaign for
+     * somebody is only rude if it also moves them. Opening a different leader
+     * from the shelf still replaces it, which remains the only close.
+     */
+    if (shelf.length > 0) {
+      const mostRecent = [...shelf].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))[0]
+      if (mostRecent) open(mostRecent.id)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [admitted, openId, shelf.length, shelfSettled])

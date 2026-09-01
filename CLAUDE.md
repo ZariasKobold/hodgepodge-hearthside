@@ -1,10 +1,10 @@
 # CLAUDE.md — Hodgepodge Hearthside project context
 
-<!-- HH v0.18.1 | Last updated: 2026-08-31 -->
+<!-- HH v0.18.2 | Last updated: 2026-08-31 -->
 
 ---
 
-## Current Version: 0.18.1
+## Current Version: 0.18.2
 
 ## Last Updated: 2026-08-31
 
@@ -435,6 +435,14 @@ with a real "you paid nothing" moment could use it.
   fixes shipped in v0.9.0 (hiding the firelight pseudo-element, which would
   otherwise wash every printed page) and both are CSS asserted in the source
   rather than observed. Same standing gap as the PDF export.
+- **Nothing may leave the masthead with only Leaders on it.** Every tab but
+  Leaders is gated on `inCampaign`, so a shelf with campaigns and none *open*
+  collapses the navigation and reads as the app having lost them. §12b's rule
+  only ever covered not *closing* a campaign; nothing opened one, so a campaign
+  that arrived by sync, or the campaign left behind after discarding the open
+  one, sat there closed. `App` now opens the most recently updated when nothing
+  is open — **without navigating**, so the tabs appear and the view does not
+  move. Fixed v0.18.2.
 - **Five views now**, and the rule that keeps them coherent: `library` (the
   shelf) → `arsenal` (the standing view of one campaign) → `sheet`, `create`,
   `campaign`. Leaders is a *view*, not an exit — switching to it must never
