@@ -89,13 +89,13 @@ describe('writing someone else’s campaign', () => {
     // Exactly one statement: the ownership check. Nothing was written, and
     // crucially nothing was deleted — this is the regression that mattered.
     expect(db.log).toHaveLength(1)
-    expect(db.log[0].sql).toContain('SELECT owner_user_id, updated_at FROM campaigns')
+    expect(db.log[0].sql).toContain('SELECT owner_user_id, updated_at, version FROM campaigns')
     expect(db.log.some((e) => /DELETE/i.test(e.sql))).toBe(false)
   })
 
   it('allows the owner through when they have seen the current version', async () => {
-    const db = fakeDB({ rows: { first: { owner_user_id: 'usr_owner', updated_at: 500 } } })
-    const result = await putCampaign('usr_owner', CAMPAIGN, db, { baseVersion: 500 })
+    const db = fakeDB({ rows: { first: { owner_user_id: 'usr_owner', updated_at: 500, version: 7 } } })
+    const result = await putCampaign('usr_owner', CAMPAIGN, db, { baseVersion: 7 })
     expect(result.forbidden).toBeUndefined()
     expect(result.stale).toBeUndefined()
     expect(result.id).toBe('cmp_1')
@@ -106,6 +106,9 @@ describe('writing someone else’s campaign', () => {
     const result = await putCampaign('usr_new', CAMPAIGN, db)
     expect(result.forbidden).toBeUndefined()
     expect(result.stale).toBeUndefined()
+    // A brand-new campaign starts at 1, so there is no version a client could
+    // already hold for a row that does not exist yet.
+    expect(result.version).toBe(1)
   })
 })
 
@@ -120,49 +123,87 @@ describe('writing someone else’s campaign', () => {
  *
  * `baseVersion` is the version the **server** last told the client about, never
  * a timestamp the client invented, so none of this depends on a client clock.
+ *
+ * Since migration 0004 it is a server-assigned integer rather than an
+ * `updated_at`, and the comparison is exact equality rather than `>`. The old
+ * form could be satisfied by a client that had merely been *told* a version —
+ * which is exactly what `useSync` did, for every campaign in its listing,
+ * before deciding anything — so the gate passed for documents that had merged
+ * nothing and the loss it was written to prevent happened a second time. There
+ * is now precisely one integer meaning "based on what is stored", and it can
+ * only be learned by being handed it.
  */
 describe('a write from a client that has not seen the current copy', () => {
-  const row = (updated_at) => ({ rows: { first: { owner_user_id: 'usr_owner', updated_at } } })
+  const row = (version, updated_at = 500) => ({
+    rows: { first: { owner_user_id: 'usr_owner', version, updated_at } },
+  })
 
   it('is refused when the row has moved on', async () => {
-    const db = fakeDB(row(900))
-    const result = await putCampaign('usr_owner', CAMPAIGN, db, { baseVersion: 500 })
-    expect(result).toEqual({ stale: true, serverUpdatedAt: 900 })
+    const db = fakeDB(row(9))
+    const result = await putCampaign('usr_owner', CAMPAIGN, db, { baseVersion: 5 })
+    expect(result).toEqual({ stale: true, serverVersion: 9, serverUpdatedAt: 500 })
   })
 
   it('is refused when the client has no base version at all', async () => {
     // It has never seen the server's copy, so it cannot be replacing it
     // knowingly. Every existing install hits this once and then reconciles.
-    const db = fakeDB(row(900))
+    const db = fakeDB(row(9))
     expect((await putCampaign('usr_owner', CAMPAIGN, db)).stale).toBe(true)
     expect((await putCampaign('usr_owner', CAMPAIGN, db, { baseVersion: null })).stale).toBe(true)
   })
 
   it('refuses before writing anything, and before deleting anything', async () => {
-    const db = fakeDB(row(900))
-    await putCampaign('usr_owner', CAMPAIGN, db, { baseVersion: 500 })
+    const db = fakeDB(row(9))
+    await putCampaign('usr_owner', CAMPAIGN, db, { baseVersion: 5 })
     expect(db.log).toHaveLength(1)
     // Anchored: an unanchored /UPDATE/i matches the `updated_at` column in the
     // gate's own SELECT, which made this assertion look like a failure.
     expect(db.log.some((e) => /^\s*(INSERT|DELETE|UPDATE)/i.test(e.sql))).toBe(false)
   })
 
-  it('allows a client that is exactly current, or somehow ahead', async () => {
-    expect((await putCampaign('usr_owner', CAMPAIGN, fakeDB(row(500)), { baseVersion: 500 })).stale).toBeUndefined()
-    expect((await putCampaign('usr_owner', CAMPAIGN, fakeDB(row(400)), { baseVersion: 500 })).stale).toBeUndefined()
+  it('allows exactly the current version, and refuses every other', async () => {
+    const ok = await putCampaign('usr_owner', CAMPAIGN, fakeDB(row(5)), { baseVersion: 5 })
+    expect(ok.stale).toBeUndefined()
+    // Handed back, or the client's very next save names a number that is
+    // already one behind and is refused for it.
+    expect(ok.version).toBe(6)
+
+    // Behind is stale. That is the obvious half.
+    expect((await putCampaign('usr_owner', CAMPAIGN, fakeDB(row(9)), { baseVersion: 5 })).stale).toBe(true)
+
+    // **Ahead is refused too**, which is a deliberate tightening. The old `>`
+    // comparison waved an "ahead" client through as harmlessly current. It is
+    // not harmless: versions are only ever issued by the server, so a client
+    // holding one the server has never issued is confused or lying, and
+    // neither earns the right to overwrite somebody's campaign.
+    expect((await putCampaign('usr_owner', CAMPAIGN, fakeDB(row(4)), { baseVersion: 5 })).stale).toBe(true)
   })
 
-  it('ignores a base version that is not a number', async () => {
-    // A client cannot talk its way past this with a string or an object.
-    for (const bad of ['500', {}, [], true, NaN]) {
-      const db = fakeDB(row(500))
+  it('increments the stored version on every accepted write', async () => {
+    const db = fakeDB(row(41))
+    const result = await putCampaign('usr_owner', CAMPAIGN, db, { baseVersion: 41 })
+    expect(result.version).toBe(42)
+    // Bound into the statement server-side, never taken from the payload, so a
+    // client cannot pin, rewind, or skip it.
+    const write = db.log.find((e) => /^INSERT INTO campaigns/i.test(e.sql))
+    expect(write.binds).toContain(42)
+    expect(write.binds).not.toContain(41)
+  })
+
+  it('ignores a base version that is not an integer', async () => {
+    // A client cannot talk its way past this with a string or an object. NaN is
+    // the one worth keeping in the list: it is a number by `typeof`, and under
+    // the old `>` comparison every comparison against it was false, so it read
+    // as "no conflict" and waved the write through.
+    for (const bad of ['5', {}, [], true, NaN, 5.5, Infinity]) {
+      const db = fakeDB(row(5))
       expect((await putCampaign('usr_owner', CAMPAIGN, db, { baseVersion: bad })).stale).toBe(true)
     }
   })
 
   it('still refuses a stranger first — ownership outranks freshness', async () => {
-    const db = fakeDB({ rows: { first: { owner_user_id: 'usr_owner', updated_at: 500 } } })
-    const result = await putCampaign('usr_intruder', CAMPAIGN, db, { baseVersion: 500 })
+    const db = fakeDB({ rows: { first: { owner_user_id: 'usr_owner', updated_at: 500, version: 5 } } })
+    const result = await putCampaign('usr_intruder', CAMPAIGN, db, { baseVersion: 5 })
     // Not `stale`, which would leak that the row exists and is current.
     expect(result).toEqual({ forbidden: true })
   })

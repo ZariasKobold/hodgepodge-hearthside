@@ -49,7 +49,7 @@ function requireSubject(userId, fn) {
 export async function listCampaigns(userId, env) {
   requireSubject(userId, 'listCampaigns')
   const { results } = await env.DB.prepare(
-    `SELECT id, doc, schema_version, updated_at
+    `SELECT id, doc, schema_version, updated_at, version
        FROM campaigns
       WHERE owner_user_id = ?
       ORDER BY updated_at DESC`
@@ -61,7 +61,7 @@ export async function listCampaigns(userId, env) {
 export async function getCampaign(userId, campaignId, env) {
   requireSubject(userId, 'getCampaign')
   const row = await env.DB.prepare(
-    `SELECT id, doc, schema_version, updated_at
+    `SELECT id, doc, schema_version, updated_at, version
        FROM campaigns
       WHERE id = ? AND owner_user_id = ?`
   ).bind(campaignId, userId).first()
@@ -94,7 +94,7 @@ export async function putCampaign(userId, campaign, env, { baseVersion = null } 
    * different. It costs one query.
    */
   const existing = await env.DB.prepare(
-    'SELECT owner_user_id, updated_at FROM campaigns WHERE id = ?'
+    'SELECT owner_user_id, updated_at, version FROM campaigns WHERE id = ?'
   ).bind(campaign.id).first()
 
   if (existing && existing.owner_user_id !== userId) {
@@ -131,16 +131,40 @@ export async function putCampaign(userId, campaign, env, { baseVersion = null } 
    * A brand-new campaign has no row, so adoption is unaffected.
    */
   if (existing) {
-    // `Number.isFinite`, not `typeof === 'number'`: NaN is a number by typeof,
-    // and `existing.updated_at > NaN` is false — so a NaN would have read as
-    // "no conflict" and waved the write through. Caught by its own test.
-    const seen = Number.isFinite(baseVersion) ? baseVersion : null
-    if (seen === null || existing.updated_at > seen) {
-      return { stale: true, serverUpdatedAt: existing.updated_at }
+    /**
+     * Exact equality against a server-assigned integer, not a comparison of
+     * clocks (0004).
+     *
+     * The previous form asked `existing.updated_at > seen`, where `seen` was
+     * whatever the client last heard. That was satisfiable without the client
+     * ever having merged anything: `useSync` recorded a version for every
+     * campaign straight off the listing, so by the time it pushed it always
+     * held "a version the server told me" and the gate always passed. The
+     * contract — *has this client seen the copy it is replacing?* — was true
+     * of the **device** and false of the **document**, which is the gap a
+     * stale copy walked through twice.
+     *
+     * `!==` closes it. There is exactly one integer that means "based on what
+     * is stored right now", it can only be learned by being handed it, and it
+     * moves on every accepted write. A client that pulled, or that pushed
+     * successfully, knows it; nobody else can guess it.
+     *
+     * `Number.isInteger`, not `isFinite`: a float or a NaN is not a version,
+     * and NaN !== anything is true, so a NaN now refuses rather than — as it
+     * once did under `>` — reading as "no conflict" and waving the write
+     * through.
+     */
+    const stored = Number.isInteger(existing.version) ? existing.version : 0
+    const seen = Number.isInteger(baseVersion) ? baseVersion : null
+    if (seen === null || seen !== stored) {
+      return { stale: true, serverVersion: stored, serverUpdatedAt: existing.updated_at }
     }
   }
 
   const now = Date.now()
+  // The version this write creates. Server-assigned and monotonic: the client
+  // has no say in it, which is the entire point.
+  const nextVersion = (Number.isInteger(existing?.version) ? existing.version : 0) + 1
   const doc = JSON.stringify(campaign)
   const arsenal = campaign.arsenals?.[0] || null
 
@@ -148,8 +172,9 @@ export async function putCampaign(userId, campaign, env, { baseVersion = null } 
     env.DB.prepare(
       `INSERT INTO campaigns
          (id, name, owner_user_id, weeks_total, started_at, week_offset,
-          house_rules, join_code, created_at, doc, schema_version, updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+          house_rules, join_code, created_at, doc, schema_version, updated_at,
+          version)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
        ON CONFLICT(id) DO UPDATE SET
          name           = excluded.name,
          weeks_total    = excluded.weeks_total,
@@ -158,7 +183,8 @@ export async function putCampaign(userId, campaign, env, { baseVersion = null } 
          house_rules    = excluded.house_rules,
          doc            = excluded.doc,
          schema_version = excluded.schema_version,
-         updated_at     = excluded.updated_at
+         updated_at     = excluded.updated_at,
+         version        = excluded.version
        WHERE campaigns.owner_user_id = ?`
     ).bind(
       campaign.id,
@@ -173,6 +199,7 @@ export async function putCampaign(userId, campaign, env, { baseVersion = null } 
       doc,
       campaign.schemaVersion ?? 1,
       now,
+      nextVersion,
       userId
     ),
   ]
@@ -268,7 +295,9 @@ export async function putCampaign(userId, campaign, env, { baseVersion = null } 
   }
 
   await env.DB.batch(statements)
-  return { id: campaign.id, updatedAt: now }
+  // The client must be told the version it just created, or its very next
+  // save names a version that is already one behind and is refused.
+  return { id: campaign.id, updatedAt: now, version: nextVersion }
 }
 
 export async function deleteCampaign(userId, campaignId, env) {
@@ -295,9 +324,16 @@ function fromRow(row) {
   } catch {
     // A row we cannot parse is worse than useless in a merge — report it as
     // empty so the local copy wins rather than silently replacing good data.
-    return { id: row.id, updatedAt: row.updated_at || 0, corrupt: true }
+    return { id: row.id, updatedAt: row.updated_at || 0, version: Number.isInteger(row.version) ? row.version : 0, corrupt: true }
   }
-  return { ...doc, id: row.id, updatedAt: row.updated_at || 0 }
+  return {
+    ...doc,
+    id: row.id,
+    updatedAt: row.updated_at || 0,
+    // The number `planSync` actually decides on. `updatedAt` rides along for
+    // display and ordering only.
+    version: Number.isInteger(row.version) ? row.version : 0,
+  }
 }
 
 /**

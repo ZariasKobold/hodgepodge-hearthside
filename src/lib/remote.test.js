@@ -192,3 +192,113 @@ describe('the listing states a version for everything in it', () => {
     expect(push.map((c) => c.id)).toEqual(['cmp_bad'])
   })
 })
+
+
+/**
+ * The version-aware path, added in v0.18.5 with migration 0004.
+ *
+ * These are the tests that matter most in this file. Every case below was
+ * decided by comparing two client clocks until now, and that comparison lost a
+ * leader portrait twice in production.
+ *
+ * The facts `planSync` is given: `baseOf(id)` — the server-assigned version
+ * this copy descends from — and `isDirty(id)` — whether it has been edited
+ * since. Both must be known, or it falls back to the old comparison rather than
+ * reasoning from half a picture.
+ */
+describe('planSync, deciding on versions rather than clocks', () => {
+  const facts = (base, dirty) => ({ baseOf: () => base, isDirty: () => dirty })
+  const mine = (updatedAt) => campaign('a', updatedAt)
+  const theirs = (version, updatedAt) => campaign('a', updatedAt, { version })
+
+  it('pulls when the server has moved on and nothing local is unsent', () => {
+    const plan = planSync([mine(100)], [theirs(9, 50)], facts(5, false))
+    expect(plan.pull.map((c) => c.id)).toEqual(['a'])
+    expect(plan.push).toHaveLength(0)
+    expect(plan.conflicts).toHaveLength(0)
+  })
+
+  it('pulls even when the local clock claims to be far newer', () => {
+    // The exact shape of the bug. A device that re-stamped a stale copy held
+    // the newest timestamp in existence and the oldest content, and won. Now
+    // the timestamps are not consulted: it is clean and behind, so it pulls.
+    const plan = planSync([mine(9_999_999_999)], [theirs(9, 1)], facts(5, false))
+    expect(plan.pull.map((c) => c.id)).toEqual(['a'])
+    expect(plan.push).toHaveLength(0)
+  })
+
+  it('pushes when this device is the only one that moved', () => {
+    const plan = planSync([mine(100)], [theirs(5, 900)], facts(5, true))
+    expect(plan.push.map((c) => c.id)).toEqual(['a'])
+    expect(plan.pull).toHaveLength(0)
+    expect(plan.conflicts).toHaveLength(0)
+  })
+
+  it('pushes an edit whose clock is behind the server it is based on', () => {
+    // A device with a slow clock still owns its unsent edit. Under the old
+    // comparison this pulled, and the edit was destroyed.
+    const plan = planSync([mine(1)], [theirs(5, 9_999_999_999)], facts(5, true))
+    expect(plan.push.map((c) => c.id)).toEqual(['a'])
+    expect(plan.pull).toHaveLength(0)
+  })
+
+  it('reports a conflict when both moved, and touches neither copy', () => {
+    const plan = planSync([mine(500)], [theirs(9, 400)], facts(5, true))
+    expect(plan.conflicts).toEqual([{ id: 'a', base: 5, serverVersion: 9 }])
+    // The whole point. Nothing is chosen, so nothing is lost.
+    expect(plan.pull).toHaveLength(0)
+    expect(plan.push).toHaveLength(0)
+  })
+
+  it('does nothing when both sides are in step', () => {
+    const plan = planSync([mine(100)], [theirs(5, 200)], facts(5, false))
+    expect(plan.pull).toHaveLength(0)
+    expect(plan.push).toHaveLength(0)
+    expect(plan.conflicts).toHaveLength(0)
+  })
+
+  it('falls back to the clock only when a fact is missing', () => {
+    // Three ways to be half-informed. Each must take the bridge rather than
+    // guess: an unknown dirty flag is not "clean", and a missing version is not
+    // version zero.
+    const noBase = planSync([mine(900)], [theirs(9, 100)], facts(null, false))
+    const noDirty = planSync([mine(900)], [theirs(9, 100)], facts(5, null))
+    const noVersion = planSync([mine(900)], [campaign('a', 100)], facts(5, false))
+
+    for (const plan of [noBase, noDirty, noVersion]) {
+      expect(plan.push.map((c) => c.id)).toEqual(['a'])
+      expect(plan.pull).toHaveLength(0)
+    }
+  })
+
+  it('treats a campaign the account has never seen as adoption, not conflict', () => {
+    const plan = planSync([mine(100)], [], facts(null, true))
+    expect(plan.push.map((c) => c.id)).toEqual(['a'])
+    expect(plan.adopted).toEqual(['a'])
+    expect(plan.conflicts).toHaveLength(0)
+  })
+
+  it('pulls a campaign this device has never held, whatever it is told', () => {
+    const plan = planSync([], [theirs(9, 100)], facts(5, true))
+    expect(plan.pull.map((c) => c.id)).toEqual(['a'])
+    expect(plan.push).toHaveLength(0)
+  })
+
+  it('reads the version and dirtiness per campaign, not once for all of them', () => {
+    const plan = planSync(
+      [campaign('clean', 100), campaign('edited', 100), campaign('clashing', 100)],
+      [
+        campaign('clean', 50, { version: 9 }),
+        campaign('edited', 50, { version: 5 }),
+        campaign('clashing', 50, { version: 9 }),
+      ],
+      {
+        baseOf: () => 5,
+        isDirty: (id) => id !== 'clean',
+      }
+    )
+    expect(plan.pull.map((c) => c.id)).toEqual(['clean'])
+    expect(plan.push.map((c) => c.id)).toEqual(['edited'])
+    expect(plan.conflicts.map((c) => c.id)).toEqual(['clashing'])
+  })
+})

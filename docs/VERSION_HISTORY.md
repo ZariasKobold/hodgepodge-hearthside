@@ -2840,3 +2840,241 @@ for your leader" (p.32). `createTotem` carries the field, `ArsenalSheet` prints
 it, and nothing anywhere sets it. `characteristicOptions` takes a `base` for
 exactly this — a totem's excluded set is not the leader's, since a totem plainly
 may be a Totem — so what is left is the component.
+
+---
+
+### Session 39e — v0.18.4
+Date: 2026-09-01
+
+**fix: opening a campaign counted as editing it, so looking at your data destroyed it**
+
+The owner reported that a leader would not update in Edge — the portrait was
+missing and the week was wrong — while Chrome and their phone both showed it
+correctly. Clearing cache and cookies, then clearing site data and unregistering
+the service worker, changed nothing.
+
+None of the obvious explanations survived contact with the evidence, and the
+sequence of eliminating them is the useful part of this entry.
+
+#### It was not a stale build
+
+The live bundle was fetched and read rather than trusted: `version:"0.18.3",
+commit:"0c49e59"`, matching what had just been pushed. The footer in Edge read
+the same. `BuildStamp` did exactly the job it was added for.
+
+#### It was not Edge showing stale data
+
+The server's copy was 2143 bytes. A portrait is a WebP data URL of ~15 KB, so it
+could not have been in there. The `leader` object had no `portrait` key at all —
+not even the `null` that `createLeader` always emits — and no `weekMode`, so the
+week fell back to calendar and computed 2 instead of the stored manual 1. **Edge
+was rendering the server faithfully. The server was the copy that had lost the
+portrait.**
+
+#### It was not the member who had just joined
+
+A real person had redeemed an invite an hour earlier and was `active` on the
+campaign, which made them the natural suspect. They were innocent, and it is
+worth recording how that was settled rather than argued: every write in
+`membershipStore.js` touches only `campaign_invites`, `campaign_members`, or
+`campaigns.member_of`, and both `member_of` writes are scoped
+`WHERE id = ? AND owner_user_id = ?`. Nothing in the membership API can reach
+the host's `doc` or house rules, and `putCampaign`'s ownership gate returns
+`forbidden` for a cross-account write. The bad copies were all stamped with the
+**owner's** `owner_user_id` — written by their own sessions.
+
+#### What it actually was
+
+`useCampaign`:
+
+```js
+const lastWritten = useRef(null)
+useEffect(() => {
+  if (!campaign) return
+  if (lastWritten.current === campaign) return   // identity
+  lastWritten.current = campaign
+  const stamped = saveCampaign(claimed)          // updatedAt = Date.now()
+  if (stamped) onSaved?.(stamped)                // → mirror → push to D1
+}, [campaign, onSaved])
+```
+
+The comment above it read *"Skip the write on the render that merely opened a
+campaign."* It never did. Every read path — the mount initialiser, `open`, and
+`refresh` after a pull — builds a fresh object via `loadCampaign`, so
+`lastWritten.current === campaign` was false on the first render after every
+single load. The write fired, `saveCampaign` stamped `updatedAt: Date.now()`,
+and `onSaved` mirrored it to the account.
+
+**Loading the page re-stamped the campaign as the newest copy in existence and
+pushed it.** Since v0.18.2 `App` auto-opens the most recently updated campaign,
+so no interaction was needed at all.
+
+`planSync` picks a winner by comparing `updatedAt`. A device sitting on a stale
+copy therefore won every merge, because its timestamp was always *now*. The loop
+this creates is the nastiest part: **reloading the page to check whether your
+data had arrived was the thing that destroyed it.** The server was observed
+being overwritten at 05:35:59, 05:52:24 and 06:00:04 — each one a reload.
+
+#### Why v0.18.0's guard did not stop it
+
+`putCampaign` refuses a write from a client that has not seen the copy it is
+replacing. But `useSync` records the server's version for *every* campaign from
+the listing **before** `planSync` decides, so a client always holds a version
+the server told it, and the gate always passes.
+
+The contract — *"has this client seen the copy it is replacing?"* — became true
+of the **device** while remaining false of the **document**, which had merged
+nothing. **A guard phrased about a client but enforced against a document will
+pass every time.** The version deadlock fix in `2aa6a2a` is what introduced the
+unconditional recording, so the commit that repaired one failure re-opened the
+one beneath it.
+
+#### The fix
+
+`lastWritten` is now seeded at all three read sites — the mount initialiser,
+`open`, and `refresh` — with a comment explaining that identity comparison only
+works if every read path seeds it. Reading is not editing.
+
+This also repairs `planSync` without touching it. The clock comparison was only
+ever dangerous because the timestamps were lying; once a device stops
+manufacturing fresh ones for copies it merely looked at, an older copy stays
+older and correctly loses.
+
+#### Recovery
+
+The owner's data was restored by writing their exported JSON straight into
+`campaigns.doc` with a fresh `updated_at`, scoped by `id` **and**
+`owner_user_id`, after backing the broken row up. The row id was deliberately
+preserved rather than re-importing: import mints a fresh id by design, and both
+`campaign_members` and `campaign_invites` cascade on delete, so discarding and
+re-importing would have silently ejected the member and burned their single-use
+invite. **A recovery that loses somebody else's seat is not a recovery.**
+
+The `arsenals` projection stayed stale through this — it is what the shared page
+reads, and only the app's own save path refreshes it. Restoring `doc` by hand
+fixes the owner's view and leaves the members' view behind until the next real
+edit, which is worth knowing before doing it again.
+
+347 tests, build clean. Verified in the browser against a seeded campaign with a
+known `updatedAt`: page load, a second page load, `open`, and tab navigation all
+leave it untouched; typing in the leader name stamps it to now and preserves the
+portrait.
+
+#### Found on the way past, not fixed
+
+- **There is no error boundary.** A campaign with `crewCard: null` — which an
+  imported JSON can carry, since imports are not vetted — throws in `Arsenal`
+  and blanks the entire app. React said so in the console. One bad field
+  should not cost the whole page.
+- **Migration 0003 was already applied on remote**, and CLAUDE.md had carried it
+  as ⚠ BLOCKING for several versions. Corrected.
+- **The remote database has five users now**, not one. §5's "first non-you user"
+  audit trigger fired without anyone noticing.
+- `member_of` is `null` on the member's campaigns and their `nickname` is empty,
+  so the shared arsenal page has nothing to show them yet.
+
+
+---
+
+### Session 39f — v0.18.5
+Date: 2026-09-01
+
+**feat: the merge stops comparing clocks, and one bad field stops costing the whole page**
+
+Both items the owner asked for after v0.18.4, in the same session, because the
+first one is what makes the app trustworthy and the second is what makes it
+survivable when it is not.
+
+#### Versions, not clocks
+
+Migration `0004_campaign_version.sql` adds `campaigns.version` — a
+server-assigned integer, incremented on every accepted write, that a client can
+only learn by being handed it.
+
+`putCampaign`'s gate is now exact equality rather than `existing.updated_at >
+seen`. The old form looks like a concurrency check and is not one: it could be
+satisfied by a client that had merely been *told* a version, which is exactly
+what `useSync` did — recording one for every campaign in its listing, before
+deciding anything. So the contract *"has this client seen the copy it is
+replacing?"* was true of the **device** and false of the **document**, and every
+push passed. **A guard phrased about a client but enforced against a document
+will pass every time.** That is the whole lesson of v0.18.4 and v0.18.5
+together, and it is why the version had to become a thing the *document*
+descends from.
+
+`useSync` no longer records versions from the listing. A version is recorded
+only where content actually arrives — on a pull, or on a push the server
+accepted. The deadlock that unconditional recording was fixing (`2aa6a2a`) is
+gone by a better route: `planSync` now asks whether a copy is *dirty*, so a
+device that is merely ahead in clock time does not try to push at all.
+
+`planSync` takes `baseOf` and `isDirty` and has four honest outcomes:
+
+| local | server | outcome |
+|---|---|---|
+| clean | ahead of my base | pull |
+| edited | still at my base | push |
+| edited | ahead of my base | **conflict — refuse to pick** |
+| clean | at my base | nothing |
+
+**A conflict is reported and never resolved.** Neither copy is written. This is
+the correction that matters: choosing a winner quietly is how a portrait was
+destroyed twice, and an app that says "these disagree" beats one that guesses
+right most of the time. Resolving needs a person, because only a person knows
+which twelve weeks are the real ones.
+
+A deliberate tightening fell out of it: a client claiming a version *ahead* of
+the server is now refused. Under `>` it was waved through as harmlessly
+current. It is not harmless — versions are only ever issued by the server, so a
+client holding one that was never issued is confused or lying, and neither earns
+the right to overwrite somebody's campaign.
+
+`isDirty` returns `null` for "nobody has ever said", kept distinct from
+`false`. Treating unknown as clean would license a pull over an offline edit
+made before the flag existed. Where any of the three facts is missing,
+`planSync` takes the old clock comparison rather than reasoning from half a
+picture — bounded, because one pull retires the bridge per campaign per device.
+
+The dirty flag lives in `campaign-dirty:<id>`, beside the version and for the
+same reason: a flag on the doc is wiped by the next keystroke, since
+`useCampaign` writes React state to storage and that state has never heard of
+fields the sync layer adds behind it. It is also not campaign data and would be
+meaningless inside an export.
+
+#### An error boundary, with a way out
+
+There was none, and React said so in the console every time. The cost was found
+by accident while testing the above: a campaign carrying `crewCard: null` threw
+inside `Arsenal` and rendered the **entire app blank** — masthead, navigation,
+every other campaign, and the legal disclaimer with them. An imported JSON can
+carry exactly that, and imports are not vetted (§12b).
+
+`ErrorBoundary` wraps the views only, inside `<main>`. The disclaimer and the
+build stamp sit outside it on purpose: §8 requires the disclaimer on every page
+and a crash is not an exemption, and the first useful question about any crash is
+which build produced it — an answer that should be on the screen the person is
+already looking at.
+
+It also offers to **download every campaign**, read straight out of localStorage
+with no hooks and no React state, so nothing it depends on can be part of what
+just broke. §8 treats portability as a requirement rather than a courtesy, and
+the moment it matters most is the one where the UI is gone. It deliberately does
+not offer to delete anything: a recovery screen should never carry the
+destructive option, however tempting "clear it and start again" looks while
+staring at an error.
+
+#### Verified
+
+358 tests, build clean. Migration 0004 applied to remote before deploying, since
+the new reads select a column that would otherwise not exist.
+
+In the browser: seeding a campaign with `crewCard: null` and opening the
+arsenal now shows the boundary with the real error text, while the masthead, the
+disclaimer and the build stamp all keep rendering, and the rescue button offers
+the campaign.
+
+The two tests worth reading are the ones that encode the bug rather than the
+fix: `pulls even when the local clock claims to be far newer` (a device with
+`updatedAt: 9999999999` and a stale version still pulls) and `pushes an edit
+whose clock is behind the server it is based on` (a slow clock no longer costs
+you your unsent work). Both were wrong before this session.

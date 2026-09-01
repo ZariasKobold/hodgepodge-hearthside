@@ -53,9 +53,31 @@ export function useCampaign({ userId = null, userReady = true, onSaved, onRemove
     return active && campaignIds().includes(active) ? active : null
   })
 
+  /**
+   * The exact object the save effect below has already persisted.
+   *
+   * Seeded at every point a campaign is *read* from storage — on mount, on
+   * `open`, and after a sync pulls — because reading a campaign is not editing
+   * it. The comparison is by identity, which only works if every read path
+   * seeds this: `loadCampaign` builds a new object on each call, so an unseeded
+   * read is indistinguishable from an edit.
+   *
+   * This was the bug that repeatedly destroyed a leader portrait. None of the
+   * read paths seeded it, so the first render after a load wrote the campaign
+   * back with a fresh `updatedAt` and mirrored it to the account. Merely
+   * opening the app therefore made this device's copy the newest one in
+   * existence, and `planSync` — which picks a winner by comparing
+   * `updatedAt` — handed it every merge, including against copies that were
+   * genuinely newer. A device left on a stale copy overwrote good work every
+   * time its owner reloaded the page to see whether the good work had arrived.
+   */
+  const lastWritten = useRef(null)
+
   const [campaign, setCampaign] = useState(() => {
     const active = activeCampaignId()
-    return active ? migrate(loadCampaign(active)) : null
+    const loaded = active ? migrate(loadCampaign(active)) : null
+    lastWritten.current = loaded
+    return loaded
   })
 
   // Every campaign on the shelf, for rendering it. Re-read whenever the shelf
@@ -96,9 +118,8 @@ export function useCampaign({ userId = null, userReady = true, onSaved, onRemove
     setActiveCampaignId(null)
   }, [campaign, userId, userReady])
 
-  // Skip the write on the render that merely opened a campaign — it would be
-  // writing back exactly what it just read.
-  const lastWritten = useRef(null)
+  // Writes the open campaign, but never one that was only just read — see
+  // `lastWritten` above for why that distinction is load-bearing.
   useEffect(() => {
     if (!campaign) return
     if (lastWritten.current === campaign) return
@@ -117,7 +138,16 @@ export function useCampaign({ userId = null, userReady = true, onSaved, onRemove
   /** Re-reads the shelf from storage, after a sync pulled rows down. */
   const refresh = useCallback(() => {
     setIds(campaignIds())
-    setCampaign((prev) => (prev ? migrate(loadCampaign(prev.id)) || prev : prev))
+    setCampaign((prev) => {
+      if (!prev) return prev
+      const fresh = migrate(loadCampaign(prev.id))
+      if (!fresh) return prev
+      // Straight from storage, so it must not be written back. This runs
+      // immediately after a pull, and re-stamping here would push the copy we
+      // were just handed back up as though this device had authored it.
+      lastWritten.current = fresh
+      return fresh
+    })
   }, [])
 
   /* ── the shelf ────────────────────────────────────────────────── */
@@ -126,6 +156,8 @@ export function useCampaign({ userId = null, userReady = true, onSaved, onRemove
     const found = migrate(loadCampaign(id))
     if (!found) return
     if (!belongsTo(found, userId)) return
+    // Read, not edited.
+    lastWritten.current = found
     setCampaign(found)
     setOpenId(id)
     setActiveCampaignId(id)

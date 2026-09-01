@@ -17,6 +17,7 @@ import Loadout from './components/steps/Loadout.jsx'
 import Record from './components/steps/Record.jsx'
 import SignInGate from './components/SignInGate.jsx'
 import BuildStamp from './components/BuildStamp.jsx'
+import ErrorBoundary from './components/ErrorBoundary.jsx'
 import ArsenalLibrary from './components/ArsenalLibrary.jsx'
 import Campaign from './components/steps/Campaign.jsx'
 import Arsenal from './components/steps/Arsenal.jsx'
@@ -252,6 +253,10 @@ export default function App() {
       />
 
       <main className="wrap">
+        {/* Views only. The disclaimer and the build stamp sit outside, so a
+            crash cannot take the legal notice off the page (§8) or hide the
+            commit somebody is about to read out to you. */}
+        <ErrorBoundary>
         {invite.status !== 'none' && <InviteBanner invite={invite} auth={auth} />}
 
         {!admitted && <SignInGate auth={auth} />}
@@ -356,6 +361,8 @@ export default function App() {
           )}
         </div>
         )}
+
+        </ErrorBoundary>
 
         <p className="colophon">{LEGAL}</p>
         <BuildStamp />

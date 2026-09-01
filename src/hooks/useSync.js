@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { remote, planSync, stampOwner, SyncError } from '../lib/remote.js'
 import {
   saveCampaign, loadCampaign, campaignIds, knownVersion, rememberVersion,
+  isDirty, markDirty,
 } from '../lib/storage.js'
 import { belongsTo } from '../lib/campaignShape.js'
 
@@ -117,11 +118,29 @@ export function useSync({ user, available, onChanged }) {
      * between this list and our PUT, the stored `updated_at` moves past what we
      * recorded and we are refused — which is the check working, not failing.
      */
-    for (const c of theirs) {
-      if (c && c.id && !c.corrupt) rememberVersion(c.id, c.updatedAt)
-    }
-
-    const { pull, push, adopted } = planSync(mine, theirs)
+    /**
+     * The listing no longer records anything, and that is a correction rather
+     * than a revert.
+     *
+     * It used to stamp a version for every campaign here, before deciding
+     * anything, to break a deadlock where a device ahead of the server could
+     * obtain a version by neither route. But recording a version you were
+     * *told* is not the same as holding a copy that *incorporates* it, and
+     * the gate in `putCampaign` could not tell the difference — so every
+     * push passed, including from devices whose document had merged nothing.
+     * That is how a portrait was destroyed after the guard meant to protect
+     * it shipped.
+     *
+     * A version is now recorded only where the content actually arrives: on a
+     * pull, or on a push the server accepted. The deadlock it was fixing is
+     * gone by a different route — `planSync` asks whether this copy is dirty,
+     * so a device that is merely *ahead in clock time* no longer tries to
+     * push at all.
+     */
+    const { pull, push, adopted, conflicts } = planSync(mine, theirs, {
+      baseOf: knownVersion,
+      isDirty,
+    })
 
     /**
      * Pull first. If the push half fails, the browser has still gained whatever
@@ -143,8 +162,10 @@ export function useSync({ user, available, onChanged }) {
       try {
         saveCampaign(stampOwner(campaign, user.id), { keepTimestamp: true })
         // The version we were just handed is, by definition, the version this
-        // copy is now based on.
-        rememberVersion(campaign.id, campaign.updatedAt)
+        // copy is now based on — and this copy is the account's own, so it
+        // owes the account nothing.
+        rememberVersion(campaign.id, campaign.version)
+        markDirty(campaign.id, false)
         pulled += 1
       } catch (err) {
         pullFailure = pullFailure || err.message
@@ -160,7 +181,9 @@ export function useSync({ user, available, onChanged }) {
         // at the version it assigned — without which the very next mirror
         // would be refused as stale.
         saveCampaign(stampOwner(campaign, user.id), { keepTimestamp: true })
-        rememberVersion(campaign.id, saved?.updatedAt)
+        rememberVersion(campaign.id, saved?.version)
+        // The account has it now. Anything typed after this marks it again.
+        markDirty(campaign.id, false)
         pushed += 1
       } catch (err) {
         // Carry on rather than stop. An earlier version broke out of this loop
@@ -178,7 +201,17 @@ export function useSync({ user, available, onChanged }) {
     }
 
     if (!alive.current) return
-    const trouble = pullFailure || failure
+    /**
+     * A conflict is not an error, and it is not a success either.
+     *
+     * Both copies moved, so nothing was written in either direction and
+     * nothing was lost. It is reported because the alternative — picking a
+     * winner quietly — is the behaviour this whole module exists to stop.
+     */
+    const clash = conflicts.length > 0
+      ? `${conflicts.length === 1 ? 'A campaign has' : `${conflicts.length} campaigns have`} been edited both here and on another device. Nothing was overwritten; open it on one device and save to settle it.`
+      : null
+    const trouble = pullFailure || failure || clash
     setState({
       status: trouble ? 'failed' : 'synced',
       pushed,
@@ -219,7 +252,8 @@ export function useSync({ user, available, onChanged }) {
         if (!alive.current) return
         // Move the base version forward, or the next save conflicts with the
         // copy this very request just created.
-        rememberVersion(campaign.id, saved?.updatedAt)
+        rememberVersion(campaign.id, saved?.version)
+        markDirty(campaign.id, false)
         setState((s) => ({ ...s, status: 'synced', error: null, at: Date.now() }))
       })
       .catch((err) => {

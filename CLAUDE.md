@@ -4,9 +4,9 @@
 
 ---
 
-## Current Version: 0.18.3
+## Current Version: 0.18.5
 
-## Last Updated: 2026-08-31
+## Last Updated: 2026-09-01
 
 **Live at hodgepodgehearthside.com** (Cloudflare Pages, auto-deploys on push to
 `main`). Repo: `ZariasKobold/hodgepodge-hearthside`.
@@ -208,17 +208,25 @@ Two things from that work worth keeping:
   a field overwrites the value it just generated, and `saveCampaign` then
   no-ops on the missing id. Strip keys, do not blank them.
 
-### ⚠ BLOCKING — migration 0003 is not on the remote database
+### Migration 0003 is applied on remote — verified 2026-09-01
 
-```bash
-npx wrangler d1 execute hodgepodge-hearthside --remote --file=./migrations/0003_membership.sql
-```
+This section stood as ⚠ BLOCKING for several versions and was already false.
+Checked directly rather than believed: `campaign_invites` exists, and so do
+`campaigns.member_of` and `campaign_members.status / nickname /
+share_identity`. The membership endpoints are not 500ing in production.
 
-Until this runs, the membership endpoints 500 in production. Everything else
-carries on — the Players tab is the only thing that touches them, and it
-degrades to its offline message. Applied and verified against a **local** D1;
-deliberately not run against remote, which still holds only the owner's real
-account.
+**The remote database is no longer just yours.** Five users, six campaigns,
+five distinct owners. Someone redeemed an invite and is an `active` member of
+the owner's own campaign. That means §5's "first non-you user" audit trigger —
+listed there as a thing to do *before* the milestone — has already fired,
+unnoticed, and the Session 39 audit inherits it.
+
+Two consequences worth holding on to:
+
+- Every mistake now costs somebody else's evening as well as your own.
+- `DELETE /api/account` and any hand-run SQL against remote are no longer
+  operating on a database where the only victim is you. Scope every statement
+  by `owner_user_id`, not just by `id`.
 
 ### Setup is otherwise complete as of 2026-08-18.
 
@@ -421,6 +429,13 @@ with a real "you paid nothing" moment could use it.
 
 **High:** none currently.
 
+**Unresolved by design — conflicts need a person.** `planSync` now reports a
+conflict instead of guessing, and `useSync` surfaces it on the shelf, but
+there is no UI to *settle* one: the local edit stays local and the account keeps
+its copy until someone saves on one device. That is the safe failure and it is
+deliberate, but a "keep mine / take theirs" screen is the honest finish. Until
+it exists, the escape hatch is the JSON export, which is always reachable.
+
 **Medium:**
 - **`road-horizon.svg` is still placeholder art**, drawn in code as a
   silhouette so it reads as deliberate rather than broken. Hank's portrait is
@@ -480,13 +495,39 @@ with a real "you paid nothing" moment could use it.
   after the player has already described the game. A §2 violation sitting in the
   data rather than in the code. Left alone this session because it is the
   owner's voice to rewrite, and any change to it is a dual-file change (§1).
-- **`updatedAt` is still a client clock** where `planSync` uses it to choose a
-  winner between two copies. v0.18.0 stopped the *blind* overwrite — the server
-  now refuses a write from a client that has not seen the copy it is replacing
-  (`baseVersion`, see `putCampaign`) — and that was the mechanism that destroyed
-  a leader portrait. But two devices editing the same campaign at once still
-  resolve by comparing clocks. A monotonic server-assigned version per campaign
-  would retire it; the pieces are in place.
+- ~~**`updatedAt` is still a client clock**~~ — **retired in v0.18.5.**
+  Migration 0004 adds a server-assigned `campaigns.version`, incremented on
+  every accepted write. `planSync` now decides from two facts it was *told*
+  rather than two clocks it compared: the version this copy descends from
+  (`knownVersion`) and whether it has unsent edits (`isDirty`). Clean and
+  behind pulls; edited and current pushes; **edited and behind is a conflict,
+  reported and left alone** — neither copy is touched, because silently picking
+  a winner is precisely how the data was lost. `updatedAt` survives for sorting
+  and for humans, and decides nothing.
+
+  A bridge remains: where the version facts are missing — a row from before 0004,
+  or a device that has not pulled since — it falls back to the clock comparison.
+  That path is bounded, since one pull retires it per campaign per device, and
+  deleting it outright would strand every copy already on a disk.
+
+  **What made this catastrophic rather than merely imperfect was fixed in
+  v0.18.4, and the lesson is worth more than the fix.** `useCampaign` stamped a
+  fresh `updatedAt` on every *read* — the guard meant to prevent that compared
+  object identity against an object `loadCampaign` had just built, so it never
+  once fired. Merely loading the page made this device's copy the newest in
+  existence and it won every merge. A stale device overwrote good work every
+  time its owner reloaded to check whether the good work had arrived, which is
+  a loop that hides its own cause: **the act of looking was the act of
+  destroying.**
+
+  v0.18.0's `baseVersion` gate did not catch it, and the reason is subtle
+  enough to write down. `useSync` records the server's version for every
+  campaign in the listing *before* `planSync` decides anything, so by the time
+  a push happens the client always holds a "version it was told". The gate then
+  reads as satisfied. Its contract — *"has this client seen the copy it is
+  replacing?"* — became true of the **device** while staying false of the
+  **document**, which never merged anything. A guard phrased about a client but
+  enforced against a document will pass every time.
 - **The version a device last saw lives in `campaign-version:<id>`, never on the
   campaign.** It was on the doc for about ten minutes and the next keystroke
   wiped it: `useCampaign` writes React state to storage on every edit, and that

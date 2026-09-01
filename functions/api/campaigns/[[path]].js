@@ -91,6 +91,10 @@ export async function onRequest(context) {
       if (saved?.stale) {
         return json({
           stale: true,
+          // Both, deliberately: `serverVersion` is what the client needs to
+          // reconcile, `serverUpdatedAt` is what a human needs to understand
+          // what happened and when.
+          serverVersion: saved.serverVersion,
           serverUpdatedAt: saved.serverUpdatedAt,
           message: 'This campaign has changed since you last saw it. Pull before pushing.',
         }, 409)

@@ -96,7 +96,7 @@ export const remote = {
       method: 'PUT',
       body: {
         campaign,
-        baseVersion: Number.isFinite(baseVersion) ? baseVersion : null,
+        baseVersion: Number.isInteger(baseVersion) ? baseVersion : null,
       },
     }),
   remove: (id, opts) => call(`/${encodeURIComponent(id)}`, { ...opts, method: 'DELETE' }),
@@ -146,7 +146,52 @@ export function stampOwner(campaign, userId) {
  * A remote row that failed to parse server-side arrives flagged `corrupt` and
  * is treated as absent, so a damaged row can never overwrite a good local copy.
  */
-export function planSync(localCampaigns, remoteCampaigns) {
+/**
+ * Decides, per campaign, whether to pull, push, or refuse to guess.
+ *
+ * ## Versions, not clocks
+ *
+ * `baseOf(id)` is the server-assigned version this device's copy is based on
+ * — an integer the server handed it on a pull or an accepted push, never
+ * anything the client worked out for itself. `isDirty(id)` says whether that
+ * copy has been edited since.
+ *
+ * Between them they answer the only question that matters, and answer it
+ * factually: *is my copy a descendant of what is stored?* Two clocks could
+ * never answer that. They were asked to for eight versions and got it wrong
+ * in production twice, destroying a leader portrait each time, because a
+ * device that re-stamped a stale copy on every page load (v0.18.4) held the
+ * newest timestamp in existence while holding the oldest content.
+ *
+ * ## The four honest outcomes
+ *
+ * | local | server | outcome |
+ * |---|---|---|
+ * | clean | ahead of my base | **pull** — I have nothing to lose |
+ * | edited | still at my base | **push** — I am the only one who moved |
+ * | edited | ahead of my base | **conflict** — both moved; refuse to pick |
+ * | clean | at my base | nothing |
+ *
+ * A conflict is reported, never resolved. Neither copy is touched and nothing
+ * is pushed: the local edit stays local and the server keeps what it has. That
+ * is deliberate and is the whole lesson of this module — **silently choosing a
+ * winner is how the data was lost**, and an app that says "these disagree"
+ * beats one that quietly picks wrong. Resolving it needs a person, because
+ * only a person knows which twelve weeks are the real ones.
+ *
+ * ## The bridge
+ *
+ * When the version facts are not available — a row written before migration
+ * 0004, or a device that has not pulled since — this falls back to the old
+ * `updatedAt` comparison. That path is no better than it ever was, but it is
+ * no worse either, and it is now bounded: one pull teaches a device its
+ * version and it never comes back here for that campaign. Deleting the
+ * fallback outright would strand every copy already on a disk.
+ */
+export function planSync(localCampaigns, remoteCampaigns, { baseOf, isDirty } = {}) {
+  const base = typeof baseOf === 'function' ? baseOf : () => null
+  const dirty = typeof isDirty === 'function' ? isDirty : () => null
+
   const localById = new Map(localCampaigns.map((c) => [c.id, c]))
   const remoteById = new Map(
     remoteCampaigns.filter((c) => c && c.id && !c.corrupt).map((c) => [c.id, c])
@@ -154,13 +199,34 @@ export function planSync(localCampaigns, remoteCampaigns) {
 
   const pull = []
   const push = []
+  const conflicts = []
 
   for (const [id, mine] of localById) {
     const theirs = remoteById.get(id)
     if (!theirs) {
+      // Never seen by the account: adoption, and there is nothing to conflict
+      // with.
       push.push(mine)
       continue
     }
+
+    const myBase = base(id)
+    const theirVersion = theirs.version
+    const changed = dirty(id)
+
+    // All three facts, or none of them — a half-known state must not be
+    // reasoned about as though it were known.
+    if (Number.isInteger(myBase) && Number.isInteger(theirVersion) && changed !== null) {
+      if (changed) {
+        if (myBase === theirVersion) push.push(mine)
+        else conflicts.push({ id, base: myBase, serverVersion: theirVersion })
+      } else if (theirVersion > myBase) {
+        pull.push(theirs)
+      }
+      continue
+    }
+
+    // Bridge. See the header.
     const mineAt = mine.updatedAt ?? 0
     const theirsAt = theirs.updatedAt ?? 0
     if (theirsAt > mineAt) pull.push(theirs)
@@ -171,5 +237,10 @@ export function planSync(localCampaigns, remoteCampaigns) {
     if (!localById.has(id)) pull.push(theirs)
   }
 
-  return { pull, push, adopted: push.filter((c) => !remoteById.has(c.id)).map((c) => c.id) }
+  return {
+    pull,
+    push,
+    conflicts,
+    adopted: push.filter((c) => !remoteById.has(c.id)).map((c) => c.id),
+  }
 }

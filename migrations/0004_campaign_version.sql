@@ -1,0 +1,31 @@
+-- 0004: a monotonic, server-assigned version per campaign.
+--
+-- Migrations are append-only. This file adds a column and nothing else.
+--
+-- Why this exists
+-- ---------------
+-- Until now `planSync` decided which copy of a campaign survived a
+-- reconciliation by comparing `updatedAt` — a *client* clock. Two devices
+-- comparing their own wristwatches is not a merge strategy, and it failed in
+-- production: a device sitting on a stale copy re-stamped it on every page load
+-- (see v0.18.4) and therefore won every comparison, destroying a leader
+-- portrait more than once.
+--
+-- v0.18.4 stopped the re-stamping, which stopped the bleeding. This column
+-- removes the clock from the decision altogether.
+--
+-- `version` is assigned by the server and increments on every accepted write.
+-- A client may only write if it names the exact version it is replacing, so
+-- "am I based on the current copy?" becomes a fact the client was told rather
+-- than an inference from two unsynchronised clocks. It cannot skew, cannot go
+-- backwards, and cannot be forged by a client posting an optimistic timestamp.
+--
+-- DEFAULT 0 rather than 1 on purpose: every row that predates this migration
+-- reads as version 0, which no client has ever been handed, so the first write
+-- from any existing device is refused until it has pulled once and learned the
+-- real number. That one refusal is the reconciliation whose absence caused the
+-- data loss, and it is cheap — it happens once per device per campaign.
+--
+-- `updated_at` stays exactly as it is. It is still what the shelf sorts by and
+-- what a human reads. It simply no longer decides who wins.
+ALTER TABLE campaigns ADD COLUMN version INTEGER NOT NULL DEFAULT 0;

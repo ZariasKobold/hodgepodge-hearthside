@@ -123,6 +123,15 @@ const LEGACY_SINGLE = 'campaign:current'
  * moment the file was imported somewhere else.
  */
 const VERSION_PREFIX = 'campaign-version:'
+/**
+ * Set when this device edits a campaign, cleared when the account has the
+ * edit. Kept beside the version rather than on the campaign for the reason
+ * the version is: `useCampaign` writes React state to storage on every edit,
+ * and that state has never heard of fields the sync layer adds behind it — a
+ * flag on the doc was wiped by the next keystroke. It is also not campaign
+ * data, and would be meaningless inside a JSON export or an import.
+ */
+const DIRTY_PREFIX = 'campaign-dirty:'
 
 const campaignKey = (id) => `campaign:${id}`
 
@@ -149,6 +158,10 @@ export function saveCampaign(campaign, { keepTimestamp = false } = {}) {
   if (!campaign?.id) return null
   const stamped = keepTimestamp ? campaign : { ...campaign, updatedAt: Date.now() }
   save(campaignKey(stamped.id), stamped)
+  // `keepTimestamp` is how a *pull* writes, and a pull is the account handing
+  // us its own copy — the opposite of an unsent edit. Every other caller is a
+  // local edit and owes the account a push.
+  if (!keepTimestamp) markDirty(stamped.id, true)
   const ids = campaignIds()
   if (!ids.includes(stamped.id)) save(INDEX_KEY, [...ids, stamped.id])
   return stamped
@@ -199,5 +212,26 @@ export function rememberVersion(id, version) {
 
 /** Forgotten with the campaign, so a re-import is not mistaken for a known copy. */
 export function forgetVersion(id) {
-  if (id) remove(VERSION_PREFIX + id)
+  if (!id) return
+  remove(VERSION_PREFIX + id)
+  remove(DIRTY_PREFIX + id)
+}
+
+/**
+ * Has this device edited its copy since the account last saw it?
+ *
+ * `null` means nobody has ever said — a campaign that predates the flag. That
+ * is deliberately distinct from `false`: "not edited" licenses `planSync` to
+ * pull over the local copy, and guessing that about a campaign we know nothing
+ * about would throw away an offline edit made before this shipped.
+ */
+export function isDirty(id) {
+  const v = load(DIRTY_PREFIX + id, null)
+  return typeof v === 'boolean' ? v : null
+}
+
+/** Marked on every local edit, cleared once the account has it. */
+export function markDirty(id, dirty = true) {
+  if (!id) return
+  save(DIRTY_PREFIX + id, !!dirty)
 }
