@@ -249,6 +249,34 @@ Two facts from that setup worth keeping, because both cost time to learn:
 
 ### Next feature work, in order
 
+#### 0. Split arsenals from campaigns — `docs/data-model-v3.md`
+
+**Designed, not started.** Owner's proposal and it is the right one: an arsenal
+becomes a durable personal object that exists before any campaign, and a campaign
+becomes the table — who is playing, which arsenal each of them brought, and
+aftermath writing back into those arsenals.
+
+It is not a matter of taste. One campaign per leader is why there are six
+campaign rows for five users, why `campaigns.member_of` is a campaign row
+pointing at another campaign row, and why `CLAUDE.md` has to warn you not to put
+your own second leader in `campaign.arsenals[]`. **D1 already models it
+correctly** — `arsenals` has had its own table with `campaign_id` and
+`user_id` since 0001 — so this is moving the client document toward the schema
+already beneath it.
+
+Two things from the plan that are easy to get wrong and expensive to undo:
+
+- **Do not copy the sync machinery for a second object type.** Generalise
+  `knownVersion`/`markDirty`/`planSync` over a `kind` once. Two divergent
+  copies of the code that can lose twelve weeks is the worst possible outcome
+  of this change.
+- **Build the shape, migrate locally, and play a real week before touching
+  D1.** §12b already says schema built on guesses is expensive once anyone has
+  saved data — and now other people have.
+
+The conflict-resolution screen listed under Known issues should probably ship
+**first**: an arsenal changes every week, so conflicts get more likely, not less.
+
 #### 1. ~~Campaign membership~~ — shipped v0.17.0
 
 Owner-issued invites and the shared arsenal page, in
@@ -600,6 +628,7 @@ hodgepodge-hearthside/
 ├── docs/
 │   ├── VERSION_HISTORY.md  why things were done this way
 │   ├── data-model.md       campaign shape + D1 schema design
+│   ├── data-model-v3.md    THE PLAN: split arsenals from campaigns — read first
 │   ├── hank-dialogue.md    numbered reading copy of the narration
 │   └── SETUP_D1_AUTH.md    one-time dashboard setup
 └── scripts/seed.mjs        optional bulk register pull
