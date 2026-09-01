@@ -2643,3 +2643,50 @@ consecutive saves push cleanly where the first attempt produced two 409s.
 - **The lost portrait is not recoverable from the server.** The owner was told
   to export the JSON from whichever device still holds it before letting it
   sync, since a pull would otherwise overwrite the last copy.
+
+---
+
+### Session 39b — v0.18.1
+Date: 2026-08-31
+
+**fix: the version check deadlocked every device that already held work**
+
+Shipped v0.18.0, and the owner immediately hit the failure it introduced: the
+leader appeared, and the shelf then said "Saved here, but not to your account —
+This campaign has changed since you last saw it" permanently, with no way out.
+
+The version check requires `baseVersion` to be a version the **server** stated,
+which is right. But v0.18.0 learned one from exactly two events — a pull, or an
+accepted push — and that is a trap. A device whose local copy is *newer* than
+the server's reaches neither: it never pulls, because it is ahead, and its push
+is refused, because it has no base version. Permanent stalemate.
+
+The session note claiming "every existing install hits this once, pulls, and
+carries on" was wrong, and wrong in a way worth naming: it only pulls if the
+*remote* is newer. Every device holding unpushed work was on the other branch.
+
+`remote.list()` is the third statement of a version and the one that breaks the
+cycle — the listing carries `updatedAt` for every campaign, which *is* the
+server saying what it holds. `useSync` now records those before deciding what to
+push, so the push that follows has a legitimate base version.
+
+That is not a loophole in the check. `baseVersion` still has to come from the
+server; this is the server, one request earlier. If another device writes in the
+gap between the listing and the PUT, the stored `updated_at` moves past what was
+recorded and the write is refused — the check working, not bypassed.
+
+Also: a stale conflict that does surface no longer shows the server's wording.
+"Pull before pushing" is an instruction to a program, not to somebody reading a
+shelf; it now reads "Another device saved this campaign a moment ago. Nothing is
+lost; try again."
+
+331 tests. Verified against a local D1 by reconstructing the owner's exact
+state — a local copy ten minutes newer than the server's, with no recorded
+version — and confirming it pushes, records a version, keeps its portrait, and
+then accepts three consecutive edits with no warning.
+
+**The lesson worth keeping.** v0.18.0 was tested thoroughly and still shipped a
+deadlock, because every test started from a device that had just pulled. The
+untested state was the one every real device was actually in: holding work the
+server had not seen. When adding a precondition, the case to test first is the
+population that already exists, not the one the happy path creates.

@@ -99,6 +99,28 @@ export function useSync({ user, available, onChanged }) {
       return
     }
 
+    /**
+     * The listing **is** the server stating its current version for every
+     * campaign, so record it before deciding anything.
+     *
+     * Without this the whole scheme deadlocks, and it did. A version was only
+     * ever learned from a pull or an accepted push — so a device whose local
+     * copy was *newer* than the server's could obtain one by neither route: it
+     * never pulled, because it was ahead, and its push was refused for having
+     * no base version. The shelf sat on "not saved to your account" for ever
+     * with no way out. Every device already holding work when the version check
+     * shipped was in exactly that position.
+     *
+     * Recording here is not a loophole in the check. `baseVersion` has to be a
+     * version the server told us, and this is the server telling us, in the
+     * request immediately before the write. If another device writes in the gap
+     * between this list and our PUT, the stored `updated_at` moves past what we
+     * recorded and we are refused — which is the check working, not failing.
+     */
+    for (const c of theirs) {
+      if (c && c.id && !c.corrupt) rememberVersion(c.id, c.updatedAt)
+    }
+
     const { pull, push, adopted } = planSync(mine, theirs)
 
     /**
@@ -144,7 +166,14 @@ export function useSync({ user, available, onChanged }) {
         // Carry on rather than stop. An earlier version broke out of this loop
         // on the first failure, so a single unpushable campaign kept every
         // campaign behind it from ever reaching the account (audit v0.11.0, H1).
-        failure = failure || err.message
+        //
+        // A conflict here means another device wrote between our listing and
+        // our push, which is a race rather than a fault and is fixed by trying
+        // again. The server's own wording — "pull before pushing" — is an
+        // instruction to a program, not to a person reading a shelf.
+        failure = failure || (err.stale
+          ? 'Another device saved this campaign a moment ago. Nothing is lost; try again.'
+          : err.message)
       }
     }
 

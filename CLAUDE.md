@@ -1,10 +1,10 @@
 # CLAUDE.md — Hodgepodge Hearthside project context
 
-<!-- HH v0.18.0 | Last updated: 2026-08-31 -->
+<!-- HH v0.18.1 | Last updated: 2026-08-31 -->
 
 ---
 
-## Current Version: 0.18.0
+## Current Version: 0.18.1
 
 ## Last Updated: 2026-08-31
 
@@ -122,7 +122,7 @@ aftermath. Shipped and live:
 | **The build stamp** | v0.18.0. Version, commit and build date in the footer, baked in by `vite.config.js`. The commit is the half that matters — `CF_PAGES_COMMIT_SHA` cannot be forgotten the way a version bump can, and it answers "is what I pushed what is live?" from the page itself. |
 | **Membership** | v0.17.0. Owner-issued single-use invites, two gates (redeem → pending → host admits), per-campaign nicknames, opt-in Discord identity, and a read-only shared arsenal page. Writes were **not** widened — see below. |
 
-328 tests.
+331 tests.
 
 ### The book is on disk, and must not be committed
 
@@ -834,7 +834,7 @@ every session. `docs/VERSION_HISTORY.md` holds how it got this way.
 npm install
 cp .env.example .env
 npm run dev      # Vite only — NO Functions, NO database. useAuth degrades to signed out.
-npm run test     # 328 tests; `functions/` is in the run too, for the authz tests
+npm run test     # 331 tests; `functions/` is in the run too, for the authz tests
 npm run build    # production bundle — the dev proxy does NOT exist here
 npm run seed     # optional local register file; ask BiggerHat's maintainer first
 

@@ -140,3 +140,55 @@ describe('stampOwner', () => {
     expect(() => stampOwner(campaign, user?.id)).not.toThrow(TypeError)
   })
 })
+
+/**
+ * The deadlock the version check created, and the shape of its fix.
+ *
+ * `baseVersion` may only ever be a version the server stated. The first
+ * implementation learned one from exactly two events — a pull, or an accepted
+ * push — and that turned out to be a trap: a device whose local copy was
+ * *newer* than the server's reaches neither. It never pulls, because it is
+ * ahead; its push is refused, because it has no base version. The shelf reads
+ * "not saved to your account" for ever with no way out, and every device
+ * already holding work was in that position the moment the check shipped.
+ *
+ * `remote.list()` is the third statement of a version, and the one that breaks
+ * the cycle: the listing carries `updatedAt` for every campaign, which *is* the
+ * server saying what it holds. `useSync` records those before deciding what to
+ * push, so the push that follows has a legitimate base version.
+ *
+ * These assert the property that makes that safe rather than a loophole: a
+ * listing tells you the version of every campaign in it, including the ones you
+ * are about to push.
+ */
+describe('the listing states a version for everything in it', () => {
+  const remoteRow = (id, updatedAt, extra = {}) => ({ id, updatedAt, ...extra })
+
+  it('covers campaigns that will be pushed, not just pulled', () => {
+    const local = [campaign('cmp_ahead', 900)]          // newer here
+    const theirs = [remoteRow('cmp_ahead', 100)]        // older there
+    const { push, pull } = planSync(local, theirs)
+
+    expect(push.map((c) => c.id)).toEqual(['cmp_ahead'])
+    expect(pull).toHaveLength(0)
+    // Nothing in the pull path would have recorded a version for this id, which
+    // is precisely why recording has to happen from the listing instead.
+    expect(theirs[0].updatedAt).toBe(100)
+  })
+
+  it('says nothing about a campaign the server has never seen', () => {
+    // Adoption: no row, so no version, and the server allows the write because
+    // there is nothing to conflict with.
+    const { push } = planSync([campaign('cmp_new', 900)], [])
+    expect(push.map((c) => c.id)).toEqual(['cmp_new'])
+  })
+
+  it('skips corrupt rows, which state nothing trustworthy', () => {
+    const theirs = [remoteRow('cmp_bad', 100, { corrupt: true })]
+    const { pull, push } = planSync([campaign('cmp_bad', 50)], theirs)
+    // A row we could not parse must not overwrite a good local copy, and its
+    // `updatedAt` must not be adopted as a base version either.
+    expect(pull).toHaveLength(0)
+    expect(push.map((c) => c.id)).toEqual(['cmp_bad'])
+  })
+})
