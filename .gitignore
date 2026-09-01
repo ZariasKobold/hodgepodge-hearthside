@@ -10,3 +10,12 @@ public/register.json
 # repo. Design decisions live in CLAUDE.md and docs/, not in the tool.
 .claude/skills/
 .claude/settings.local.json
+
+# The campaign book itself. Keep a copy in docs/ to work from — it is the
+# source for everything in src/data/equipment.js, injuries.js and
+# advancements.js — but it must NEVER be committed. This repository is public,
+# and the book's own copyright page permits personal non-commercial copies
+# only, explicitly barring distribution. Committing it would be redistributing
+# Wyrd's product, which is the fastest way to lose the fan-policy permission
+# this whole project stands on (CLAUDE.md §8).
+docs/*.pdf

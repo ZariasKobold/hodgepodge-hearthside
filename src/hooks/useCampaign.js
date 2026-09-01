@@ -5,9 +5,12 @@ import {
   load,
 } from '../lib/storage.js'
 import {
-  createCampaign, createModel, migrate, migrateLeaderToCampaign,
+  createCampaign, createModel, createGame, createEquipment, createInjury,
+  createTotem, migrate, migrateLeaderToCampaign,
   myArsenal as selectMyArsenal, currentWeek, totalFor, mustHireThisWeek,
   belongsTo, shouldRelease,
+  setWeekPatch, stepWeekPatch, weekModePatch, canRegress,
+  MIN_WEEKS_TOTAL, MAX_WEEKS_TOTAL,
 } from '../lib/campaignShape.js'
 
 const LEGACY_LEADER_KEY = 'leader:current'
@@ -286,17 +289,220 @@ export function useCampaign({ userId = null, userReady = true, onSaved, onRemove
     updateArsenal((a) => ({ scrip: a.scrip + amount }))
   }, [updateArsenal])
 
+  /* ── the week ─────────────────────────────────────────────────── */
+
+  /**
+   * Move the campaign to a week the calendar disagrees with.
+   *
+   * Writes an offset, never a week (see `offsetForWeek`), so the campaign goes
+   * on advancing by itself afterwards. Groups who play three weeks on one
+   * bank holiday, or skip a fortnight, need this constantly — the alternative
+   * is the app being confidently wrong about the one number every other number
+   * hangs off, since the week decides the hire discount and files each model
+   * under when it arrived.
+   */
+  const setWeek = useCallback((target) => {
+    setCampaign((prev) => (prev ? { ...prev, ...setWeekPatch(prev, target) } : prev))
+  }, [])
+
+  /** Forward or back a week. Regressing is as real a need as advancing. */
+  const stepWeek = useCallback((delta) => {
+    setCampaign((prev) => {
+      if (!prev) return prev
+      if (delta < 0 && !canRegress(prev)) return prev
+      return { ...prev, ...stepWeekPatch(prev, delta) }
+    })
+  }, [])
+
+  /**
+   * Calendar or manual, switched without the number on screen moving.
+   * `weekModePatch` carries the current week across, so the switch reads as a
+   * change of mechanism rather than as the campaign jumping.
+   */
+  const setWeekMode = useCallback((mode) => {
+    setCampaign((prev) => (prev ? { ...prev, ...weekModePatch(prev, mode) } : prev))
+  }, [])
+
+  /** Back to whatever the calendar says, discarding every past correction. */
+  const resetWeek = useCallback(() => {
+    setCampaign((prev) => (prev ? { ...prev, weekOffset: 0 } : prev))
+  }, [])
+
+  /**
+   * When the campaign actually began.
+   *
+   * Editable because the app is usually opened *after* the first game — the
+   * campaign started at the table, not when someone got round to typing it in,
+   * and in calendar mode every week since is measured from this.
+   */
+  const setStartedAt = useCallback((timestamp) => {
+    setCampaign((prev) => (prev ? { ...prev, startedAt: timestamp } : prev))
+  }, [])
+
+  const setWeeksTotal = useCallback((n) => {
+    setCampaign((prev) => {
+      if (!prev) return prev
+      const total = Math.min(MAX_WEEKS_TOTAL, Math.max(MIN_WEEKS_TOTAL, Math.round(Number(n) || 1)))
+      return { ...prev, weeksTotal: total }
+    })
+  }, [])
+
+  /* ── games and the aftermath ──────────────────────────────────── */
+
+  /**
+   * File a game against this arsenal and return it.
+   *
+   * Games are appended, never edited in place by anything but `updateGame`,
+   * because the aftermath is walked over several sittings — a player logs the
+   * result at the table and finishes the injury flips afterwards.
+   */
+  const logGame = useCallback((patch = {}) => {
+    const game = createGame({ arsenalId: campaign?.localArsenalId ?? null, week, ...patch })
+    setCampaign((prev) => (prev ? { ...prev, games: [...prev.games, game] } : prev))
+    return game
+  }, [campaign?.localArsenalId, week])
+
+  const updateGame = useCallback((gameId, patch) => {
+    setCampaign((prev) => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        games: prev.games.map((g) =>
+          g.id === gameId ? { ...g, ...(typeof patch === 'function' ? patch(g) : patch) } : g
+        ),
+      }
+    })
+  }, [])
+
+  const removeGame = useCallback((gameId) => {
+    setCampaign((prev) => (prev ? { ...prev, games: prev.games.filter((g) => g.id !== gameId) } : prev))
+  }, [])
+
+  /* ── equipment ────────────────────────────────────────────────── */
+
+  const buyEquipment = useCallback((entry, cost) => {
+    updateArsenal((a) => ({
+      equipment: [...a.equipment, createEquipment({ ...entry, acquiredWeek: week })],
+      scrip: Math.max(0, a.scrip - cost),
+    }))
+  }, [updateArsenal, week])
+
+  /**
+   * Equipment leaves the arsenal outright when annihilated — it "may not be
+   * used until purchased again" — so this deletes rather than flagging. An
+   * equipment row that lingered would keep counting toward a campaign rating.
+   */
+  const removeEquipment = useCallback((id) => {
+    updateArsenal((a) => ({ equipment: a.equipment.filter((e) => e.id !== id) }))
+  }, [updateArsenal])
+
+  /* ── injuries ─────────────────────────────────────────────────── */
+
+  const addInjury = useCallback((entry) => {
+    updateArsenal((a) => ({ injuries: [...a.injuries, createInjury({ ...entry, gainedWeek: week })] }))
+  }, [updateArsenal, week])
+
+  /**
+   * Healed rather than deleted. The doctor's ledger is part of the story, and
+   * an injury that was paid to remove still happened — `injuriesFor` already
+   * filters on `removedAt`, so nothing downstream counts it.
+   */
+  const healInjury = useCallback((injuryId) => {
+    updateArsenal((a) => ({
+      injuries: a.injuries.map((i) => (i.id === injuryId ? { ...i, removedAt: Date.now() } : i)),
+    }))
+  }, [updateArsenal])
+
+  /**
+   * Deleted, not healed — for an injury that was never gained.
+   *
+   * The one case is Fate intervening: when miraculous recovery cancels a
+   * leader's annihilation, "no new injury is gained but the previous two
+   * remain". A `removedAt` would be a lie in the ledger, saying the doctor
+   * mended something that never happened.
+   */
+  const dropInjury = useCallback((injuryId) => {
+    updateArsenal((a) => ({ injuries: a.injuries.filter((i) => i.id !== injuryId) }))
+  }, [updateArsenal])
+
+  /**
+   * Three injuries and the model is out — checked at the END of phase 6, never
+   * during it, which is why this is called by the flow rather than by
+   * `addInjury`.
+   *
+   * Flagged, not deleted: it stays on the roster so the week it arrived and
+   * the scrip it cost are still legible, and `liveModels` keeps it out of the
+   * arsenal total and out of every hire.
+   */
+  const annihilateModel = useCallback((modelId) => {
+    updateArsenal((a) => ({
+      models: a.models.map((m) => (m.id === modelId ? { ...m, annihilated: true } : m)),
+    }))
+  }, [updateArsenal])
+
+  /* ── advancement ──────────────────────────────────────────────── */
+
+  /**
+   * Check experience boxes and record what each one bought.
+   *
+   * Boxes and advancements move together on purpose. They are two halves of
+   * one fact — the leader is three boxes along *because* of these three
+   * advancements — and letting either be written without the other is how a
+   * track ends up disagreeing with the list beside it.
+   */
+  const advanceLeader = useCallback(({ boxes = 0, taken = [] }) => {
+    updateArsenal((a) => ({
+      leader: {
+        ...a.leader,
+        experience: { ...a.leader.experience, boxesChecked: (a.leader.experience?.boxesChecked || 0) + boxes },
+        advancements: [...(a.leader.advancements || []), ...taken],
+      },
+    }))
+  }, [updateArsenal])
+
+  /** An advancement handed to the totem instead of the leader. */
+  const advanceTotem = useCallback((entry) => {
+    updateArsenal((a) => (a.totem
+      ? { totem: { ...a.totem, advancements: [...a.totem.advancements, entry] } }
+      : {}))
+  }, [updateArsenal])
+
+  const setTotem = useCallback((patch) => {
+    updateArsenal((a) => ({ totem: a.totem ? { ...a.totem, ...patch } : createTotem(patch) }))
+  }, [updateArsenal])
+
+  const addCrewCardAdvancement = useCallback((entry) => {
+    updateArsenal((a) => ({ crewCardAdvancements: [...(a.crewCardAdvancements || []), entry] }))
+  }, [updateArsenal])
+
+  /**
+   * Fate intervenes, once. The second annihilation stands.
+   *
+   * Recorded on the leader rather than inferred from the games, because the
+   * box on the arsenal sheet is a box: it is ticked or it is not, and a player
+   * who reconstructs a campaign by hand has to be able to tick it.
+   */
+  const useMiraculousRecovery = useCallback(() => {
+    updateArsenal((a) => ({ leader: { ...a.leader, miraculousRecoveryUsed: true } }))
+  }, [updateArsenal])
+
   return {
     // the shelf
     shelf, openId, open, close, startNew, discard, adopt, refresh,
     // the open campaign
     campaign, setCampaignField, setHouseRules,
     arsenal, updateArsenal,
-    week,
+    week, setWeek, stepWeek, setWeekMode, resetWeek, setStartedAt, setWeeksTotal,
     totalCost: arsenal ? totalFor(arsenal) : 0,
     mustHire: arsenal ? mustHireThisWeek(arsenal, week) : false,
     // wizard adapter — same surface the step components already expect
     leader, set: setLeader, setPick,
     addModel, removeModel, spendScrip, earnScrip,
+    // games and the aftermath
+    logGame, updateGame, removeGame,
+    buyEquipment, removeEquipment,
+    addInjury, healInjury, dropInjury, annihilateModel,
+    advanceLeader, advanceTotem, setTotem, addCrewCardAdvancement,
+    useMiraculousRecovery,
   }
 }

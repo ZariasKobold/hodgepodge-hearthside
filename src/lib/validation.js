@@ -1,4 +1,5 @@
 import { getArchetype, SLOTS } from '../data/archetypes.js'
+import { isTotem } from './indexing.js'
 
 /**
  * Legality for a leader selection, split into two groups on purpose.
@@ -36,11 +37,22 @@ export function checkSource(model, slot, archetypeId, leaderKeywords) {
   if (!archetype) return { ok: false, problems: ['No archetype chosen.'] }
 
   const cap = archetype.slots[slot].cap
-  // Totems are checked separately from cost because they HAVE costs — the
-  // cost test never caught them, while this message claimed it did, so a
-  // player could take a totem's action and be told totems were barred
-  // (audit v0.11.0, M4/M5).
-  if (model.isTotem) {
+  /**
+   * Totems get their own message, and it is the message rather than the check
+   * that earns its keep.
+   *
+   * Audit v0.11.0 (M4/M5) added this believing totems "HAVE costs — the cost
+   * test never caught them". That belief was wrong: every totem in the register
+   * has `cost: null`, so the costless test below catches all of them, and this
+   * branch has never been the thing doing the barring.
+   *
+   * It stays because "Masters and costless models cannot be used as a source"
+   * is a confusing thing to be told about a totem, which is the actual
+   * complaint M4/M5 recorded. Reads the model's own characteristic now, rather
+   * than an `isTotem` flag that `useRoster` set on a list totems had already
+   * been filtered out of — so it was never true, and this branch never ran.
+   */
+  if (isTotem(model)) {
     problems.push(`${model.name} is a totem, and totems cannot be a source.`)
   }
   if (model.cost == null || model.cost <= 0) {

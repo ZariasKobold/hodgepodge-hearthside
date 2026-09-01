@@ -460,3 +460,40 @@ Rules for the split:
 
 Steps 1–3 are where the design gets corrected. Doing 4 first means migrating a
 schema built on guesses.
+
+---
+
+## 12. As built — v0.16.0
+
+This document is the design; `src/lib/campaignShape.js` is what exists. They
+agree on the shapes that mattered — equipment as arsenal rows with a per-game
+`equipmentHired` list, injuries attached to a group rather than to each titled
+version, annihilation checked at the end of phase 6 — which is the useful
+result of writing the design down first.
+
+Three things the design did not anticipate, now in the client shape:
+
+- **`arsenal.totem`.** A crew may have exactly one, gained from the tier-3
+  advancement table. It carries its own `advancements`, because once it exists
+  the leader may hand any later advancement to it and both count toward the
+  campaign rating. Its keywords are the leader's by rule, so they are not
+  stored — a copy would go stale on a rename.
+- **`arsenal.crewCardAdvancements`.** Tier-4 advancements add an effect lifted
+  off a real master's crew card. There is no table to pick from, so the entry is
+  free text plus the page it came from.
+- **Injuries carry a `name` and a `page`.** The design's `injuries` table has an
+  `injury_id`; the client stores the printed name and the page instead, because
+  §4 keeps the effect text out and a bare id would leave the sheet unable to
+  print anything a player could look up.
+
+The aftermath record on a game is close to §7's sketch but keyed by phase
+rather than being a flat object: `{ phase, done, handSize, scripEarned, paid,
+barter, advance, doctor, injuries }`. `paid` and `advance.applied` exist because
+effects are written to the arsenal as each phase is confirmed rather than at the
+end — a player who walks away after payday has still earned the scrip — so
+reopening a phase must not pay twice.
+
+**The D1 projection has not been widened yet.** `injuries`, `equipment` and
+`games` still ride inside `doc` alone. Migration 0002 deferred normalising them
+on the grounds that Aftermath would reshape them, and it did; the shapes are now
+real and played, so the reason for deferring has expired.

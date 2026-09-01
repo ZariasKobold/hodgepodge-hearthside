@@ -28,8 +28,17 @@ export default function WeeklyHire({ arsenal, week, houseRules, mustHire, roster
   // calls Versatile, where unticking silently did nothing.
   const [versatileOverride, setVersatileOverride] = useState(null)
 
+  // Totems are absent from both pools and that is not an oversight: `useRoster`
+  // never collects one, because a totem comes from the tier-3 advancement table
+  // and nowhere else (p.52). See `isSelectionSource`.
+  //
   // Split so a Versatile model showing up outside your keywords reads as a
   // rule rather than a bug. Both are equally hirable; only the surcharge differs.
+  // The partition is on the characteristic alone, deliberately: Versatile names
+  // what a model *is*, so a Versatile model that also shares your keyword stays
+  // under Versatile rather than moving between groups depending on who declared
+  // what. The surcharge asks its own question and is unaffected — owner
+  // decision, v0.16.0.
   // Sorted by cost and labelled in soulstones, matching the creation step's
   // picker. The two disagreed — one sorted and wrote "5ss", the other did
   // neither — which made the same list read differently on two screens

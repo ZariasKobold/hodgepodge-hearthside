@@ -7,6 +7,10 @@ import {
   ratingForGame, mustHireThisWeek, gamesInWeek,
   migrateLeaderToCampaign, migrate, SCHEMA_VERSION, DEFAULT_HOUSE_RULES,
   hireRules, isOutOfKeyword, hiresInWeek, belongsTo, shouldRelease,
+  elapsedWeek, offsetForWeek, weekAdjustment, standingRating, gamesWon,
+  weekMode, setWeekPatch, stepWeekPatch, canRegress, weekModePatch, WEEK_MODES,
+  gamesPlayed, heldEquipmentIds, injuryNamesFor,
+  createEquipment, createInjury, createTotem,
 } from './campaignShape.js'
 
 const DAY = 86400000
@@ -371,5 +375,247 @@ describe('shouldRelease', () => {
 
   it('has nothing to release when nothing is open', () => {
     expect(shouldRelease(null, 'user-a', true)).toBe(false)
+  })
+})
+
+describe('setting the week by hand', () => {
+  const start = Date.UTC(2026, 0, 1)
+  const c = createCampaign({ startedAt: start })
+
+  it('reports what the calendar alone would say', () => {
+    expect(elapsedWeek(c, start)).toBe(1)
+    expect(elapsedWeek(c, start + 21 * DAY)).toBe(4)
+  })
+
+  it('computes an offset that lands on the week asked for', () => {
+    const now = start + 21 * DAY          // the calendar says week 4
+    for (const target of [1, 2, 6, 12, 40]) {
+      const moved = { ...c, weekOffset: offsetForWeek(c, target, now) }
+      expect(currentWeek(moved, now)).toBe(target)
+    }
+  })
+
+  /**
+   * The whole reason this stores an offset rather than a week: a campaign set
+   * forward on Sunday is a week further on the next Sunday without anyone
+   * touching it again. A stored week would sit still.
+   */
+  it('keeps advancing on its own afterwards', () => {
+    const now = start + 21 * DAY
+    const moved = { ...c, weekOffset: offsetForWeek(c, 6, now) }
+    expect(currentWeek(moved, now)).toBe(6)
+    expect(currentWeek(moved, now + 7 * DAY)).toBe(7)
+    expect(currentWeek(moved, now + 21 * DAY)).toBe(9)
+  })
+
+  it('can be moved backwards without falling below week one', () => {
+    const now = start + 70 * DAY
+    const moved = { ...c, weekOffset: offsetForWeek(c, 1, now) }
+    expect(currentWeek(moved, now)).toBe(1)
+    // A large enough negative offset still floors rather than going to zero.
+    expect(currentWeek({ ...c, weekOffset: -99 }, now)).toBe(1)
+  })
+
+  it('honours a shortened week length when converting', () => {
+    const fast = createCampaign({ startedAt: start, houseRules: { weekLengthDays: 3 } })
+    const now = start + 9 * DAY           // four 3-day weeks in
+    expect(elapsedWeek(fast, now)).toBe(4)
+    const moved = { ...fast, weekOffset: offsetForWeek(fast, 2, now) }
+    expect(currentWeek(moved, now)).toBe(2)
+    expect(currentWeek(moved, now + 3 * DAY)).toBe(3)
+  })
+
+  it('reports whether the week has been corrected at all', () => {
+    expect(weekAdjustment(c)).toBe(0)
+    expect(weekAdjustment({ ...c, weekOffset: -2 })).toBe(-2)
+  })
+
+  it('rounds a fractional target rather than drifting', () => {
+    const now = start + 7 * DAY
+    expect(currentWeek({ ...c, weekOffset: offsetForWeek(c, 5.4, now) }, now)).toBe(5)
+  })
+})
+
+describe('the standing campaign rating', () => {
+  it('counts advancements minus injuries, and no equipment', () => {
+    const a = createArsenal({
+      leader: createLeader({ advancements: [{ name: 'x' }, { name: 'y' }] }),
+      injuries: [createInjury({ modelId: 'm1' })],
+      equipment: [createEquipment({ equipmentId: 'sword' })],
+    })
+    // Two advancements, one injury — and the sword is not counted, because the
+    // rating counts equipment *hired*, which has no value between games.
+    expect(standingRating(a)).toBe(1)
+  })
+
+  it('counts the totem\'s advancements alongside the leader\'s', () => {
+    const a = createArsenal({
+      leader: createLeader({ advancements: [{ name: 'x' }] }),
+      totem: createTotem({ advancements: [{ name: 'y' }, { name: 'z' }] }),
+    })
+    expect(standingRating(a)).toBe(3)
+    expect(ratingForGame(a, { equipmentHired: [{}, {}] })).toBe(5)
+  })
+
+  it('goes negative, which the book allows', () => {
+    const a = createArsenal({
+      injuries: [createInjury({ modelId: 'm1' }), createInjury({ modelId: 'm2' })],
+    })
+    expect(standingRating(a)).toBe(-2)
+  })
+
+  it('stops counting an injury the doctor removed', () => {
+    const a = createArsenal({
+      injuries: [createInjury({ modelId: 'm1', removedAt: 1 }), createInjury({ modelId: 'm2' })],
+    })
+    expect(standingRating(a)).toBe(-1)
+  })
+})
+
+describe('game tallies', () => {
+  const arsenalId = 'ars_mine'
+  const c = createCampaign({
+    localArsenalId: arsenalId,
+    games: [
+      { arsenalId, result: 'win' },
+      { arsenalId, result: 'loss' },
+      { arsenalId, result: 'win' },
+      { arsenalId: 'ars_theirs', result: 'win' },
+    ],
+  })
+
+  it('counts only this arsenal\'s wins', () => {
+    expect(gamesWon(c)).toBe(2)
+    expect(gamesPlayed(c)).toBe(3)
+    expect(gamesWon(c, 'ars_theirs')).toBe(1)
+  })
+})
+
+describe('equipment and injury lookups', () => {
+  it('lists what is held, for the Those Who Thirst limit', () => {
+    const a = createArsenal({
+      equipment: [
+        createEquipment({ equipmentId: 'sword' }),
+        createEquipment({ equipmentId: 'medusa', thirst: true }),
+      ],
+    })
+    expect(heldEquipmentIds(a)).toEqual(['sword', 'medusa'])
+  })
+
+  it('names the injuries on a model so a duplicate flip can be spotted', () => {
+    const model = createModel({ id: 'm1', name: 'Bob' })
+    const a = createArsenal({
+      models: [model],
+      injuries: [
+        createInjury({ modelId: 'm1', name: 'Leadfooted' }),
+        createInjury({ modelId: 'm1', name: 'Senseless', removedAt: 1 }),
+      ],
+    })
+    // The healed one is gone: flipping Senseless again would be a real injury.
+    expect(injuryNamesFor(a, model)).toEqual(['Leadfooted'])
+  })
+
+  it('shares a titled model\'s injuries across every version', () => {
+    const a = createArsenal({
+      models: [
+        createModel({ id: 'm1', name: 'Someone', titleGroup: 'someone' }),
+        createModel({ id: 'm2', name: 'Someone, Reborn', titleGroup: 'someone' }),
+      ],
+      injuries: [createInjury({ titleGroup: 'someone', name: 'Off Balance' })],
+    })
+    expect(injuryNamesFor(a, a.models[0])).toEqual(['Off Balance'])
+    expect(injuryNamesFor(a, a.models[1])).toEqual(['Off Balance'])
+  })
+
+  it('reads the leader\'s own injuries when given no model', () => {
+    const a = createArsenal({ injuries: [createInjury({ name: 'Mangled Limb' })] })
+    expect(injuryNamesFor(a, null)).toEqual(['Mangled Limb'])
+  })
+})
+
+describe('week modes', () => {
+  const start = Date.UTC(2026, 0, 1)
+  const base = createCampaign({ startedAt: start })
+  const now = start + 21 * DAY          // the calendar says week 4
+
+  it('defaults to the calendar', () => {
+    expect(WEEK_MODES).toEqual(['calendar', 'manual'])
+    expect(weekMode(base)).toBe('calendar')
+    expect(weekMode({ ...base, weekMode: 'nonsense' })).toBe('calendar')
+    expect(currentWeek(base, now)).toBe(4)
+  })
+
+  it('holds still in manual mode however much time passes', () => {
+    const manual = { ...base, weekMode: 'manual', manualWeek: 6 }
+    expect(currentWeek(manual, now)).toBe(6)
+    expect(currentWeek(manual, now + 365 * DAY)).toBe(6)
+  })
+
+  it('writes the right field for the mode it is in', () => {
+    expect(setWeekPatch(base, 7, now)).toEqual({ weekOffset: 3 })
+    expect(setWeekPatch({ ...base, weekMode: 'manual' }, 7, now)).toEqual({ manualWeek: 7 })
+  })
+
+  it('steps forward and back in both modes', () => {
+    for (const mode of WEEK_MODES) {
+      const c = mode === 'manual'
+        ? { ...base, weekMode: 'manual', manualWeek: 4 }
+        : base
+      const fwd = { ...c, ...stepWeekPatch(c, 1, now) }
+      expect(currentWeek(fwd, now)).toBe(5)
+      const back = { ...c, ...stepWeekPatch(c, -1, now) }
+      expect(currentWeek(back, now)).toBe(3)
+    }
+  })
+
+  it('will not step below week one', () => {
+    const atOne = { ...base, weekMode: 'manual', manualWeek: 1 }
+    expect(canRegress(atOne, now)).toBe(false)
+    expect(currentWeek({ ...atOne, ...stepWeekPatch(atOne, -1, now) }, now)).toBe(1)
+
+    const calAtOne = { ...base, weekOffset: offsetForWeek(base, 1, now) }
+    expect(canRegress(calAtOne, now)).toBe(false)
+  })
+
+  it('keeps advancing after a step in calendar mode', () => {
+    const stepped = { ...base, ...stepWeekPatch(base, 1, now) }
+    expect(currentWeek(stepped, now)).toBe(5)
+    expect(currentWeek(stepped, now + 7 * DAY)).toBe(6)
+  })
+
+  /**
+   * A mode switch that moved the week would look like data loss, so both
+   * directions carry the number on screen across.
+   */
+  it('does not move the week when the mode changes', () => {
+    const corrected = { ...base, weekOffset: 3 }        // showing week 7
+    expect(currentWeek(corrected, now)).toBe(7)
+
+    const toManual = { ...corrected, ...weekModePatch(corrected, 'manual', now) }
+    expect(weekMode(toManual)).toBe('manual')
+    expect(currentWeek(toManual, now)).toBe(7)
+
+    const backToCalendar = { ...toManual, ...weekModePatch(toManual, 'calendar', now) }
+    expect(weekMode(backToCalendar)).toBe('calendar')
+    expect(currentWeek(backToCalendar, now)).toBe(7)
+    // …and it advances by itself again, which is the point of going back.
+    expect(currentWeek(backToCalendar, now + 7 * DAY)).toBe(8)
+  })
+
+  it('reports no calendar adjustment in manual mode, where there is no calendar', () => {
+    const manual = { ...base, weekMode: 'manual', manualWeek: 9, weekOffset: 5 }
+    expect(weekAdjustment(manual)).toBe(0)
+    expect(weekAdjustment({ ...base, weekOffset: 5 })).toBe(5)
+  })
+
+  it('rounds a fractional target rather than storing one', () => {
+    const manual = { ...base, weekMode: 'manual', manualWeek: 1 }
+    expect(setWeekPatch(manual, 5.6, now)).toEqual({ manualWeek: 6 })
+  })
+
+  it('still ends the campaign at weeksTotal in either mode', () => {
+    const manual = { ...base, weekMode: 'manual', manualWeek: 13, weeksTotal: 12 }
+    expect(isCampaignOver(manual, now)).toBe(true)
+    expect(weeksRemaining({ ...manual, manualWeek: 9 }, now)).toBe(3)
   })
 })

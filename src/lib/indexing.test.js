@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { toIndexedModel, isSelectionSource, isVersatile } from './indexing.js'
+import { toIndexedModel, isSelectionSource, isVersatile, isTotem } from './indexing.js'
 import { candidatesFor } from './validation.js'
 import { FACTIONS, registerFaction } from '../data/factions.js'
 
@@ -104,5 +104,55 @@ describe('Versatile does not widen leader selection', () => {
   it('remains a legal hire either way', () => {
     expect(isSelectionSource(toIndexedModel(CHANGELING))).toBe(true)
     expect(isSelectionSource(toIndexedModel(TEDDY))).toBe(true)
+  })
+})
+
+/**
+ * A totem exactly as the register serves one, verified against the live API in
+ * v0.16.0: `cost: null`, `station: null`, and the fact in `characteristics`.
+ *
+ * Pinned as a fixture because the previous belief — that totems carry costs and
+ * announce themselves through `station` — was wrong on both counts and survived
+ * two audits by being written into a comment and a test name instead of checked.
+ */
+const JACKALOPE = {
+  slug: 'jackalope',
+  name: 'Jackalope',
+  display_name: 'Jackalope',
+  cost: null,
+  station: null,
+  faction: 'neverborn',
+  keywords: [{ name: 'Chimera', slug: 'chimera' }],
+  characteristics: ['totem', 'unique', 'beast'],
+}
+
+describe('totems', () => {
+  it('are recognised by characteristic, not by station', () => {
+    const indexed = toIndexedModel(JACKALOPE)
+    expect(isTotem(indexed)).toBe(true)
+    expect(indexed.station).toBe(null)
+    expect(isTotem(toIndexedModel(TEDDY))).toBe(false)
+  })
+
+  it('never reach the hire picker', () => {
+    expect(isSelectionSource(toIndexedModel(JACKALOPE))).toBe(false)
+  })
+
+  /**
+   * Two independent guards, so neither is load-bearing alone. The cost test
+   * catches every totem the register currently serves; the characteristic test
+   * would catch one that gained a cost upstream.
+   */
+  it('stay out even if the register ever gives one a cost', () => {
+    const priced = toIndexedModel({ ...JACKALOPE, cost: 4 })
+    expect(priced.cost).toBe(4)
+    expect(isTotem(priced)).toBe(true)
+    expect(isSelectionSource(priced)).toBe(false)
+  })
+
+  it('are not mistaken for Versatile, which reads the same list', () => {
+    expect(isVersatile(toIndexedModel(JACKALOPE))).toBe(false)
+    expect(isTotem(toIndexedModel(TEDDY))).toBe(false)
+    expect(isVersatile(toIndexedModel(TEDDY))).toBe(true)
   })
 })

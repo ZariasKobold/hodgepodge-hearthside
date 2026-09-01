@@ -62,6 +62,75 @@ export function createLeader(patch = {}) {
   }
 }
 
+/**
+ * A totem, gained from the tier-3 advancement table.
+ *
+ * A crew may only ever have one, and once it exists the leader may hand any
+ * later advancement to it instead — which is why it carries its own
+ * `advancements` array. Its keywords are the leader's by rule, so they are not
+ * stored: a copy here would go stale the moment a keyword changed.
+ */
+export function createTotem(patch = {}) {
+  return {
+    id: uid('ttm'),
+    name: '',
+    /** Which row of the totem table this came from, for the page reference. */
+    tableValue: null,
+    stats: { df: 5, wp: 5, sp: 6, health: 9 },
+    size: 1,
+    base: 30,
+    characteristics: [],
+    representingModel: '',
+    advancements: [],
+    ...patch,
+  }
+}
+
+/**
+ * One piece of equipment in the arsenal.
+ *
+ * `equipmentId` points into `data/equipment.js`; the name is copied so an
+ * export still reads sensibly if that table is ever renumbered, and the page
+ * travels with it so the player can find the card. No effect text (§4).
+ *
+ * Equipment is bought once and attached freely at each hire, so nothing here
+ * records which model holds it — that is a per-game choice and lives on the
+ * game's `equipmentHired`.
+ */
+export function createEquipment(patch = {}) {
+  return {
+    id: uid('eqp'),
+    equipmentId: null,
+    name: '',
+    cc: 0,
+    page: null,
+    /** Those Who Thirst items are limited to one at a time; ordinary ones are not. */
+    thirst: false,
+    acquiredWeek: null,
+    ...patch,
+  }
+}
+
+/**
+ * One injury upgrade.
+ *
+ * Attached to exactly one subject — see `injuriesFor` for the three shapes.
+ * `removedAt` rather than deletion, because the back-alley doctor's ledger is
+ * part of the campaign's story and a healed injury still happened.
+ */
+export function createInjury(patch = {}) {
+  return {
+    id: uid('inj'),
+    name: '',
+    page: null,
+    modelId: null,
+    titleGroup: null,
+    gainedWeek: null,
+    removedAt: null,
+    ...patch,
+  }
+}
+
 export function createArsenal(patch = {}) {
   return {
     id: uid('ars'),
@@ -72,9 +141,12 @@ export function createArsenal(patch = {}) {
     scrip: 0,
     leader: createLeader(),
     crewCard: { effect: '', choice: '' },
+    /** Effects added to the crew card by tier-4 advancements. */
+    crewCardAdvancements: [],
     models: [],
     injuries: [],
     equipment: [],
+    totem: null,
     ...patch,
   }
 }
@@ -87,7 +159,11 @@ export function createCampaign(patch = {}) {
     name: '',
     weeksTotal: 12,
     startedAt: Date.now(),
+    /** See `WEEK_MODES`. Calendar by default; manual is opt-in per campaign. */
+    weekMode: 'calendar',
     weekOffset: 0,
+    /** Read only in manual mode, but always present so the shape is one shape. */
+    manualWeek: 1,
     houseRules: { ...DEFAULT_HOUSE_RULES },
     joinCode: null,
     /**
@@ -121,6 +197,12 @@ export function createModel(patch = {}) {
     addedWeek: 1,
     scripPaid: 0,
     titleGroup: null,
+    /**
+     * Peons may never have equipment attached, gain injuries, or be
+     * annihilated (p. 37) — so they never flip in phase 6. Stored rather than
+     * read off the register because a hand-typed hire has no record to read.
+     */
+    peon: false,
     annihilated: false,
     ...patch,
   }
@@ -145,6 +227,14 @@ export function createGame(patch = {}) {
     campaignRatingOpponent: null,
     equipmentHired: [],     // [{ equipmentId, modelId }] — chosen fresh each game
     killedModelIds: [],     // drives phase 6 injury flips
+    /**
+     * The two things only the player saw. The leader's experience depends on
+     * them (p. 31) and nothing in the app can observe either, so they are
+     * asked rather than guessed — a wrong guess here silently mis-advances a
+     * leader for the rest of the campaign.
+     */
+    killedNonPeon: false,
+    interactedNearEnemyDeployment: false,
     aftermath: {},
     ...patch,
   }
@@ -157,11 +247,126 @@ export function createGame(patch = {}) {
  * means it's wrong whenever nobody remembers to advance it, and every player's
  * device disagrees. `weekOffset` is the escape hatch for groups who skip a week.
  */
-export function currentWeek(campaign, now = Date.now()) {
-  const days = campaign.houseRules?.weekLengthDays || 7
-  const elapsed = Math.floor((now - campaign.startedAt) / (days * 86400000))
-  return Math.max(1, elapsed + 1 + (campaign.weekOffset || 0))
+/**
+ * Two ways a campaign can know what week it is, chosen per campaign.
+ *
+ * `calendar` is the original and still the default: the week follows real time
+ * from `startedAt`, corrected by `weekOffset`. It cannot go stale, and two
+ * devices that never speak still agree.
+ *
+ * `manual` stores the number outright and moves only when somebody moves it.
+ * Migration 0001 argued against exactly this — "a counter is only right if
+ * someone remembers to press a button" — and that objection is sound for a
+ * group who would rather not think about it, and beside the point for a group
+ * who has decided to drive it. A campaign that meets fortnightly is *wrong* in
+ * calendar mode and right in manual mode; the answer was never one of them.
+ *
+ * The mode is stored so the two devices agree about which question is being
+ * asked, and `manualWeek` is merged by the same `updatedAt`-wins rule as scrip.
+ */
+export const WEEK_MODES = ['calendar', 'manual']
+
+export function weekMode(campaign) {
+  return campaign?.weekMode === 'manual' ? 'manual' : 'calendar'
 }
+
+export function currentWeek(campaign, now = Date.now()) {
+  if (weekMode(campaign) === 'manual') {
+    return Math.max(1, Math.round(campaign.manualWeek || 1))
+  }
+  return Math.max(1, elapsedWeek(campaign, now) + (campaign.weekOffset || 0))
+}
+
+/** The week the calendar alone would put you in, before any offset. */
+export function elapsedWeek(campaign, now = Date.now()) {
+  const days = campaign?.houseRules?.weekLengthDays || 7
+  const elapsed = Math.floor((now - campaign.startedAt) / (days * 86400000))
+  return elapsed + 1
+}
+
+/**
+ * The `weekOffset` that makes `currentWeek` read as `target`.
+ *
+ * The offset exists because a real group does not keep to a calendar: they play
+ * three weeks' worth on a bank holiday, or miss a fortnight, and the app
+ * insisting it is week four is the app being wrong in a way the player cannot
+ * argue with.
+ *
+ * Stored as an offset rather than as the week itself, deliberately. A stored
+ * `currentWeek` stops advancing the moment nobody remembers to press the
+ * button, and two devices then disagree about what week it is with no way to
+ * tell which is stale. An offset keeps the calendar doing the work and records
+ * only the correction — so a campaign set forward to week six on Sunday is in
+ * week seven the following Sunday without anyone touching it again.
+ */
+export function offsetForWeek(campaign, target, now = Date.now()) {
+  return Math.round(target) - elapsedWeek(campaign, now)
+}
+
+/**
+ * The patch that puts a campaign in `target`, whichever mode it is in.
+ *
+ * One function rather than two call sites branching on the mode, because the
+ * two representations are an implementation detail of the same idea and a
+ * caller that has to know which one is in force will eventually get it wrong.
+ * Floors at week one: there is no week zero, and a group correcting a mistake
+ * should not be able to land somewhere that does not exist.
+ */
+export function setWeekPatch(campaign, target, now = Date.now()) {
+  const week = Math.max(1, Math.round(Number(target) || 1))
+  if (weekMode(campaign) === 'manual') return { manualWeek: week }
+  return { weekOffset: offsetForWeek(campaign, week, now) }
+}
+
+/**
+ * Forward or back by whole weeks.
+ *
+ * Regressing matters as much as advancing: a group that ticked over by mistake,
+ * or that agreed to replay a week nobody could make, needs the way back — and
+ * in calendar mode there was none, because the offset was only ever written by
+ * typing an absolute number.
+ */
+export function stepWeekPatch(campaign, delta, now = Date.now()) {
+  return setWeekPatch(campaign, currentWeek(campaign, now) + delta, now)
+}
+
+/** Would stepping back land before week one? */
+export function canRegress(campaign, now = Date.now()) {
+  return currentWeek(campaign, now) > 1
+}
+
+/**
+ * Switching modes preserves the week on screen rather than the number
+ * underneath it.
+ *
+ * Flipping to manual adopts whatever the calendar currently says, so nothing
+ * jumps; flipping back to calendar writes the offset that reproduces the manual
+ * week today, so again nothing jumps — and from then on it advances by itself.
+ * A mode switch that moved the week would look like data loss.
+ */
+export function weekModePatch(campaign, mode, now = Date.now()) {
+  const next = mode === 'manual' ? 'manual' : 'calendar'
+  const showing = currentWeek(campaign, now)
+  if (next === 'manual') return { weekMode: 'manual', manualWeek: showing }
+  return { weekMode: 'calendar', weekOffset: offsetForWeek(campaign, showing, now) }
+}
+
+/**
+ * Has the week been moved off the calendar, and by how much?
+ *
+ * Meaningless in manual mode, where there is no calendar to be off — reported
+ * as zero so a caller cannot show "set by hand · the calendar says 3" beside a
+ * number the calendar has no opinion about.
+ */
+export function weekAdjustment(campaign) {
+  if (weekMode(campaign) === 'manual') return 0
+  return campaign?.weekOffset || 0
+}
+
+/** The book recommends 4 to 12 weeks, agreed before anyone starts. */
+export const MIN_WEEKS_TOTAL = 1
+export const MAX_WEEKS_TOTAL = 52
+export const RECOMMENDED_WEEKS = [4, 12]
 
 export function isCampaignOver(campaign, now = Date.now()) {
   return currentWeek(campaign, now) > campaign.weeksTotal
@@ -267,9 +472,60 @@ export function ratingForGame(arsenal, game) {
   return campaignRating({
     equipmentHired: game?.equipmentHired?.length || 0,
     leaderAdvancements: arsenal.leader.advancements?.length || 0,
-    totemAdvancements: 0,
+    totemAdvancements: arsenal.totem?.advancements?.length || 0,
     injuriesInCrew: activeInjuryCount(arsenal),
   })
+}
+
+/**
+ * The part of the campaign rating that is true between games.
+ *
+ * Advancements minus injuries — everything except the equipment, which is
+ * chosen fresh at each hire and so cannot be known until there is a game. The
+ * arsenal sheet prints this beside a reminder to add one per piece of kit
+ * taken, which is what the printed sheet's blank box was always asking for.
+ *
+ * Deliberately *not* called the campaign rating: a number that is only most of
+ * the rating must not be named as though it were all of it.
+ */
+export function standingRating(arsenal) {
+  return campaignRating({
+    equipmentHired: 0,
+    leaderAdvancements: arsenal.leader?.advancements?.length || 0,
+    totemAdvancements: arsenal.totem?.advancements?.length || 0,
+    injuriesInCrew: activeInjuryCount(arsenal),
+  })
+}
+
+/** Games this arsenal has won, for the sheet's tally and competitive play. */
+export function gamesWon(campaign, arsenalId = campaign?.localArsenalId) {
+  return (campaign?.games || []).filter(
+    (g) => g.arsenalId === arsenalId && g.result === 'win'
+  ).length
+}
+
+/** Games this arsenal has played at all. */
+export function gamesPlayed(campaign, arsenalId = campaign?.localArsenalId) {
+  return (campaign?.games || []).filter((g) => g.arsenalId === arsenalId).length
+}
+
+/** Equipment ids currently in the arsenal, for the Those Who Thirst limit. */
+export function heldEquipmentIds(arsenal) {
+  return (arsenal?.equipment || []).map((e) => e.equipmentId).filter(Boolean)
+}
+
+/**
+ * Injury names already on a model, so a duplicate result can be recognised.
+ *
+ * "If a model flips an injury result which it already has, do not apply the
+ * result again" — which needs names rather than counts, and needs the titled
+ * group's injuries when the model is titled.
+ */
+export function injuryNamesFor(arsenal, model) {
+  const list = model
+    ? injuriesFor(arsenal, model.titleGroup ? { titleGroup: model.titleGroup } : { modelId: model.id })
+    : injuriesFor(arsenal, {})
+  return list.map((inj) => inj.name)
 }
 
 /**

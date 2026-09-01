@@ -3,6 +3,7 @@ import {
   startingScrip, hireCost, campaignRating, soulstoneBonus,
   maxEncounterSize, aftermathHandSize, experienceEarned,
   payday, injuryFlipCount, isAnnihilated, AFTERMATH_PHASES,
+  MAX_EXPERIENCE_PER_GAME,
 } from './campaign.js'
 
 describe('startingScrip', () => {
@@ -134,8 +135,37 @@ describe('AFTERMATH_PHASES', () => {
 })
 
 describe('experienceEarned', () => {
-  it('caps at three and only counts the leader\'s own path', () => {
-    expect(experienceEarned({ path: 'bruiser', killedNonPeon: true, interactedNearEnemyDeployment: true, lost: true })).toBe(2)
-    expect(experienceEarned({ path: 'strategist', killedNonPeon: true, interactedNearEnemyDeployment: true, lost: true })).toBe(2)
+  it('gives a point for playing, whatever else happened', () => {
+    expect(experienceEarned({ path: 'bruiser', killedNonPeon: false, lost: false })).toBe(1)
+    expect(experienceEarned({ path: '', killedNonPeon: false, lost: false })).toBe(1)
+  })
+
+  it('reaches three and only counts the leader\'s own path', () => {
+    expect(experienceEarned({ path: 'bruiser', killedNonPeon: true, interactedNearEnemyDeployment: true, lost: true })).toBe(3)
+    expect(experienceEarned({ path: 'strategist', killedNonPeon: true, interactedNearEnemyDeployment: true, lost: true })).toBe(3)
+  })
+
+  /**
+   * The book's own worked example, p. 37: Jack lost, his Bruiser leader killed
+   * an enemy, and that is three points — one for playing, one for losing, one
+   * for the path. The example is the reason this rule was found missing at all,
+   * so it is the test that guards it.
+   */
+  it('matches the book\'s worked example', () => {
+    expect(experienceEarned({ path: 'bruiser', killedNonPeon: true, lost: true })).toBe(3)
+  })
+
+  it('never exceeds the stated maximum', () => {
+    for (const path of ['bruiser', 'strategist', '']) {
+      for (const killed of [true, false]) {
+        for (const interacted of [true, false]) {
+          for (const lost of [true, false]) {
+            const xp = experienceEarned({ path, killedNonPeon: killed, interactedNearEnemyDeployment: interacted, lost })
+            expect(xp).toBeGreaterThanOrEqual(1)
+            expect(xp).toBeLessThanOrEqual(MAX_EXPERIENCE_PER_GAME)
+          }
+        }
+      }
+    }
   })
 })

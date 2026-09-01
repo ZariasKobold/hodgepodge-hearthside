@@ -2119,3 +2119,397 @@ a picture. If it is raised again, raise it in small steps and stop at the point
 where you notice it without looking.
 
 187 tests, build clean.
+
+---
+
+### Session 37 — v0.16.0
+Date: 2026-08-31
+
+**feat: the aftermath, all six phases, and a week you can argue with**
+
+The largest single feature since the campaign shape itself. Everything under
+"Written but not wired" is now wired, and five of the arsenal sheet's six
+ruled-and-blank sections are filled.
+
+The owner supplied `docs/Index_of_the_Untold.pdf`, which is why this session
+could work from the book rather than from memory of it. Two things fell out of
+reading it that were not the point of the session and matter more than most of
+what was:
+
+**`experienceEarned` was missing a rule, and the audit had blessed the gap.**
+The book gives 1 XP *for playing the game* — "every encounter teaches
+something" (p.31) — before any of the conditional points. Audit L1 looked at
+the code, counted two reachable points, saw a comment claiming three, and
+concluded the book's maximum "describes a rule that is not implemented and may
+not exist". The rule existed. The book's own worked example on p.37 awards Jack
+three points for one game: playing, losing, and being a Bruiser who killed
+something. That example is now a test, because it is the cheapest possible
+guard against the same mistake.
+
+The lesson worth keeping: **an audit that reasons from the code cannot find a
+missing rule.** L1 was diligent and still wrong, because the only evidence it
+had was the artefact being audited. Anything of the form "the book probably
+doesn't say this" needs the book open.
+
+**`EXPERIENCE_TRACK` in `ArsenalSheet.jsx` was wrong.** Rows two and three had
+their numbers in the wrong columns. It had been wrong since the sheet shipped
+and nothing could have caught it, because the sheet was the only thing that
+used it and a track of plausible-looking numbers looks fine.
+
+The correct track was read off the printed page's glyph coordinates rather than
+transcribed by eye — the PDF's text layer serves the three rows interleaved,
+which is very likely how the original error happened. It cross-checks against
+p.37's example (first three boxes 1, 1, 2). It now lives in
+`data/advancements.js`, beside the flow that walks it, because two copies of
+one table is exactly how this survives.
+
+**The aftermath is one stateful flow, and the record lives on the game.**
+`AFTERMATH_PHASES` has said since v0.1 that the deck is not reshuffled between
+phases; this is the first code that has to honour it. Six screens would each
+imply a fresh deck. So `Aftermath.jsx` walks the sequence, and the whole
+`aftermath` record is stored on the game — which means closing the tab between
+the barter and the injuries loses nothing, and an unfinished aftermath syncs to
+D1 like anything else. The campaign tab carries a dot while one is open,
+because a half-finished aftermath holds unpaid scrip and unflipped injuries and
+is the easiest thing in the app to forget.
+
+**Effects land as they are confirmed, not at the end.** A player who walks away
+after payday has still earned the scrip. That forces every write to be
+idempotent, which is what the `paid` and `applied` flags on the record are for.
+
+**A withdrawal on turn one or two is a different shape, not a smaller one.**
+Five of six phases do not happen. `phasesFor` marks them skipped *with a
+reason* rather than dropping them, so a forfeited aftermath reads as the book's
+price for getting out early rather than as a broken screen.
+
+**The app owns no fate deck, and must not pretend to.** Every flip is entered
+by hand through `FlipInput`. A "flip for me" button would be a different game:
+the aftermath economy is one hand of cards spent across six phases, and a
+player who cheated a 12 on barter has one fewer card for the injuries. The
+`cheated` checkbox is not decoration — three separate rules turn on it (a
+cheated red joker on barter counts as a thirteen instead of reaching Those Who
+Thirst, a cheated red joker on injuries is a plain miss rather than a Lucky
+Miss, and a cheated joker on an advancement table reads as its value), and it
+is asked for only where it changes the answer.
+
+**Book tables: names, values and page numbers. No effect text.** §4 forbids
+persisting rules text, and unlike model cards there is no live source to fetch
+this from — BiggerHat carries the Malifaux namespace, not campaign-book
+content. So `equipment.js` (82 barter items + 9 relics), `injuries.js` (the
+injury chart, Lucky Miss, the back-alley doctor) and `advancements.js` (~250
+entries across six tables) hold identifiers and a page reference each, and the
+player reads the effect in the book. Owner decision, this session, choosing
+page references throughout over a bare name list.
+
+Modelled as *behaviour* rather than prose wherever the app is responsible for a
+number: `injury`, `annihilates`, `reflipIf`, `luckyMiss`. Each reflip condition
+is a real branch — a model with no triggers that flips Permanent Hex has not
+been injured, and a campaign rating computed as though it had is wrong for the
+rest of the campaign. The app has never seen a stat card, so it asks.
+
+**Three flip semantics, and getting them wrong is invisible.** `orLower` for
+the modification and action tables, `exact` for totems, `choose` for summoning
+and the crew card. Offering the whole totem table on a 12 rather than the one
+totem printed at 12 is a strictly better campaign than the book's, quietly, and
+nobody would notice. It is asserted in the tests.
+
+**Annihilation is checked at the end of phase 6, never during it.** A model can
+reach three injuries mid-game — the Mutagen Injector does exactly that — and
+still fights until this moment. Counting as you go removes it a phase early and
+takes its cost out of the arsenal total while barter is still open.
+
+**Miraculous recovery drops the injury rather than healing it.** "No new injury
+is gained but the previous two remain." A `removedAt` would put a visit to
+Dr. Mo in the ledger that never happened, so `dropInjury` deletes the row. It is
+the only place anything is deleted from `injuries`.
+
+**The week can be set by hand, and it is still an offset.** Owner request. The
+week decides the first-of-week discount, whether a hire is owed, and which week
+each model is filed under, so being wrong about it is being wrong about the
+ledger. But `offsetForWeek` writes a correction and lets the calendar keep
+doing the work: a campaign set to week six on Sunday is in week seven the
+following Sunday without anyone coming back. A stored `currentWeek` stops dead
+the moment nobody presses the button, and then two devices disagree with no way
+to tell which is stale.
+
+**The arsenal sheet.** Games won, crew rating, equipment, per-model injuries,
+the experience track and the totem are all filled. Two things stay ruled and
+blank on purpose: the equipment half of the campaign rating, which counts kit
+*hired for a game* and so has no value between games — the sheet prints
+"N + kit hired" — and the totem's actions, which come off a card §4 does not
+let this app store.
+
+**One Hank line removed from a screen, none written.** All the dialogue this
+needed already existed. `healSkipped` was rendered on arrival at the doctor and
+has been dropped: it reads as Hank accepting a decision the player has not made
+yet, which is the timing rule (§2), and skipping ends the phase so there is no
+later moment to say it in. No change to `hank.js`, so the dual-file rule (§1)
+did not fire.
+
+**`docs/*.pdf` is now in `.gitignore`, and this is not housekeeping.** The
+repository is public. The book's own copyright page permits personal
+non-commercial copies and explicitly bars distributing them. A `git add .` with
+the book sitting in `docs/` would have redistributed Wyrd's product from a
+public repo — the fastest available way to lose the fan-policy permission this
+whole project stands on (§8). Keep the copy locally; it is the source for three
+data files and will be needed again.
+
+**Totems, and two comments that had been lying for two audits.** The owner
+asked whether it was right that every Versatile model shows in the weekly hire.
+It is — the register marks exactly 14 Neverborn Versatile and the picker shows
+those 14, and Versatile means hirable regardless of keyword, which is the
+campaign rule too. But checking it turned up something else.
+
+`indexing.js` said, in a comment: "**Totems are deliberately not filtered here.
+They are perfectly hirable** — stripping them from the roster would bar the
+weekly hire from buying one." `validation.js` said: "Totems are checked
+separately from cost because they **HAVE costs** — the cost test never caught
+them" (audit v0.11.0, M4/M5). A test was named after that second claim.
+
+Both are false. Checked against the live register: **every totem has `cost:
+null`** — all 16 in Neverborn, all 16 in Guild, and the detail endpoint agrees
+with the index — so the cost test caught every one of them and the roster never
+contained a totem at all. The two comments described opposite behaviours to
+each other and neither described the code.
+
+The consequences were all dead code rather than bugs, which is why nothing
+caught it:
+
+- `totemSlugs()` built a set of totems named by masters, for a marking pass that
+  ran on an **already cost-filtered list**, so `isTotem` was never once true.
+- `validation.js`'s totem branch therefore never executed.
+- The `roster:2:` cache-key bump, introduced so that "browsers holding an old
+  cache would stop offering totems as selection sources", solved nothing.
+- `totemSlug` rode into every cached roster in localStorage, read by nobody —
+  the same waste audit L3 removed three other fields for.
+
+There is a correct signal and it was sitting next to the one already in use:
+totems carry `'totem'` in `characteristics`, exactly where `isVersatile` reads.
+`station` is not it — no record in any faction carries `station: 'Totem'`, and
+known totems come back `null`, `Peon` or `Minion`, which is the same
+unreliability §6 already warns about for masters.
+
+So: `isTotem()` reads the characteristic, `isSelectionSource` excludes totems
+**by name** rather than as a side effect of a data quirk that could change
+upstream, `validation.js` keeps its totem *message* (which is what M4/M5 was
+really complaining about — being told a totem is a "costless model" is
+confusing) but now has a check that can actually fire, and `totemSlugs`,
+`totemSlug` and the `isTotem` marking are gone. The cache key is deliberately
+**not** bumped: old caches were built by a filter that already excluded totems,
+so they contain none, and bumping would re-fetch a donation-funded register for
+a byte-identical result.
+
+The fixtures were rebuilt too, because they were the mechanism by which the
+false belief survived. `validation.test.js` asserted a totem with `cost: 4` and
+`isTotem: true` — a shape the register cannot produce — under a test name that
+repeated the wrong claim. They now match what the API really serves, and
+`indexing.test.js` pins a real Jackalope record as a fixture. One test keeps the
+old case as a *defensive* one: if the register ever does give a totem a cost,
+the characteristic check still bars it.
+
+**Owner's ruling on where totems belong.** They come from the tier-3 advancement
+table and nowhere else, so they are not a hire and not a Versatile-adjacent
+oddity — they get their own category, and only the totem actually earned counts.
+The Arsenal view now has a Totem section: the earned totem with its advancement
+count and `free · 0ss`, or an explanation of the only route to one. It is
+deliberately outside the week groups and outside the arsenal total — a totem has
+no scrip price and no soulstone cost, and folding it into either would put it in
+the ledger beside models that were paid for, or inflate the encounter cap it has
+no business touching.
+
+**Owner's ruling on the Versatile grouping.** A Versatile model that also shares
+your declared keyword stays under "Versatile" rather than moving to "From your
+keywords". Versatile names what a model *is*, not why you happen to be allowed
+it, so the same model is always in the same place regardless of who declared
+what. The surcharge asks its own question and was never affected either way.
+
+**A note on §5's third audit trigger, which fired and was overruled.** This
+session first recorded an audit as blocking under "8+ files or a shared
+module". The owner questioned it, and checking the record showed the trigger is
+the problem rather than the answer: it fired at Session 34 (10 files), Session
+35 (10 files) and Session 37 (22), and was ignored the first two times, because
+nearly every feature session touches eight files.
+
+A trigger that fires constantly and is ignored constantly is worse than no
+trigger — it devalues the two beside it, one of which (the 10-session cadence)
+is the rule that has actually caught drift. §5 now says so, and the next audit
+stays on its schedule at Session 39, covering Sessions 30–38 together.
+
+The narrow check this session does need is a different job from the §5 ritual
+anyway: the ritual reads `src/` for cross-file drift and would never re-derive a
+barter rating from the book. ~370 rows of transcription need the book open
+beside the file, and no test can substitute, because the test would be
+transcribed from the same source.
+
+Worth noticing that both audit-shaped mistakes this session turned up have the
+same root: **checking an artefact against itself.** L1 reasoned about the book
+from the code; a test of the equipment table written from the equipment table
+would do the same. Both need the external source in hand.
+
+258 tests (up from 187), build clean. Walked end to end in the browser: two
+full aftermaths including an early withdrawal, a reflip, an annihilation, a
+heal, two advancements and a week set forward from 3 to 7; then the totem
+section in both states, with the arsenal total confirmed to exclude it.
+
+---
+
+### Session 38 — v0.17.0
+Date: 2026-08-31
+
+**feat: the week is yours to set, and campaigns have other people in them**
+
+Two owner requests: explicit control over the week, and the membership feature
+that has sat at the top of "next feature work" since v0.8.0.
+
+#### The week, in two modes
+
+Migration 0001 says, in a comment: "current_week is NOT stored. It derives from
+started_at, because a counter is only right if someone remembers to press a
+button." That is a good argument and it is not the whole argument. It is right
+for a group who would rather not think about the week, and simply wrong for a
+group who meets when they can — a campaign that plays fortnightly is *always*
+wrong in calendar mode, and no amount of correcting an offset fixes a mechanism
+that is measuring the wrong thing.
+
+So the mode is now a per-campaign choice.
+
+- **Calendar** is unchanged and still the default: real time from `startedAt`,
+  corrected by `weekOffset`, and it cannot go stale.
+- **Manual** stores `manualWeek` and moves only when someone moves it.
+
+The objection in 0001 does not apply to manual mode, because in manual mode
+pressing the button *is* the group's intent rather than a chore they might
+forget. Both are merged by the same `updatedAt`-wins rule as scrip, so two
+devices are no worse off than they already were.
+
+`setWeekPatch`, `stepWeekPatch` and `weekModePatch` exist so no call site
+branches on the mode. The two representations are an implementation detail of
+one idea, and a caller that has to know which is in force will eventually get
+it wrong.
+
+**Regressing was the real gap, and the owner asked for it directly.** The offset
+could only ever be written by typing an absolute number, so a group who ticked
+over by mistake, or agreed to replay a week nobody could make, had no way back
+that looked like a way back. Forward and back are now buttons in both modes,
+floored at week one.
+
+Also newly editable, none of which had a control anywhere: **campaign length**
+(the book says 4–12 and the field was hardcoded to 12), **week length in days**
+(the book explicitly invites 3 or 1), and **the start date** — which matters
+most, because the app is nearly always opened after the first game and every
+calendar week is measured from it.
+
+`weekModePatch` carries the week on screen across a mode switch in both
+directions. A switch that moved the number would read as data loss.
+
+#### Membership
+
+The design CLAUDE.md has specified since v0.8.0, built. **`join_code` stays
+unused**: a bare code is a capability URL, anyone holding it is in, and being in
+used to mean seeing everyone's Discord identity.
+
+**The risky change was avoided rather than tested.** CLAUDE.md warned that
+widening `putCampaign` to accept a non-owner writer "is precisely the change
+that created the `arsenal_models` hole in v0.7.0". The obvious shape for
+membership — one campaign row with several contributors — requires exactly that.
+
+So writes were not widened at all. `campaignStore.js` is untouched apart from
+three new projection columns. Every player still owns their own campaign row
+containing their own arsenal; membership is a **pointer**, `campaigns.member_of`,
+from a player's campaign to the host's:
+
+```
+Alice's campaign  H   (member_of NULL — the host)
+Bob's campaign    B   (member_of = H)
+```
+
+The shared page is then one read across campaigns linked to H, and CLAUDE.md's
+rule holds without a single write path changing. The five attack tests it
+demanded pass, and so do forty-four others.
+
+**Two gates, because a link can be forwarded.** Redeeming makes you `pending`;
+only the host admitting you makes you `active`; only `active` reads anything. A
+forwarded link costs the host a decision, not a leak. `roleIn` returns a role
+rather than a boolean so no caller can accidentally treat pending as in.
+
+**Tokens are stored as hashes.** The row is what an attacker with database read
+access would want, and a SHA-256 is useless to them — the token exists only in
+the link the host sends, and is shown in the UI exactly once. Single-use is
+enforced in the claiming UPDATE's own `WHERE redeemed_by IS NULL`, not by the
+SELECT above it, because two requests can pass a read simultaneously and only
+one can win a write.
+
+**What crosses the member boundary is the nickname, and nothing else.** The
+owner's ruling: identity sharing is opt-in, per campaign, in the player's hands.
+`share_identity` defaults to 0 — a privacy default that leaks is not a setting,
+it is a formality — and `publicMember` is the single function that decides what
+leaves, so there is one place to check rather than one per query.
+
+**A leak found by the tests, not by review.** The first draft of `publicMember`
+included `userId` for everyone. The test named "never sends another player's
+user id" caught it. A user id outlives the campaign, is the same id everywhere
+else that account goes, and joins somebody's arsenal to them permanently —
+which is the correlation the nickname exists to prevent. Now the host gets ids
+on the member list, where admitting and removing have to name a row, and
+**nobody** gets them on the shared arsenal page, which is read-only and has no
+use for them.
+
+**The shared read never touches `doc`.** It reads the projection columns, and
+that distinction is the point: `doc` is the whole campaign — house rules, week
+log, games — and a member is entitled to the arsenal, which the rules make
+public (p.14), not to the rest of it. A test asserts no statement in that path
+mentions `doc`. Migration 0003 widens the projection with `injuries`,
+`equipment` and `totem`, which also closes half of the standing to-do from
+0002; the reason for deferring (Aftermath would reshape them) expired when
+Aftermath shipped.
+
+`listSharedArsenals` is five statements regardless of how many players are in
+the campaign, per §12b and D1's 50-query cap. Asserted.
+
+**Not local-first, deliberately.** Every other network path here caches, because
+a campaign must survive being offline. Membership does not: it is the answer to
+"who may see my data", and a stale answer to that is worse than no answer.
+Offline, the Players tab says so and the rest of the app carries on.
+
+The invite link is `?invite=<token>` on the app's own origin rather than
+`/join/<token>`: this is an SPA on Pages, a real path needs a rewrite rule to
+reach the app at all, and a rule nothing tests is a thing to get wrong. The
+token stays in the URL while signed out — sign-in reloads the page and it has to
+survive the round trip — and is cleared with `replaceState` the moment it is
+spent, so a reload does not retry a dead token and the back button is not left
+pointing at one.
+
+`SharedArsenal` is a new component rather than a reuse of `ArsenalSheet`. The
+sheet renders a live campaign — it reads the register for action values,
+resolves crew cards, and expects `campaign.games` — and none of that crosses the
+member boundary. Feeding it a half-shaped object would either throw or, worse,
+render blanks that look like facts.
+
+#### Verified
+
+317 tests (up from 258), build clean.
+
+Migration 0003 applied to a fresh local D1, then the whole flow driven over real
+HTTP against `wrangler pages dev` with three forged sessions — the same
+technique used to prove D1 sync in v0.7.0, since Discord still has no preview
+redirect URI. Confirmed: a stranger is refused before and after a member joins;
+a pending member reads nothing; a replayed token is refused; a member cannot
+admit themselves, remove another player, link a campaign they do not own, or
+link at all before being admitted; cross-origin writes are refused; the host's
+Discord name, avatar, user id and `doc` never appear in what a member receives;
+opting in and back out of identity sharing works both ways; and leaving unlinks
+the departing player's campaign so their arsenal leaves the shared page.
+
+The local test database was deleted afterwards. **Nothing was run against the
+remote database**, which still has only the owner's real account on it.
+
+#### Still to do
+
+- **Migration 0003 has not been applied to the remote database.** It must be,
+  before this deploys: `npx wrangler d1 execute hodgepodge-hearthside --remote
+  --file=./migrations/0003_membership.sql`. Until then the membership endpoints
+  will 500 in production while everything else carries on.
+- The shared page shows arsenals, not encounter sizes. `maxEncounterSize` is
+  right there and the numbers are now on screen together; a "you two can play a
+  33-stone game" line is a small addition and the reason the rules make arsenals
+  public in the first place.

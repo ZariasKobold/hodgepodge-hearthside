@@ -114,6 +114,41 @@ export default function Arsenal({ campaign, arsenal, leader, archetype, week, ru
           )
         })}
 
+        {/* Its own category, and never one of the weeks.
+            A totem is not hired and has no scrip price: it arrives from the
+            tier-3 advancement table (p.52), the crew may have exactly one, and
+            it is taken for free at each encounter like a totem in an ordinary
+            game. Filing it under the week it appeared would put it in the
+            ledger beside models that cost scrip, and counting its stones into
+            the arsenal total would inflate the encounter cap it has no business
+            touching. */}
+        <div style={{ marginTop: 10 }}>
+          <Label>Totem</Label>
+          {arsenal.totem ? (
+            <div className="pick" style={{ borderColor: 'var(--brass)', background: 'var(--panel)' }}>
+              <span className="pick__meta" style={{ fontSize: 13, color: 'var(--text)' }}>
+                {arsenal.totem.name}
+              </span>
+              <span style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                {arsenal.totem.advancements?.length > 0 && (
+                  <span className="pick__meta">
+                    {arsenal.totem.advancements.length} advancement
+                    {arsenal.totem.advancements.length === 1 ? '' : 's'}
+                  </span>
+                )}
+                <span className="pick__meta">free · 0ss</span>
+              </span>
+            </div>
+          ) : (
+            <div className="empty">
+              No totem. There is no way to hire one — a totem comes from the
+              tier-3 Totem Advancement in the aftermath, and only while you have
+              none. Once you have it, later advancements may go to it instead of
+              to your leader.
+            </div>
+          )}
+        </div>
+
         {lost.length > 0 && (
           <div style={{ marginTop: 10 }}>
             <Label>Annihilated — no longer hirable</Label>

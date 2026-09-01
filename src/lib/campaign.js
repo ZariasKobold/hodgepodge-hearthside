@@ -136,18 +136,27 @@ export const AFTERMATH_PHASES = [
 export const DOCTOR_FEE_PER_ATTEMPT = 1
 
 /**
- * Experience from one game.
+ * Experience from one game — Index of the Untold, p. 31.
  *
- * The comment here used to claim a maximum of three. The reachable maximum is
- * **two** — the advancement-path bonus and the loss bonus — and nothing caps
- * anything, so the number was describing a rule that is not implemented and
- * may not exist (audit L1). Stated as what the code does; if the book really
- * does allow a third, it is missing rather than uncapped.
+ * The comment here used to say the reachable maximum was **two**, and that the
+ * book's stated maximum of three described a rule that was not implemented and
+ * might not exist (audit L1). The rule exists: the first point is for *playing
+ * the game*, "every encounter teaches something", and it was simply missing.
+ *
+ * With it back, the three are participation, the advancement-path bonus, and
+ * the consolation for losing — which is exactly the maximum the book claims,
+ * and exactly the three the book's own worked example on p. 37 awards Jack.
+ *
+ * Nothing here caps the total, because nothing needs to: three ways to earn
+ * one point each cannot exceed three.
  */
 export function experienceEarned({ path, killedNonPeon, interactedNearEnemyDeployment, lost }) {
-  let xp = 0
+  let xp = 1                                   // for playing at all
   if (path === 'bruiser' && killedNonPeon) xp += 1
   if (path === 'strategist' && interactedNearEnemyDeployment) xp += 1
   if (lost) xp += 1
   return xp
 }
+
+/** The most one game can teach, so a UI can say "2 of 3" without arithmetic. */
+export const MAX_EXPERIENCE_PER_GAME = 3

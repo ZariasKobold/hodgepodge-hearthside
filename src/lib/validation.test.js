@@ -6,6 +6,13 @@ import { checkStructure, checkSource, candidatesFor, availableTriggers } from '.
  * an action from, and it went eight versions naming a rule it did not enforce
  * (audit v0.5.2 M8, v0.11.0 M4/M5) — so the totem case is asserted here rather
  * than described in a comment.
+ *
+ * The totem fixtures were rebuilt in v0.16.0. They used to set `isTotem: true`
+ * alongside a cost, on the belief — stated in `checkSource` and in a test name —
+ * that totems "HAVE costs and so were never caught by the cost test". Checked
+ * against the live register: every totem has `cost: null` and says what it is in
+ * `characteristics`. The fixtures now match the register rather than the belief,
+ * which is the whole point of a fixture.
  */
 
 const model = (patch = {}) => ({
@@ -24,8 +31,20 @@ describe('checkSource', () => {
     expect(checkSource(model(), 'attack', 'schemer', ['angler']).ok).toBe(true)
   })
 
-  it('refuses a totem, which has a cost and so was never caught by the cost test', () => {
-    const totem = model({ name: 'Duke Carcinus', cost: 4, isTotem: true })
+  it('refuses a totem, and says so in those words', () => {
+    // As the register really serves them: no cost, and the fact in
+    // `characteristics`. Both the costless branch and the totem branch fire;
+    // what matters is that the player is told which one they picked.
+    const totem = model({ name: 'Duke Carcinus', cost: null, characteristics: ['totem', 'unique'] })
+    const result = checkSource(totem, 'attack', 'schemer', ['angler'])
+    expect(result.ok).toBe(false)
+    expect(result.problems.join(' ')).toMatch(/totem/i)
+  })
+
+  it('would still refuse a totem if the register ever gave one a cost', () => {
+    // Defensive: the totem branch does not lean on cost being null, so a data
+    // change upstream cannot quietly make totems selectable.
+    const totem = model({ name: 'Duke Carcinus', cost: 4, characteristics: ['totem'] })
     const result = checkSource(totem, 'attack', 'schemer', ['angler'])
     expect(result.ok).toBe(false)
     expect(result.problems.join(' ')).toMatch(/totem/i)
@@ -60,14 +79,14 @@ describe('checkSource', () => {
   })
 
   it('reports every reason at once rather than only the first', () => {
-    const bad = model({ cost: 99, keywords: ['elsewhere'], isTotem: true })
+    const bad = model({ cost: 99, keywords: ['elsewhere'], characteristics: ['totem'] })
     expect(checkSource(bad, 'attack', 'schemer', ['angler']).problems.length).toBeGreaterThan(2)
   })
 })
 
 describe('candidatesFor', () => {
   it('drops totems from the list a player picks from', () => {
-    const roster = [model(), model({ slug: 'totem', name: 'Totem', isTotem: true })]
+    const roster = [model(), model({ slug: 'totem', name: 'Totem', characteristics: ['totem'] })]
     const rows = candidatesFor('attack', roster, 'schemer', ['angler'])
     expect(rows.map((r) => r.model.slug)).toEqual(['ally'])
   })

@@ -6,6 +6,7 @@ import { useRoster } from './hooks/useRoster.js'
 import { useRules } from './hooks/useRules.js'
 import { useAuth } from './hooks/useAuth.js'
 import { useSync } from './hooks/useSync.js'
+import { useMembership, useInviteRedemption } from './hooks/useMembership.js'
 import { HankProvider } from './hooks/useHank.jsx'
 import Masthead from './components/Masthead.jsx'
 import { Button } from './components/ui.jsx'
@@ -16,7 +17,7 @@ import Loadout from './components/steps/Loadout.jsx'
 import Record from './components/steps/Record.jsx'
 import SignInGate from './components/SignInGate.jsx'
 import ArsenalLibrary from './components/ArsenalLibrary.jsx'
-import WeeklyHire from './components/steps/WeeklyHire.jsx'
+import Campaign from './components/steps/Campaign.jsx'
 import Arsenal from './components/steps/Arsenal.jsx'
 import ArsenalSheet from './components/ArsenalSheet.jsx'
 import './styles/app.css'
@@ -49,7 +50,12 @@ export default function App() {
   const {
     shelf, openId, open, close, startNew, discard, adopt, refresh,
     leader, set, setPick,
-    campaign, arsenal, week, mustHire, addModel, spendScrip,
+    campaign, arsenal, week, mustHire, addModel, spendScrip, earnScrip,
+    setWeek, stepWeek, setWeekMode, resetWeek, setStartedAt, setWeeksTotal,
+    setHouseRules,
+    logGame, updateGame, buyEquipment, addInjury, healInjury, dropInjury, annihilateModel,
+    advanceLeader, advanceTotem, setTotem, addCrewCardAdvancement,
+    useMiraculousRecovery,
   } = useCampaign({
     // The shelf is scoped to the account, not the browser. Without this a
     // second person signing in on a shared machine sees the first one's
@@ -64,6 +70,22 @@ export default function App() {
     onRemoved: (id) => syncRef.current.forget(id),
   })
   const roster = useRoster()
+
+  /**
+   * Membership for the open campaign, and the invite in the address bar.
+   *
+   * Nothing here is cached locally: it is the answer to "who may see my data",
+   * and a stale answer to that is worse than none. Offline, the Players tab
+   * says so and everything else carries on.
+   */
+  const membership = useMembership({
+    campaignId: openId,
+    signedIn: Boolean(auth.user),
+  })
+  const invite = useInviteRedemption({
+    signedIn: Boolean(auth.user),
+    onJoined: () => membership.refresh(),
+  })
   // Rules text is fetched live and held only in memory (§4). One instance for
   // the whole tree so the loadout's hover lookups and the record's writeout
   // share the same in-flight requests instead of racing each other.
@@ -159,6 +181,29 @@ export default function App() {
 
   const inCampaign = Boolean(openId && leader)
 
+  /**
+   * Everything the campaign view can do to a campaign, in one object.
+   *
+   * Bundled rather than passed as a dozen props because the aftermath threads
+   * them three components deep, and a flow that has to be handed `addInjury`
+   * through two intermediaries that never call it is a flow whose signature
+   * changes every time a phase learns something new.
+   */
+  const campaignActions = {
+    setWeek, stepWeek, setWeekMode, resetWeek, setStartedAt, setWeeksTotal,
+    setHouseRules,
+    logGame, updateGame,
+    earnScrip, spendScrip,
+    buyEquipment,
+    addInjury, healInjury, dropInjury, annihilateModel,
+    advanceLeader, advanceTotem, setTotem, addCrewCardAdvancement,
+    useMiraculousRecovery,
+    onHire: (model, cost) => {
+      addModel(model, { scripPaid: cost })
+      spendScrip(cost)
+    },
+  }
+
   return (
     <HankProvider>
     <div className="shell">
@@ -175,6 +220,8 @@ export default function App() {
       />
 
       <main className="wrap">
+        {invite.status !== 'none' && <InviteBanner invite={invite} auth={auth} />}
+
         {!admitted && <SignInGate auth={auth} />}
 
         {admitted && view === 'library' && (
@@ -221,7 +268,8 @@ export default function App() {
             covered, and the other two rendered a page containing nothing but
             the Back button and the legal line (audit v0.11.0, M2). */}
         {admitted && inCampaign && !archetype &&
-          (view === 'arsenal' || view === 'sheet' || (view === 'create' && step === 3)) && (
+          (view === 'arsenal' || view === 'sheet' || view === 'campaign' ||
+           (view === 'create' && step === 3)) && (
           <div className="empty">
             This leader isn't finished yet — no archetype chosen.{' '}
             <button className="gate__link" onClick={() => { setStep(0); setView('create') }}>
@@ -230,17 +278,19 @@ export default function App() {
           </div>
         )}
 
-        {admitted && inCampaign && view === 'campaign' && (
-          <WeeklyHire
+        {admitted && inCampaign && view === 'campaign' && archetype && (
+          <Campaign
+            campaign={campaign}
             arsenal={arsenal}
+            leader={leader}
             week={week}
+            roster={roster}
             houseRules={campaign.houseRules}
             mustHire={mustHire}
-            roster={roster}
-            onHire={(model, cost) => {
-              addModel(model, { scripPaid: cost })
-              spendScrip(cost)
-            }}
+            actions={campaignActions}
+            membership={membership}
+            shelf={shelf}
+            signedIn={Boolean(auth.user)}
           />
         )}
 
@@ -280,4 +330,61 @@ export default function App() {
     </div>
     </HankProvider>
   )
+}
+
+/**
+ * What happened to the invite link somebody clicked.
+ *
+ * Rendered above everything, including the sign-in gate, because the most
+ * common case is arriving here signed out — the token has to survive the
+ * sign-in round trip, and the person needs to be told that before they wonder
+ * why nothing happened.
+ */
+function InviteBanner({ invite, auth }) {
+  if (invite.status === 'needs-sign-in') {
+    return (
+      <div className="panel panel--attention">
+        <strong>You have been invited to a campaign.</strong>
+        <p className="note">
+          Sign in and the invite is used automatically — the link survives the
+          round trip. Nothing is shared with the campaign until its host lets
+          you in, and even then only what you choose to share.
+        </p>
+        {!auth.available && (
+          <p className="note note--warn">
+            The account service is unreachable from here, so this cannot be
+            redeemed yet. The link keeps working until it expires.
+          </p>
+        )}
+      </div>
+    )
+  }
+
+  if (invite.status === 'redeeming') {
+    return <div className="panel">Using your invite…</div>
+  }
+
+  if (invite.status === 'pending') {
+    return (
+      <div className="panel panel--attention">
+        <strong>Invite accepted — now waiting on the host.</strong>
+        <p className="note">
+          They have to let you in before you can see the campaign, and before
+          anyone there can see anything of yours. Nothing has been shared yet.
+        </p>
+        <button className="gate__link" onClick={invite.dismiss}>Dismiss</button>
+      </div>
+    )
+  }
+
+  if (invite.status === 'refused' || invite.status === 'error') {
+    return (
+      <div className="panel">
+        <p className="note note--warn">{invite.message}</p>
+        <button className="gate__link" onClick={invite.dismiss}>Dismiss</button>
+      </div>
+    )
+  }
+
+  return null
 }

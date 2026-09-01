@@ -1193,3 +1193,164 @@ body::after {
   }
   .portrait__zoom { width: 100%; max-width: 260px; }
 }
+
+
+/* the campaign view: the week, the phases, the counter -------------------
+   All of this hangs off the same panel-and-hairline vocabulary the hire
+   screen uses, because the aftermath is the hire screen's other half and a
+   second visual language for it would read as a second app. */
+
+.weekbar {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  border: 1px solid var(--line); border-radius: var(--r);
+  background: var(--panel); box-shadow: var(--shadow-1);
+  padding: 12px 16px; margin-bottom: 16px;
+}
+.weekbar__now { display: flex; align-items: baseline; gap: 8px; }
+.weekbar__k {
+  font-family: var(--data); font-size: 11px; letter-spacing: 1.5px;
+  text-transform: uppercase; color: var(--mute);
+}
+.weekbar__v { font-family: var(--display); font-size: 28px; color: var(--brass); line-height: 1; }
+.weekbar__of { font-family: var(--data); font-size: 11px; color: var(--faint); }
+.weekbar__aside { margin-left: auto; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.weekbar__note { font-family: var(--data); font-size: 11px; color: var(--faint); }
+.weekbar__edit { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.weekbar__edit .input { width: 74px; }
+.weekbar__over { flex-basis: 100%; margin: 0; }
+
+/* Sub-navigation inside the campaign view. Reuses .views__item so the two
+   levels are visibly the same kind of control at different scales. */
+.subviews { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 20px; }
+.views__dot {
+  display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--ember); margin-left: 7px; vertical-align: middle;
+}
+
+/* The six phases, as a rail rather than tabs: they are walked in order and
+   cannot be jumped between, so they must not look clickable. */
+.rail {
+  display: flex; gap: 4px; flex-wrap: wrap;
+  border: 1px solid var(--line-soft); border-radius: var(--r);
+  padding: 8px 10px; margin-bottom: 20px;
+}
+.rail__item {
+  display: inline-flex; align-items: baseline; gap: 6px;
+  font-family: var(--data); font-size: 11px; color: var(--faint);
+  padding: 4px 9px; border-radius: var(--r-sm);
+}
+.rail__n {
+  font-size: 10px; border: 1px solid currentColor; border-radius: 50%;
+  width: 16px; height: 16px; display: inline-flex;
+  align-items: center; justify-content: center; flex: 0 0 auto;
+}
+.rail__item--now { color: var(--brass); background: var(--brass-wash); }
+.rail__item--skip { color: var(--line); text-decoration: line-through; }
+
+/* One card, entered by hand — the app owns no fate deck. */
+.flip { margin-bottom: 18px; }
+.flip__row { display: flex; gap: 9px; flex-wrap: wrap; }
+.flip__row .select { flex: 1 1 150px; }
+
+/* The vendor's counter. */
+.stock { list-style: none; padding: 0; margin: 0; }
+.stock__row {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  border-bottom: 1px solid var(--line-soft); padding: 9px 0;
+  font-family: var(--data); font-size: 12px; color: var(--text);
+}
+.stock__name { flex: 1 1 160px; }
+.stock__meta { color: var(--faint); font-size: 11px; }
+.stock__cc { color: var(--brass); }
+
+.picklist { display: flex; flex-direction: column; gap: 2px; }
+.picklist .hire__check { margin: 0; }
+
+.grid2, .grid3 { display: grid; gap: 0 18px; }
+.grid2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.grid3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 620px) {
+  .grid2, .grid3 { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* The experience track, shown live rather than printed. Same boxes as the
+   sheet, on the dark ground rather than on paper. */
+.xp--live .sheet__xp-box {
+  border-color: var(--line); color: var(--faint); background: transparent;
+}
+.xp--live .xp-box--on {
+  border-color: var(--brass); color: var(--brass); background: var(--brass-wash);
+}
+.xp--live .xp-box--now {
+  border-color: var(--ember); color: var(--ember); background: var(--ember-wash);
+}
+
+/* A filled injury column is content, not a repeated heading, so it reads in
+   the ink colour rather than the label grey. */
+.sheet__ruled-sub--filled { color: var(--card-ink); font-style: normal; }
+/* Marked experience boxes, on paper. */
+.sheet__xp-box--on { background: var(--card-line); color: var(--card-ink); }
+
+/* The week bar grew a step control and a setup drawer. */
+.weekbar__step { display: flex; gap: 6px; }
+.weekbar__note {
+  flex-basis: 100%; margin: 0;
+  font-family: var(--data); font-size: 11px; color: var(--faint);
+}
+.weekbar__setup {
+  flex-basis: 100%; margin-top: 4px; padding-top: 14px;
+  border-top: 1px solid var(--line-soft);
+}
+.weekbar__setup .field { margin-bottom: 14px; }
+.weekbar__setup .input[type="date"] { max-width: 220px; }
+
+/* membership: invites, the member list, and other people's arsenals ------
+   Same panel-and-hairline vocabulary as the rest; the only new idea is
+   `--attention`, an ember edge for the two places where somebody is waiting
+   on a decision. */
+.panel {
+  border: 1px solid var(--line); border-radius: var(--r);
+  background: var(--panel); box-shadow: var(--shadow-1);
+  padding: 16px 18px; margin-bottom: 18px;
+}
+.panel--attention { border-color: var(--ember-deep); }
+
+.invite { margin: 14px 0; }
+.invite__row {
+  display: flex; gap: 9px; align-items: center; flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.invite__link {
+  flex: 1 1 260px; min-width: 0; overflow-x: auto; white-space: nowrap;
+  font-family: var(--data); font-size: 12px; color: var(--brass);
+  border: 1px solid var(--line-soft); border-radius: var(--r-sm);
+  padding: 8px 10px; background: var(--ground);
+}
+
+.shared {
+  border: 1px solid var(--line); border-radius: var(--r);
+  background: var(--panel); padding: 16px 18px; margin-bottom: 16px;
+}
+.shared--mine { border-color: var(--brass); }
+.shared__head {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 16px; flex-wrap: wrap; margin-bottom: 12px;
+}
+.shared__who {
+  font-family: var(--data); font-size: 11px; letter-spacing: 1.5px;
+  text-transform: uppercase; color: var(--brass);
+}
+.shared__leader {
+  font-family: var(--display); font-size: 23px; font-weight: 700;
+  margin: 2px 0 3px; line-height: 1.1; color: var(--text);
+}
+.shared__meta { font-family: var(--data); font-size: 11px; color: var(--faint); }
+.shared__identity { display: flex; gap: 9px; align-items: center; }
+.shared__avatar { border-radius: 50%; border: 1px solid var(--line); }
+.shared__handle { font-family: var(--data); font-size: 11px; color: var(--mute); }
+.shared__ledger { margin-bottom: 14px; }
+.shared__cols { display: grid; grid-template-columns: 1fr 1fr; gap: 0 22px; }
+.shared__foot { margin-top: 12px; }
+@media (max-width: 620px) {
+  .shared__cols { grid-template-columns: 1fr; }
+}

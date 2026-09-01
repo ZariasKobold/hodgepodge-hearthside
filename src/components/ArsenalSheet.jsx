@@ -1,7 +1,10 @@
 import { SLOTS } from '../data/archetypes.js'
 import { getEffect } from '../data/crewCards.js'
 import { factionLabel } from '../data/factions.js'
-import { totalFor, liveModels, activeInjuryCount } from '../lib/campaignShape.js'
+import {
+  totalFor, liveModels, activeInjuryCount, injuriesFor, standingRating, gamesWon,
+} from '../lib/campaignShape.js'
+import { EXPERIENCE_TRACK } from '../data/advancements.js'
 import { sourceSlug, findEntry, actionColumns } from '../lib/rules.js'
 import { PrintLegal } from './ui.jsx'
 
@@ -26,27 +29,23 @@ import { PrintLegal } from './ui.jsx'
  *
  * Anything the app tracks is printed. Anything it does not is ruled and left
  * empty on purpose, so the sheet is usable at a table with a pencil rather than
- * being useless until every feature exists. Blank today: games won, crew
- * rating, equipment, per-model injuries, the experience track, and the totem —
- * all of which arrive with Aftermath.
+ * being useless until every feature exists.
+ *
+ * The six sections that were ruled-and-blank until the aftermath existed —
+ * games won, crew rating, equipment, per-model injuries, the experience track
+ * and the totem — are filled now that something produces them. What is still
+ * left to the pencil is deliberate: the equipment half of the campaign rating,
+ * which counts kit *hired for a game* and so has no value between games, and
+ * the totem's actions, which come off a card this app does not store (§4).
  */
 
 const EQUIPMENT_SLOTS = 10
 const CREW_SLOTS = 12
 
-/**
- * The leadership experience track, as printed: three rows of thirteen, with a
- * number in the boxes that grant an advancement.
- *
- * A bare fact of the sheet, the same kind as the archetype stat lines in
- * `archetypes.js` — no rules text, just the shape of the track. `null` is an
- * ordinary box.
- */
-const EXPERIENCE_TRACK = [
-  [1, 1, 2, null, 3, null, 4, 1, null, 2, null, 4, null],
-  [null, null, 1, null, 2, 1, null, null, 3, null, null, null, null],
-  [null, null, 1, null, null, 2, null, 4, null, null, null, null, null],
-]
+/* The experience track moved to `data/advancements.js`, beside the flow that
+   walks it. The copy that used to live here had rows two and three wrong —
+   transcribed rather than read off the printed track — and two copies of one
+   table is how a mistake like that survives eight versions unnoticed. */
 
 function Field({ label, value, wide, children }) {
   return (
@@ -57,14 +56,24 @@ function Field({ label, value, wide, children }) {
   )
 }
 
-function Ruled({ n, values = [], numbered = true, sub }) {
+/**
+ * `sub` is a column heading repeated down every rule, the way the printed sheet
+ * does it; `subs` fills that column per row wherever the app knows the answer.
+ * A filled row drops the heading — printing "Injuries" beside "Severe
+ * Amputation" would read as a second injury.
+ */
+function Ruled({ n, values = [], numbered = true, sub, subs = [] }) {
   return (
     <ol className="sheet__ruled">
       {Array.from({ length: n }, (_, i) => (
         <li key={i} className="sheet__ruled-row">
           {numbered && <span className="sheet__ruled-n">{i + 1}.</span>}
           <span className="sheet__ruled-v">{values[i] || ' '}</span>
-          {sub && <span className="sheet__ruled-sub">{sub}</span>}
+          {(sub || subs[i]) && (
+            <span className={`sheet__ruled-sub${subs[i] ? ' sheet__ruled-sub--filled' : ''}`}>
+              {subs[i] || sub}
+            </span>
+          )}
         </li>
       ))}
     </ol>
@@ -130,7 +139,19 @@ export default function ArsenalSheet({ arsenal, leader, archetype, campaign, rul
   }
 
   const abilityNames = (leader.picks.ability || []).map((p) => p.name)
-  const gamesWon = (campaign?.games || []).filter((g) => g.result === 'win').length
+  const won = campaign ? gamesWon(campaign, arsenal.id) : 0
+  const equipment = arsenal.equipment || []
+  const totem = arsenal.totem
+  const boxesChecked = leader.experience?.boxesChecked || 0
+  const leaderAdvancements = leader.advancements || []
+  const totemAdvancements = totem?.advancements || []
+
+  // Injuries print against the model carrying them, which is what the official
+  // sheet's second column beside each crew line is for.
+  const injuryFor = (m) =>
+    injuriesFor(arsenal, m.titleGroup ? { titleGroup: m.titleGroup } : { modelId: m.id })
+      .map((i) => i.name).join(', ')
+  const leaderInjuries = injuriesFor(arsenal, {}).map((i) => i.name)
 
   return (
     <div className="sheet">
@@ -147,8 +168,12 @@ export default function ArsenalSheet({ arsenal, leader, archetype, campaign, rul
             </div>
           </div>
           <div className="sheet__tallies">
-            <Field label="Games won" value={gamesWon || ' '} />
-            <Field label="Crew rating" value="&nbsp;" />
+            <Field label="Games won" value={won || ' '} />
+            {/* The rating counts equipment *hired for a game*, which cannot be
+                known between games — so the standing part is printed and the
+                rest is left to the pencil, which is what the printed box was
+                always asking for. */}
+            <Field label="Crew rating" value={`${standingRating(arsenal)} + kit hired`} />
             <Field label="Scrip" value={arsenal.scrip} />
           </div>
         </header>
@@ -162,13 +187,16 @@ export default function ArsenalSheet({ arsenal, leader, archetype, campaign, rul
         <div className="sheet__cols">
           <section>
             <h2 className="sheet__h2">Equipment</h2>
-            {/* Not tracked yet — Aftermath's barter phase fills these. */}
-            <Ruled n={EQUIPMENT_SLOTS} />
+            <Ruled
+              n={Math.max(EQUIPMENT_SLOTS, equipment.length)}
+              values={equipment.map((e) => `${e.name}${e.page ? ` — p.${e.page}` : ''}`)}
+            />
 
             <h2 className="sheet__h2">Crew</h2>
             <Ruled
               n={Math.max(CREW_SLOTS, models.length)}
               values={models.map((m) => `${m.name}${m.cost ? ` — ${m.cost}ss` : ''}`)}
+              subs={models.map(injuryFor)}
               sub="Injuries"
             />
             <div className="sheet__note">
@@ -200,12 +228,46 @@ export default function ArsenalSheet({ arsenal, leader, archetype, campaign, rul
           <div className="sheet__xp">
             {EXPERIENCE_TRACK.map((row, r) => (
               <div className="sheet__xp-row" key={r}>
-                {row.map((n, c) => (
-                  <span className="sheet__xp-box" key={c}>{n ?? ''}</span>
-                ))}
+                {row.map((n, c) => {
+                  const i = r * row.length + c
+                  return (
+                    <span
+                      className={`sheet__xp-box${i < boxesChecked ? ' sheet__xp-box--on' : ''}`}
+                      key={c}
+                    >
+                      {n ?? ''}
+                    </span>
+                  )
+                })}
               </div>
             ))}
           </div>
+          <div className="sheet__note">
+            {boxesChecked} of {EXPERIENCE_TRACK.flat().length} marked. A number
+            grants an advancement from a table of that tier or lower.
+          </div>
+
+          {leaderAdvancements.length > 0 && (
+            <>
+              <h3 className="sheet__h3">Advancements</h3>
+              <Ruled
+                n={Math.max(6, leaderAdvancements.length)}
+                values={leaderAdvancements.map(
+                  (adv) => `${adv.name} — ${adv.tableName}${adv.page ? `, p.${adv.page}` : ''}`
+                )}
+              />
+            </>
+          )}
+
+          {(arsenal.crewCardAdvancements || []).length > 0 && (
+            <>
+              <h3 className="sheet__h3">Crew card additions</h3>
+              <Ruled
+                n={arsenal.crewCardAdvancements.length}
+                values={arsenal.crewCardAdvancements.map((adv) => adv.name)}
+              />
+            </>
+          )}
         </section>
 
         <div className="sheet__foot">
@@ -242,7 +304,7 @@ export default function ArsenalSheet({ arsenal, leader, archetype, campaign, rul
             </div>
             <div className="sheet__identity">
               <Field label="Crew card" value={effect?.name || ''} />
-              <Field label="Totem" value="" />
+              <Field label="Totem" value={totem?.name || ''} />
             </div>
 
             <div className="sheet__stats">
@@ -260,6 +322,9 @@ export default function ArsenalSheet({ arsenal, leader, archetype, campaign, rul
 
             <HealthTrack health={archetype.stats.health} />
             <div className="sheet__note">Base {leader.base}mm · Health {archetype.stats.health}</div>
+            {leaderInjuries.length > 0 && (
+              <div className="sheet__note">Injuries — {leaderInjuries.join(', ')}</div>
+            )}
           </section>
 
           <section>
@@ -272,28 +337,48 @@ export default function ArsenalSheet({ arsenal, leader, archetype, campaign, rul
         </div>
 
         <h2 className="sheet__h2 sheet__h2--spaced">Totem stat card</h2>
-        {/* Totems are not modelled yet (see CLAUDE.md known issues), so this is
-            ruled and left blank rather than omitted — the official sheet has
-            one, and a player with a totem needs somewhere to write it. */}
+        {/* Filled once a tier-3 advancement grants a totem, ruled and blank
+            until then — the official sheet has the card either way, and a
+            player who gains one mid-evening needs somewhere to write it. Its
+            keywords are the leader's by rule, so they are printed from the
+            arsenal rather than stored a second time. */}
         <div className="sheet__cols">
           <section>
-            <Field label="Totem name" value="" wide />
-            <Field label="Keyword(s)" value="" wide />
-            <Field label="Characteristic(s)" value="" wide />
+            <Field label="Totem name" value={totem?.name || ''} wide />
+            <Field label="Keyword(s)" value={totem ? keywords.join(' · ') : ''} wide />
+            <Field
+              label="Characteristic(s)"
+              value={totem ? [...(totem.characteristics || []), 'Totem'].join(', ') : ''}
+              wide
+            />
             <div className="sheet__identity">
-              <Field label="Faction" value="" />
-              <Field label="Cost" value="" />
+              <Field label="Faction" value={totem ? factionLabel(arsenal.faction) : ''} />
+              <Field label="Cost" value={totem ? '—' : ''} />
             </div>
             <div className="sheet__stats">
-              {['Df', 'Wp', 'Sp', 'Sz'].map((k) => (
+              {[['Df', totem?.stats.df], ['Wp', totem?.stats.wp],
+                ['Sp', totem?.stats.sp], ['Sz', totem?.size]].map(([k, v]) => (
                 <div className="sheet__stat" key={k}>
                   <span className="sheet__stat-k">{k}</span>
-                  <span className="sheet__stat-v">&nbsp;</span>
+                  <span className="sheet__stat-v">{v ?? ' '}</span>
                 </div>
               ))}
             </div>
             <h3 className="sheet__h3">Abilities</h3>
-            <Ruled n={6} numbered={false} />
+            <Ruled
+              n={Math.max(6, totemAdvancements.length)}
+              values={totemAdvancements.map((a) => `${a.name} — ${a.tableName}`)}
+              numbered={false}
+            />
+            {totem && (
+              <>
+                <HealthTrack health={totem.stats.health} />
+                <div className="sheet__note">
+                  Base {totem.base}mm · Health {totem.stats.health}
+                  {totem.tableValue != null && ` · totem table ${totem.tableValue}, p.52`}
+                </div>
+              </>
+            )}
           </section>
           <section>
             <h3 className="sheet__h3">Actions</h3>

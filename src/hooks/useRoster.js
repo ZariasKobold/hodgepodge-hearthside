@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from 'react'
 import { registry, throttledMap, RegistryError, loadLocalRegister } from '../lib/api.js'
-import { toIndexedModel, isSelectionSource, isVersatile, totemSlugs } from '../lib/indexing.js'
+import { toIndexedModel, isSelectionSource, isVersatile } from '../lib/indexing.js'
 import { registerFaction } from '../data/factions.js'
 import { save, load } from '../lib/storage.js'
 
@@ -50,20 +50,18 @@ export function useRoster() {
       try {
         const { models: records = [] } = await loadLocalRegister()
         const indexed = records.map(toIndexedModel)
-        const totems = totemSlugs(indexed)
-        const mark = (m) => ({ ...m, isTotem: totems.has(m.slug) })
         const collected = new Map()
 
         for (const keyword of wanted) {
           indexed
             .filter((m) => m.keywords.includes(keyword) && isSelectionSource(m))
-            .forEach((m) => collected.set(m.slug, mark(m)))
+            .forEach((m) => collected.set(m.slug, m))
         }
         if (faction) {
           const registerSlug = registerFaction(faction)
           indexed
             .filter((m) => m.faction === registerSlug && isVersatile(m) && isSelectionSource(m))
-            .forEach((m) => { if (!collected.has(m.slug)) collected.set(m.slug, mark(m)) })
+            .forEach((m) => { if (!collected.has(m.slug)) collected.set(m.slug, m) })
         }
 
         setModels([...collected.values()])
@@ -80,9 +78,11 @@ export function useRoster() {
       const collected = new Map()
 
       for (const keyword of wanted) {
-        // Version in the key: the cached shape gained `isTotem`, and without a
-        // bump every browser holding an old cache would keep offering totems as
-        // selection sources forever, since nothing expires these.
+        // The version in the key is deliberately NOT bumped for the v0.16.0
+        // totem change. Old caches were built by an `isSelectionSource` that
+        // already dropped every totem — via the cost test, which catches them
+        // all — so no cached roster contains one. Bumping would re-fetch a
+        // donation-funded register for a result identical to what is on disk.
         const cacheKey = `roster:2:${keyword}`
         const cached = load(cacheKey)
         if (cached) {
@@ -92,9 +92,6 @@ export function useRoster() {
 
         const data = await registry.keyword(keyword, { signal: controller.signal })
         const indexed = (data.characters || []).map(toIndexedModel)
-        // Built from the UNFILTERED list: a totem is named by the character
-        // that owns it, and that owner has to still be present to name it.
-        const totems = totemSlugs(indexed)
         let roster = indexed.filter(isSelectionSource)
 
         // The keyword endpoint may return thin records without actions.
@@ -117,9 +114,11 @@ export function useRoster() {
           roster = roster.map((m) => byslug.get(m.slug) || m)
         }
 
-        // After the detail refill, which replaces whole records and would
-        // otherwise drop the mark.
-        roster = roster.map((m) => ({ ...m, isTotem: totems.has(m.slug) }))
+        // The detail refill is also where `characteristics` arrives — the
+        // keyword index does not carry it — so a totem that slipped past the
+        // thin record's cost test is caught here rather than reaching the
+        // picker.
+        roster = roster.filter(isSelectionSource)
 
         save(cacheKey, roster)
         roster.forEach((m) => collected.set(m.slug, m))
@@ -168,10 +167,7 @@ async function loadVersatileFor(faction, signal, setProgress) {
   })
 
   const indexed = records.map(toIndexedModel)
-  const totems = totemSlugs(indexed)
-  const roster = indexed
-    .filter((m) => isVersatile(m) && isSelectionSource(m))
-    .map((m) => ({ ...m, isTotem: totems.has(m.slug) }))
+  const roster = indexed.filter((m) => isVersatile(m) && isSelectionSource(m))
 
   save(cacheKey, roster)
   return roster

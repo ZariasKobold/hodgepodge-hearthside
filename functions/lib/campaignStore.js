@@ -141,10 +141,21 @@ export async function putCampaign(userId, campaign, env) {
   if (arsenal) {
     statements.push(
       env.DB.prepare(
+        /**
+         * `injuries`, `equipment` and `totem` joined the projection in 0003.
+         *
+         * They are not for this owner — `doc` already holds them and is what
+         * their own client reads. They are here because the shared page reads
+         * the *columns* and never `doc`: a member is entitled to the arsenal,
+         * which the rules make public (p.14), not to the whole campaign.
+         * Anything not projected here is invisible to other players, which
+         * makes this list the privacy boundary as much as a schema.
+         */
         `INSERT INTO arsenals
            (id, campaign_id, user_id, faction, keyword_a, keyword_b, scrip,
-            leader, crew_card, total_cost, updated_at)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?)
+            leader, crew_card, total_cost, updated_at,
+            injuries, equipment, totem)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
          ON CONFLICT(id) DO UPDATE SET
            faction    = excluded.faction,
            keyword_a  = excluded.keyword_a,
@@ -153,7 +164,10 @@ export async function putCampaign(userId, campaign, env) {
            leader     = excluded.leader,
            crew_card  = excluded.crew_card,
            total_cost = excluded.total_cost,
-           updated_at = excluded.updated_at
+           updated_at = excluded.updated_at,
+           injuries   = excluded.injuries,
+           equipment  = excluded.equipment,
+           totem      = excluded.totem
          WHERE arsenals.user_id = ?`
       ).bind(
         arsenal.id,
@@ -167,6 +181,9 @@ export async function putCampaign(userId, campaign, env) {
         JSON.stringify(arsenal.crewCard || {}),
         (arsenal.models || []).reduce((sum, m) => sum + (m.cost || 0), 0),
         now,
+        JSON.stringify(arsenal.injuries || []),
+        JSON.stringify(arsenal.equipment || []),
+        arsenal.totem ? JSON.stringify(arsenal.totem) : null,
         userId
       )
     )
