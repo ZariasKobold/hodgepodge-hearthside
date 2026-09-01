@@ -16,6 +16,7 @@ import Archetype from './components/steps/Archetype.jsx'
 import Loadout from './components/steps/Loadout.jsx'
 import Record from './components/steps/Record.jsx'
 import SignInGate from './components/SignInGate.jsx'
+import BuildStamp from './components/BuildStamp.jsx'
 import ArsenalLibrary from './components/ArsenalLibrary.jsx'
 import Campaign from './components/steps/Campaign.jsx'
 import Arsenal from './components/steps/Arsenal.jsx'
@@ -129,7 +130,12 @@ export default function App() {
    * pushed it up to the account. "Empty" and "not arrived yet" are different
    * answers and only one of them means build someone.
    */
-  const shelfSettled = sync.settled
+  /**
+   * `knowsShelf`, not `settled`. A failed sync settles too, and reading a
+   * failed sync as "this account has no campaigns" is how the app came to
+   * invent a blank leader over the top of somebody's real one.
+   */
+  const shelfSettled = sync.knowsShelf
 
   useEffect(() => {
     if (!admitted) return
@@ -326,6 +332,7 @@ export default function App() {
         )}
 
         <p className="colophon">{LEGAL}</p>
+        <BuildStamp />
       </main>
     </div>
     </HankProvider>

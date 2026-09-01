@@ -1354,3 +1354,15 @@ body::after {
 @media (max-width: 620px) {
   .shared__cols { grid-template-columns: 1fr; }
 }
+
+/* The build stamp. Quieter than the colophon above it — it is for the one
+   person trying to work out what is deployed, not for readers. */
+.buildstamp {
+  display: flex; gap: 7px; flex-wrap: wrap;
+  font-family: var(--data); font-size: 10px; letter-spacing: 1px;
+  color: var(--faint); opacity: .65;
+  margin: 10px 0 0;
+}
+.buildstamp__commit { color: var(--mute); }
+.buildstamp__sep { opacity: .5; }
+@media print { .buildstamp { display: none; } }

@@ -2513,3 +2513,133 @@ remote database**, which still has only the owner's real account on it.
   right there and the numbers are now on screen together; a "you two can play a
   33-stone game" line is a small addition and the reason the rules make arsenals
   public in the first place.
+
+---
+
+### Session 39 — v0.18.0
+Date: 2026-08-31
+
+**fix: the sync bug that lost a portrait, and a build stamp in the footer**
+
+The owner signed in on Chrome and found none of the leaders they had built on
+mobile and in Edge, and noticed a leader portrait had gone missing. Both came
+from one root cause, and the investigation is worth recording because the code
+looked correct.
+
+#### The stale closure
+
+`useSync`'s `reconcile` was `useCallback(async () => {…}, [onChanged])`.
+`onChanged` is `useCampaign`'s `refresh`, a `useCallback` with an empty
+dependency list — stable for the life of the app. So `reconcile` was built
+**once, on the first render, while `useAuth` was still loading and `user` was
+null**, and every reconcile afterwards ran against that closure.
+
+The effect could not notice. Its own closure is fresh, so it checked a real
+user, set `reconciledFor`, and called a function that could not see one. Then:
+
+- `belongsTo(c, user?.id)` matched only unclaimed campaigns
+- the pull loop hit `{ ...campaign, ownerUserId: user.id }` → TypeError on null
+- nothing caught it: `remote.list()` had a try/catch, everything after it had
+  none
+- unhandled rejection, status stuck on `syncing`, `at` never stamped, `settled`
+  never true
+
+From outside that looked like nothing happening: **"Checking your account for
+campaigns…" for ever, 0 on file**, while the campaign sat on the server intact.
+
+`mirror`'s deps were correct, so **pushes worked and pulls did not**. Data went
+up and never came back down, which is exactly the shape of the owner's report.
+
+Reproduced by reverting only the deps: with a campaign waiting on the server,
+the app not only failed to pull it but **invented a blank leader** and dropped
+into the creation wizard.
+
+#### What that exposed on the way past
+
+Fixing the hang meant a failed reconcile now stamps `at`, so it settles. That
+made `App`'s "no campaigns yet, build someone" branch fire on a *failed* sync —
+inventing a blank leader because a network call failed. `settled` and "we know
+what is on the shelf" turn out to be different questions, so `useSync` now
+exposes **`knowsShelf`** (settled **and** not failed) and `App` uses that.
+
+#### The portrait, and optimistic concurrency
+
+`planSync` compares `updatedAt` carefully to decide which copy of a campaign
+survives a reconciliation — and `mirror` then pushed on **every local save with
+no comparison at all**. With pulls broken, Edge held a copy that had never
+learned about the portrait, and the next save there overwrote the server's good
+copy with it.
+
+`putCampaign` now takes a `baseVersion` and refuses a write from a client that
+has not seen the copy it is replacing, returning 409 with the server's version.
+Two refusals, and the second matters more than it looks:
+
+- the row moved on since the client last saw it → stale
+- a row exists and the client has **no** base version → also stale. It has
+  never seen the server's copy, so it cannot be replacing it knowingly. Every
+  existing install hits this once, pulls, and carries on — which is the
+  reconciliation whose absence caused the loss.
+
+**`baseVersion` is the version the server last told the client about, never a
+timestamp the client invented.** That is the whole point: a client clock can be
+wrong by minutes, but "the version I was handed" is not subject to skew at all.
+Proven by attacking it — a stale client claiming `updatedAt: 9999999999999` is
+still refused, because its clock is not consulted.
+
+#### The version had to leave the document
+
+First attempt stored it as `campaign.syncedAt`, and testing the real path caught
+it inside a minute: **the next keystroke wiped it**. `useCampaign` holds the
+campaign in React state and writes that state to storage on every edit, and that
+state has never heard of a field the sync layer added behind it. So every save
+after the first pushed with no base version, was refused, and could never
+recover — a permanent 409 loop, visible in the network log as two consecutive
+conflicts on the same campaign.
+
+It does not belong in the doc on principle either: it is per-device sync
+bookkeeping, not campaign data, and would otherwise ride into the JSON export
+and into `doc` on the server, where it means nothing and is wrong the moment the
+file is imported elsewhere. It now lives under its own `campaign-version:<id>`
+key, and is forgotten when a campaign is discarded — or a later re-import of the
+same id would look like a copy this device had already seen.
+
+Two bugs found by their own tests, both worth keeping:
+
+- `typeof NaN === 'number'` is true, and `existing.updated_at > NaN` is false,
+  so a NaN base version read as "no conflict" and waved the write through. Now
+  `Number.isFinite`.
+- An unanchored `/UPDATE/i` in a test matched the `updated_at` column in the
+  gate's own SELECT, so an assertion that nothing was written looked like a
+  failure. Anchored.
+
+#### The build stamp
+
+Owner request, and it earns its place: **is the thing I just pushed the thing I
+am looking at?** could not be answered from the page. `vite.config.js` now bakes
+version, commit and build date in, and `BuildStamp` prints them under the
+colophon.
+
+The commit is the load-bearing half. A version number only moves when someone
+remembers to bump it — `package.json` was sitting at **0.8.0** while CLAUDE.md
+said 0.17.0, found while wiring this up and now corrected to 0.18.0 — whereas
+`CF_PAGES_COMMIT_SHA` is set by Cloudflare on every build and cannot be
+forgotten. If the footer's commit matches what was pushed, the deploy landed.
+Locally it reads `dev · local`, which is honest: Vite built it from the working
+tree, uncommitted changes and all.
+
+328 tests, build clean. Verified against a local D1 over real HTTP: the exact
+attack that destroyed the portrait is refused and the portrait survives; a
+client holding the current version writes successfully; replaying that same
+version is then refused; a fresh device pulls and records the version; and three
+consecutive saves push cleanly where the first attempt produced two 409s.
+
+#### Still open
+
+- **`updatedAt` is still a client clock** where `planSync` uses it to choose a
+  winner. The version check stops a *blind* overwrite, which was the mechanism
+  that lost the portrait, but two devices editing the same campaign at once
+  still resolve by comparing clocks. A monotonic server-assigned version on
+  every campaign would retire that; the pieces are now in place for it.
+- **The lost portrait is not recoverable from the server.** The owner was told
+  to export the JSON from whichever device still holds it before letting it
+  sync, since a pull would otherwise overwrite the last copy.

@@ -1,10 +1,10 @@
 # CLAUDE.md — Hodgepodge Hearthside project context
 
-<!-- HH v0.17.0 | Last updated: 2026-08-31 -->
+<!-- HH v0.18.0 | Last updated: 2026-08-31 -->
 
 ---
 
-## Current Version: 0.17.0
+## Current Version: 0.18.0
 
 ## Last Updated: 2026-08-31
 
@@ -98,7 +98,7 @@ Save to `docs/audits/audit-vX.Y.Z.md`.
 
 ## ⚠️ NEXT SESSION — pending
 
-### Where things stand — v0.17.0
+### Where things stand — v0.18.0
 
 Sessions 14–38 took this from a local-only leader builder to a synced,
 multi-leader campaign tracker that plays a whole campaign week, game and
@@ -119,9 +119,10 @@ aftermath. Shipped and live:
 | **Hank has a face** | v0.9.1. Owner-drawn 16-bit medallion, served as a 33 KB WebP beside every line he speaks. See `docs/ART_BRIEF.md`. |
 | **The aftermath** | v0.16.0. All six phases as one stateful flow, walked once per game, the record stored on the game so it survives a closed tab and syncs like anything else. Barter with the full equipment table, leader advancement across all six tables, Dr. Mo, injury flips with their reflip conditions, and annihilation checked at the end of phase 6. |
 | **The week is yours** | v0.17.0. Calendar or manual, per campaign. Forward *and back* in both. Campaign length, week length and start date are all editable. Calendar mode still writes an offset, not a week, so it keeps advancing underneath. |
+| **The build stamp** | v0.18.0. Version, commit and build date in the footer, baked in by `vite.config.js`. The commit is the half that matters — `CF_PAGES_COMMIT_SHA` cannot be forgotten the way a version bump can, and it answers "is what I pushed what is live?" from the page itself. |
 | **Membership** | v0.17.0. Owner-issued single-use invites, two gates (redeem → pending → host admits), per-campaign nicknames, opt-in Discord identity, and a read-only shared arsenal page. Writes were **not** widened — see below. |
 
-317 tests.
+328 tests.
 
 ### The book is on disk, and must not be committed
 
@@ -466,10 +467,19 @@ with a real "you paid nothing" moment could use it.
   after the player has already described the game. A §2 violation sitting in the
   data rather than in the code. Left alone this session because it is the
   owner's voice to rewrite, and any change to it is a dual-file change (§1).
-- **`updatedAt` decides which copy of a campaign survives a sync**, and it is a
-  client clock. Two devices with badly skewed clocks could let an older edit
-  win. Acceptable for one player on two devices; revisit before a campaign has
-  several people writing.
+- **`updatedAt` is still a client clock** where `planSync` uses it to choose a
+  winner between two copies. v0.18.0 stopped the *blind* overwrite — the server
+  now refuses a write from a client that has not seen the copy it is replacing
+  (`baseVersion`, see `putCampaign`) — and that was the mechanism that destroyed
+  a leader portrait. But two devices editing the same campaign at once still
+  resolve by comparing clocks. A monotonic server-assigned version per campaign
+  would retire it; the pieces are in place.
+- **The version a device last saw lives in `campaign-version:<id>`, never on the
+  campaign.** It was on the doc for about ten minutes and the next keystroke
+  wiped it: `useCampaign` writes React state to storage on every edit, and that
+  state does not know about fields the sync layer adds behind it. It is also not
+  campaign data — on the doc it would ride into the JSON export and into `doc`
+  on the server, where it is meaningless and wrong after an import.
 - Project lives inside OneDrive. Usually fine, but OneDrive syncing
   `node_modules` mid-install can cause file-lock errors. First suspect for any
   inexplicable build failure.
@@ -824,7 +834,7 @@ every session. `docs/VERSION_HISTORY.md` holds how it got this way.
 npm install
 cp .env.example .env
 npm run dev      # Vite only — NO Functions, NO database. useAuth degrades to signed out.
-npm run test     # 317 tests; `functions/` is in the run too, for the authz tests
+npm run test     # 328 tests; `functions/` is in the run too, for the authz tests
 npm run build    # production bundle — the dev proxy does NOT exist here
 npm run seed     # optional local register file; ask BiggerHat's maintainer first
 

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   saveCampaign, loadCampaign, campaignIds, removeCampaign,
   activeCampaignId, setActiveCampaignId, adoptLegacyCampaign,
-  load,
+  load, forgetVersion,
 } from '../lib/storage.js'
 import {
   createCampaign, createModel, createGame, createEquipment, createInjury,
@@ -149,6 +149,9 @@ export function useCampaign({ userId = null, userReady = true, onSaved, onRemove
 
   const discard = useCallback((id) => {
     removeCampaign(id)
+    // Or a later re-import of the same id would look like a copy this device
+    // had already seen, and be allowed to overwrite the server's.
+    forgetVersion(id)
     onRemoved?.(id)
     setIds(campaignIds())
     setOpenId((prev) => (prev === id ? null : prev))

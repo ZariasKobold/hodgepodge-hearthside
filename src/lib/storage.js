@@ -107,6 +107,23 @@ const INDEX_KEY = 'campaigns:index'
 const ACTIVE_KEY = 'campaigns:active'
 const LEGACY_SINGLE = 'campaign:current'
 
+/**
+ * The server version each campaign is known to be based on.
+ *
+ * Kept in its own key, **not on the campaign**, and the difference is not
+ * cosmetic. The first attempt stored it as `campaign.syncedAt` and it was wiped
+ * by the next keystroke: `useCampaign` holds the campaign in React state and
+ * writes that state to storage on every edit, and that state has never heard of
+ * a field the sync layer added behind it. Every save after the first therefore
+ * pushed with no base version, was refused as stale, and could never recover.
+ *
+ * It also does not belong in the doc on principle. This is per-device sync
+ * bookkeeping, not campaign data — it would otherwise ride into the JSON export
+ * and into `doc` on the server, where it means nothing and would be wrong the
+ * moment the file was imported somewhere else.
+ */
+const VERSION_PREFIX = 'campaign-version:'
+
 const campaignKey = (id) => `campaign:${id}`
 
 export function campaignIds() {
@@ -166,4 +183,21 @@ export function adoptLegacyCampaign() {
   saveCampaign(legacy)
   setActiveCampaignId(legacy.id)
   return legacy.id
+}
+
+/** The server version this device last saw for a campaign, or null. */
+export function knownVersion(id) {
+  const v = load(VERSION_PREFIX + id, null)
+  return Number.isFinite(v) ? v : null
+}
+
+/** Records the version the server just told us about. */
+export function rememberVersion(id, version) {
+  if (!id || !Number.isFinite(version)) return
+  save(VERSION_PREFIX + id, version)
+}
+
+/** Forgotten with the campaign, so a re-import is not mistaken for a known copy. */
+export function forgetVersion(id) {
+  if (id) remove(VERSION_PREFIX + id)
 }

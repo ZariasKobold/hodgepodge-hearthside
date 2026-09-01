@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { remote, planSync, SyncError } from '../lib/remote.js'
-import { saveCampaign, loadCampaign, campaignIds } from '../lib/storage.js'
+import { remote, planSync, stampOwner, SyncError } from '../lib/remote.js'
+import {
+  saveCampaign, loadCampaign, campaignIds, knownVersion, rememberVersion,
+} from '../lib/storage.js'
 import { belongsTo } from '../lib/campaignShape.js'
 
 /**
@@ -36,7 +38,38 @@ export function useSync({ user, available, onChanged }) {
     return () => { alive.current = false }
   }, [])
 
+  /**
+   * `user` and `available` are in the dependency list, and that is the whole
+   * fix for a bug that lost work.
+   *
+   * They were not, and the deps were `[onChanged]` alone — which App passes as
+   * `useCampaign`'s `refresh`, a `useCallback` with an empty dependency list
+   * and therefore stable for the life of the app. So this callback was built
+   * exactly once, on the first render, when `useAuth` is still loading and
+   * `user` is null. Every later reconcile ran against that first closure and
+   * saw `user === null` no matter who had signed in.
+   *
+   * The effect below could not notice: its own closure is fresh, so it checked
+   * a real user, set `reconciledFor`, and called a function that could not see
+   * one. Everything then failed in a way that looked like nothing happening —
+   * `belongsTo(c, undefined)` matched only unclaimed campaigns, and the pull
+   * loop threw on `user.id` with no catch around it, leaving the status stuck
+   * on `syncing` for ever.
+   *
+   * What that looked like from outside: sign in on a second device, and the
+   * shelf says "Checking your account for campaigns…" and stays empty, while
+   * the campaign is sitting on the server perfectly intact. `mirror` was
+   * unaffected — its deps are correct — so pushes worked and pulls did not,
+   * which is why the data got up but never came back down.
+   */
   const reconcile = useCallback(async () => {
+    // The guard the effect cannot provide: it holds a fresh `user`, this holds
+    // whatever it was built with, and only this one can check the one it will
+    // actually use.
+    if (!user?.id) {
+      setState((s) => ({ ...s, status: 'offline', error: null }))
+      return
+    }
     setState((s) => ({ ...s, status: 'syncing', error: null }))
 
     /**
@@ -68,21 +101,44 @@ export function useSync({ user, available, onChanged }) {
 
     const { pull, push, adopted } = planSync(mine, theirs)
 
-    // Pull first. If the push half fails, the browser has still gained whatever
-    // the account held, and nothing local was thrown away to get it.
-    // Anything the server hands back is this account's by definition — it was
-    // fetched with their session — so stamp it on the way in.
+    /**
+     * Pull first. If the push half fails, the browser has still gained whatever
+     * the account held, and nothing local was thrown away to get it.
+     * Anything the server hands back is this account's by definition — it was
+     * fetched with their session — so stamp it on the way in.
+     *
+     * Wrapped, because this loop was the one that threw. An exception here used
+     * to escape `reconcile` entirely: `remote.list` had its own catch, and
+     * everything after it had none, so a throw became an unhandled rejection
+     * and the status stayed on `syncing` for ever. **A sync that fails has to
+     * say so** — the shelf's "Checking your account for campaigns…" is drawn
+     * from that status, and a spinner that never resolves is the one failure
+     * mode a local-first app should not have.
+     */
+    let pulled = 0
+    let pullFailure = null
     for (const campaign of pull) {
-      saveCampaign({ ...campaign, ownerUserId: user.id }, { keepTimestamp: true })
+      try {
+        saveCampaign(stampOwner(campaign, user.id), { keepTimestamp: true })
+        // The version we were just handed is, by definition, the version this
+        // copy is now based on.
+        rememberVersion(campaign.id, campaign.updatedAt)
+        pulled += 1
+      } catch (err) {
+        pullFailure = pullFailure || err.message
+      }
     }
 
     let pushed = 0
     let failure = null
     for (const campaign of push) {
       try {
-        await remote.put(campaign)
-        // Claimed now that the account has actually accepted it.
-        saveCampaign({ ...campaign, ownerUserId: user.id }, { keepTimestamp: true })
+        const { saved } = await remote.put(campaign, { baseVersion: knownVersion(campaign.id) })
+        // Claimed now that the account has actually accepted it, and recorded
+        // at the version it assigned — without which the very next mirror
+        // would be refused as stale.
+        saveCampaign(stampOwner(campaign, user.id), { keepTimestamp: true })
+        rememberVersion(campaign.id, saved?.updatedAt)
         pushed += 1
       } catch (err) {
         // Carry on rather than stop. An earlier version broke out of this loop
@@ -93,16 +149,19 @@ export function useSync({ user, available, onChanged }) {
     }
 
     if (!alive.current) return
+    const trouble = pullFailure || failure
     setState({
-      status: failure ? 'failed' : 'synced',
+      status: trouble ? 'failed' : 'synced',
       pushed,
-      pulled: pull.length,
+      pulled,
       adopted: adopted.length,
-      error: failure,
+      error: trouble,
+      // Always stamped, success or failure. `settled` is derived from `at`, so
+      // leaving it null on a bad reconcile is what hangs the shelf.
       at: Date.now(),
     })
-    if (pull.length > 0) onChanged?.()
-  }, [onChanged])
+    if (pulled > 0) onChanged?.()
+  }, [onChanged, user, available])
 
   useEffect(() => {
     if (!available || !user) {
@@ -126,10 +185,38 @@ export function useSync({ user, available, onChanged }) {
    */
   const mirror = useCallback((campaign) => {
     if (!user || !available || !campaign?.id) return
-    remote.put(campaign)
-      .then(() => alive.current && setState((s) => ({ ...s, status: 'synced', error: null, at: Date.now() })))
-      .catch((err) => alive.current && setState((s) => ({ ...s, status: 'failed', error: err.message })))
-  }, [user, available])
+    remote.put(campaign, { baseVersion: knownVersion(campaign.id) })
+      .then(({ saved }) => {
+        if (!alive.current) return
+        // Move the base version forward, or the next save conflicts with the
+        // copy this very request just created.
+        rememberVersion(campaign.id, saved?.updatedAt)
+        setState((s) => ({ ...s, status: 'synced', error: null, at: Date.now() }))
+      })
+      .catch((err) => {
+        if (!alive.current) return
+        /**
+         * A conflict is not a failure, and must not be retried.
+         *
+         * The server refused because this copy is behind — which is the guard
+         * that exists precisely because blindly retrying is what destroyed a
+         * leader portrait. So the local edit stays exactly where it is, and a
+         * full reconcile decides what happens to it: `planSync` compares
+         * `updatedAt` and either pushes this copy forward or pulls the newer
+         * one down. Nothing here overwrites anything.
+         */
+        if (err.stale) {
+          setState((s) => ({
+            ...s,
+            status: 'syncing',
+            error: null,
+          }))
+          reconcile()
+          return
+        }
+        setState((s) => ({ ...s, status: 'failed', error: err.message }))
+      })
+  }, [user, available, reconcile])
 
   const forget = useCallback((id) => {
     if (!user || !available) return
@@ -155,5 +242,23 @@ export function useSync({ user, available, onChanged }) {
    */
   const settled = !user || !available ? true : state.at !== null && state.status !== 'syncing'
 
-  return { ...state, settled, reconcile, mirror, forget }
+  /**
+   * Do we actually **know** what is on this account's shelf?
+   *
+   * Different from `settled`, and the difference is the whole point. `settled`
+   * answers "has the reconcile stopped running", which is now true even when it
+   * stopped by failing — deliberately, because the alternative is the spinner
+   * that never resolves. But "the sync failed" and "this account has no
+   * campaigns" are not the same answer, and only one of them means it is safe
+   * to act as though the shelf is empty.
+   *
+   * Caught while reproducing the stale-closure bug: with the pull failing but
+   * settling, the app read an empty shelf as a new player and **invented a
+   * blank leader**, dropping straight into the creation wizard while a real
+   * campaign sat on the server. Inventing data because a network call failed is
+   * a worse outcome than showing nothing.
+   */
+  const knowsShelf = settled && state.status !== 'failed'
+
+  return { ...state, settled, knowsShelf, reconcile, mirror, forget }
 }

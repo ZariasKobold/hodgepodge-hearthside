@@ -89,14 +89,15 @@ describe('writing someone else’s campaign', () => {
     // Exactly one statement: the ownership check. Nothing was written, and
     // crucially nothing was deleted — this is the regression that mattered.
     expect(db.log).toHaveLength(1)
-    expect(db.log[0].sql).toContain('SELECT owner_user_id FROM campaigns')
+    expect(db.log[0].sql).toContain('SELECT owner_user_id, updated_at FROM campaigns')
     expect(db.log.some((e) => /DELETE/i.test(e.sql))).toBe(false)
   })
 
-  it('allows the owner through', async () => {
-    const db = fakeDB({ rows: { first: { owner_user_id: 'usr_owner' } } })
-    const result = await putCampaign('usr_owner', CAMPAIGN, db)
+  it('allows the owner through when they have seen the current version', async () => {
+    const db = fakeDB({ rows: { first: { owner_user_id: 'usr_owner', updated_at: 500 } } })
+    const result = await putCampaign('usr_owner', CAMPAIGN, db, { baseVersion: 500 })
     expect(result.forbidden).toBeUndefined()
+    expect(result.stale).toBeUndefined()
     expect(result.id).toBe('cmp_1')
   })
 
@@ -104,6 +105,66 @@ describe('writing someone else’s campaign', () => {
     const db = fakeDB({ rows: { first: null } })
     const result = await putCampaign('usr_new', CAMPAIGN, db)
     expect(result.forbidden).toBeUndefined()
+    expect(result.stale).toBeUndefined()
+  })
+})
+
+/**
+ * Optimistic concurrency, added after a real loss.
+ *
+ * `planSync` compares `updatedAt` carefully to decide which copy of a campaign
+ * survives — and `mirror` then pushed on every local save without comparing
+ * anything at all. A device holding a stale copy overwrote a newer one the
+ * moment its owner changed a single field, and a leader portrait added on
+ * another device was destroyed exactly that way.
+ *
+ * `baseVersion` is the version the **server** last told the client about, never
+ * a timestamp the client invented, so none of this depends on a client clock.
+ */
+describe('a write from a client that has not seen the current copy', () => {
+  const row = (updated_at) => ({ rows: { first: { owner_user_id: 'usr_owner', updated_at } } })
+
+  it('is refused when the row has moved on', async () => {
+    const db = fakeDB(row(900))
+    const result = await putCampaign('usr_owner', CAMPAIGN, db, { baseVersion: 500 })
+    expect(result).toEqual({ stale: true, serverUpdatedAt: 900 })
+  })
+
+  it('is refused when the client has no base version at all', async () => {
+    // It has never seen the server's copy, so it cannot be replacing it
+    // knowingly. Every existing install hits this once and then reconciles.
+    const db = fakeDB(row(900))
+    expect((await putCampaign('usr_owner', CAMPAIGN, db)).stale).toBe(true)
+    expect((await putCampaign('usr_owner', CAMPAIGN, db, { baseVersion: null })).stale).toBe(true)
+  })
+
+  it('refuses before writing anything, and before deleting anything', async () => {
+    const db = fakeDB(row(900))
+    await putCampaign('usr_owner', CAMPAIGN, db, { baseVersion: 500 })
+    expect(db.log).toHaveLength(1)
+    // Anchored: an unanchored /UPDATE/i matches the `updated_at` column in the
+    // gate's own SELECT, which made this assertion look like a failure.
+    expect(db.log.some((e) => /^\s*(INSERT|DELETE|UPDATE)/i.test(e.sql))).toBe(false)
+  })
+
+  it('allows a client that is exactly current, or somehow ahead', async () => {
+    expect((await putCampaign('usr_owner', CAMPAIGN, fakeDB(row(500)), { baseVersion: 500 })).stale).toBeUndefined()
+    expect((await putCampaign('usr_owner', CAMPAIGN, fakeDB(row(400)), { baseVersion: 500 })).stale).toBeUndefined()
+  })
+
+  it('ignores a base version that is not a number', async () => {
+    // A client cannot talk its way past this with a string or an object.
+    for (const bad of ['500', {}, [], true, NaN]) {
+      const db = fakeDB(row(500))
+      expect((await putCampaign('usr_owner', CAMPAIGN, db, { baseVersion: bad })).stale).toBe(true)
+    }
+  })
+
+  it('still refuses a stranger first — ownership outranks freshness', async () => {
+    const db = fakeDB({ rows: { first: { owner_user_id: 'usr_owner', updated_at: 500 } } })
+    const result = await putCampaign('usr_intruder', CAMPAIGN, db, { baseVersion: 500 })
+    // Not `stale`, which would leak that the row exists and is current.
+    expect(result).toEqual({ forbidden: true })
   })
 })
 

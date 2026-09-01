@@ -77,7 +77,7 @@ export async function getCampaign(userId, campaignId, env) {
  * the ON CONFLICT clause re-asserts the owner so an existing row cannot be
  * hijacked by id collision either.
  */
-export async function putCampaign(userId, campaign, env) {
+export async function putCampaign(userId, campaign, env, { baseVersion = null } = {}) {
   requireSubject(userId, 'putCampaign')
 
   /**
@@ -94,11 +94,50 @@ export async function putCampaign(userId, campaign, env) {
    * different. It costs one query.
    */
   const existing = await env.DB.prepare(
-    'SELECT owner_user_id FROM campaigns WHERE id = ?'
+    'SELECT owner_user_id, updated_at FROM campaigns WHERE id = ?'
   ).bind(campaign.id).first()
 
   if (existing && existing.owner_user_id !== userId) {
     return { forbidden: true }
+  }
+
+  /**
+   * Optimistic concurrency: refuse a write from a client that has not seen the
+   * copy it is about to replace.
+   *
+   * This write used to be unconditional, and that lost real work. `planSync`
+   * compares `updatedAt` carefully to decide which copy survives a
+   * reconciliation — and then `mirror` pushed on every local save without
+   * comparing anything at all, so a device holding a stale copy overwrote a
+   * newer one the moment its owner changed a single field. A leader portrait
+   * added on one device was destroyed exactly this way.
+   *
+   * `baseVersion` is the `updated_at` **the server last told this client
+   * about** — never a timestamp the client made up. That distinction is the
+   * point: a client clock can be wrong by minutes, but "the version I last
+   * saw" is a fact the client can only know by having been told, so it is not
+   * subject to clock skew at all. It comes from `syncedAt`, which is stamped
+   * only on a pull or on a successful push.
+   *
+   * Two refusals, and the second one matters more than it looks:
+   *
+   *   - the row moved on since the client last saw it → stale
+   *   - a row exists and the client has **no** base version → also stale. It
+   *     has never seen the server's copy, so it cannot be replacing it
+   *     knowingly. Every existing install hits this once after this ships,
+   *     pulls, and carries on — which is the correct reconciliation, and is
+   *     precisely the step whose absence caused the loss.
+   *
+   * A brand-new campaign has no row, so adoption is unaffected.
+   */
+  if (existing) {
+    // `Number.isFinite`, not `typeof === 'number'`: NaN is a number by typeof,
+    // and `existing.updated_at > NaN` is false — so a NaN would have read as
+    // "no conflict" and waved the write through. Caught by its own test.
+    const seen = Number.isFinite(baseVersion) ? baseVersion : null
+    if (seen === null || existing.updated_at > seen) {
+      return { stale: true, serverUpdatedAt: existing.updated_at }
+    }
   }
 
   const now = Date.now()

@@ -11,7 +11,9 @@ import {
  *
  *   GET    /api/campaigns          every campaign this account owns
  *   GET    /api/campaigns/:id      one of them
- *   PUT    /api/campaigns/:id      create or replace it
+ *   PUT    /api/campaigns/:id      create or replace it, if you have seen the
+ *                                  copy you are replacing — see `baseVersion`
+ *                                  in `putCampaign`. 409 if you have not.
  *   DELETE /api/campaigns/:id      remove it
  *
  * Unlike `/api/auth/me`, these **do** 401 when signed out. Signed out is a
@@ -70,10 +72,29 @@ export async function onRequest(context) {
       if (!Array.isArray(campaign.arsenals) || campaign.arsenals.length === 0) {
         return json({ message: 'A campaign needs at least one arsenal.' }, 400)
       }
-      const saved = await putCampaign(user.id, campaign, env)
+      const saved = await putCampaign(user.id, campaign, env, {
+        // The version the client last saw from us, or null if it has never
+        // seen one. Never a clock reading the client invented.
+        baseVersion: Number.isFinite(body.baseVersion) ? body.baseVersion : null,
+      })
       // 404 rather than 403, matching GET: whether an id exists is not a
       // question a stranger gets an answer to.
       if (saved?.forbidden) return json({ message: 'Not found.' }, 404)
+      /**
+       * 409, and the server's version with it.
+       *
+       * A conflict is not a failure — the client's copy is fine, it is simply
+       * behind — so this is neither a 4xx the client should give up on nor a
+       * 500. Handing back `serverUpdatedAt` lets the client reconcile without a
+       * second round trip to find out what it missed.
+       */
+      if (saved?.stale) {
+        return json({
+          stale: true,
+          serverUpdatedAt: saved.serverUpdatedAt,
+          message: 'This campaign has changed since you last saw it. Pull before pushing.',
+        }, 409)
+      }
       return json({ saved })
     }
 
