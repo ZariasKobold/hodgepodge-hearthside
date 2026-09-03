@@ -24,5 +24,81 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+
+    <!--
+      The service worker is registered HERE, in the document, and not in the
+      app bundle. That is deliberate and it is load-bearing.
+
+      Until v0.19.3 it was registered from `src/main.jsx`. A worker bug that
+      poisoned the asset cache then stopped the bundle from loading at
+      all — so the registration inside it never ran, the browser never checked
+      for a new worker, and the *fixed* worker could not reach the browsers that
+      needed it. The app was a white screen with no route back to a working
+      state. A registration that only runs when the app already works cannot
+      repair an app that does not.
+
+      `updateViaCache: 'none'` makes the browser fetch `/sw.js` from the network
+      rather than its HTTP cache, so a fix always gets seen.
+
+      Localhost is excluded: `npm run dev` serves `public/` too, and a worker in
+      front of the dev server caches whatever Vite happened to be serving, which
+      is the classic way to spend an afternoon on a stale bundle. Failure is
+      silent — the app works perfectly well without a worker.
+    -->
+    <script>
+      (function () {
+        var local = ['localhost', '127.0.0.1', '[::1]'].indexOf(location.hostname) !== -1
+        if (!('serviceWorker' in navigator) || local) return
+        window.addEventListener('load', function () {
+          navigator.serviceWorker
+            .register('/sw.js', { updateViaCache: 'none' })
+            .then(function (reg) { return reg.update() })
+            .catch(function () {})
+        })
+      })()
+    </script>
+
+    <!--
+      Last resort: an app that cannot boot at all.
+
+      `ErrorBoundary` catches a render that throws, which is a luxury that
+      assumes React started. Nothing covered the case where the bundle itself
+      never arrives — and that is exactly what a poisoned cache produced. This
+      notices an empty root, clears the two things that can cause it, and
+      reloads once.
+
+      Guarded to a single attempt per tab via sessionStorage, because a reload
+      loop on a broken deploy would be worse than the white screen it is trying
+      to cure. If one attempt does not fix it, the page stays blank and the
+      problem is a real one worth seeing.
+    -->
+    <script>
+      (function () {
+        var TRIED = 'hh:boot-recovery'
+        window.addEventListener('load', function () {
+          setTimeout(function () {
+            var root = document.getElementById('root')
+            if (root && root.childNodes.length > 0) return
+            try {
+              if (sessionStorage.getItem(TRIED)) return
+              sessionStorage.setItem(TRIED, String(Date.now()))
+            } catch (e) { return }
+            var done = function () { location.reload() }
+            var jobs = []
+            if (window.caches && caches.keys) {
+              jobs.push(caches.keys().then(function (ks) {
+                return Promise.all(ks.map(function (k) { return caches.delete(k) }))
+              }))
+            }
+            if ('serviceWorker' in navigator) {
+              jobs.push(navigator.serviceWorker.getRegistrations().then(function (rs) {
+                return Promise.all(rs.map(function (r) { return r.unregister() }))
+              }))
+            }
+            Promise.all(jobs).then(done, done)
+          }, 5000)
+        })
+      })()
+    </script>
   </body>
 </html>

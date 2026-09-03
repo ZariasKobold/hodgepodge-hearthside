@@ -3569,3 +3569,61 @@ UNVERIFIED: that the fix survives the *next* deploy's propagation window — whi
 is the only place the bug lives, and cannot be forced on demand.
 NEXT: unchanged — play a week on v3, then migration 0005 and the generalised
 sync, then the audit.
+
+---
+
+### Session 43 — v0.19.4
+Date: 2026-09-03
+
+**fix: the repair could not reach the browsers that needed it**
+
+v0.19.3 fixed the service worker's cache poisoning and deployed cleanly. Then
+the poisoned tab from the previous session was reloaded twice against the fixed
+production build and **stayed blank**, still holding `hh-v1-assets`.
+
+The fix was correct and undeliverable, which is a worse failure than the bug.
+
+#### Why
+
+`navigator.serviceWorker.register()` lived in `src/main.jsx` — inside the app
+bundle. A poisoned cache stops that bundle from loading. So:
+
+    poisoned cache → bundle does not load → register() never runs
+    → browser never checks for a new worker → poisoned cache
+
+A closed loop. The browser does check for worker updates on navigation, but it
+is throttled and may consult the HTTP cache, so it is not something to rely on
+for a page that is otherwise dead. Proved by hand: calling `reg.update()` from
+the console purged `hh-v1-*` and left `hh-v2-shell` immediately. The fix worked
+the moment anything asked for it. Nothing was asking.
+
+The general form is worth keeping: **a repair that only runs when the app
+already works cannot repair an app that does not.**
+
+#### Two changes
+
+**The worker is registered from `index.html`**, in an inline script that runs
+whether or not the module bundle arrives, with `updateViaCache: 'none'` so the
+browser fetches `/sw.js` from the network rather than its HTTP cache. `main.jsx`
+keeps a comment saying where it went and not to move it back.
+
+**A one-shot boot recovery**, also inline. `ErrorBoundary` catches a render that
+throws, which quietly assumes React started; nothing covered the bundle never
+arriving. Five seconds after load, if `#root` is still empty, it clears Cache
+Storage, unregisters every worker and reloads — **once**, guarded by
+sessionStorage, because a reload loop against a genuinely broken deploy would be
+worse than the white screen it is curing. One attempt, then it stops and lets
+the problem be seen.
+
+That second one is deliberately general. It does not know about service workers
+or MIME types; it knows the app did not start, and tries the two things that
+most often explain that. The specific bug is fixed in `sw.js`; this is the net
+under the next one.
+
+Files: `index.html`, `src/main.jsx`, `CLAUDE.md`, `package.json`
+RESOLVED: the delivery gap — the v0.19.3 fix can now reach a poisoned browser.
+UNVERIFIED: the recovery script firing in production against a genuinely
+poisoned cache. It was reasoned from a reproduction, not triggered on a stranger's
+device, and by its nature the situation cannot be manufactured on demand.
+NEXT: unchanged — play a week on v3, then migration 0005 and the generalised
+sync, then the audit.

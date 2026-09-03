@@ -1,10 +1,10 @@
 # CLAUDE.md — Hodgepodge Hearthside project context
 
-<!-- HH v0.19.3 | Last updated: 2026-09-03 -->
+<!-- HH v0.19.4 | Last updated: 2026-09-03 -->
 
 ---
 
-## Current Version: 0.19.3
+## Current Version: 0.19.4
 
 ## Last Updated: 2026-09-03
 
@@ -108,7 +108,7 @@ Save to `docs/audits/audit-vX.Y.Z.md`.
 
 ## ⚠️ NEXT SESSION — pending
 
-### Where things stand — v0.19.3
+### Where things stand — v0.19.4
 
 Sessions 14–38 took this from a local-only leader builder to a synced,
 multi-leader campaign tracker that plays a whole campaign week, game and
@@ -132,6 +132,7 @@ aftermath. Shipped and live:
 | **The build stamp** | v0.18.0. Version, commit and build date in the footer, baked in by `vite.config.js`. The commit is the half that matters — `CF_PAGES_COMMIT_SHA` cannot be forgotten the way a version bump can, and it answers "is what I pushed what is live?" from the page itself. |
 | **The v3 shape** | v0.19.2. Arsenals are top-level objects and campaigns are tables. **The app runs on this now** — `campaignShape.js` is deleted. The lift runs on load and was verified against all six live campaigns. ⚠ **Sync is off** while it beds in; see below. |
 | **The starting scrip** | v0.19.1. p. 15's grant is finally *paid* rather than only displayed. Reconciled from the week-0 models, so editing the starting arsenal adjusts the balance instead of paying twice; arsenals that predate the fix are **offered** the scrip they were never given. |
+| **Booting is defended** | v0.19.4. The worker is registered from `index.html`, not from the bundle — a registration living inside the bundle cannot repair a browser that cannot load the bundle, which is what made the v0.19.3 bug unrecoverable. Plus a one-shot recovery: an empty `#root` after five seconds clears caches, unregisters workers and reloads once, guarded by sessionStorage so it can never loop. |
 | **The service worker** | v0.19.3. It cached Pages' SPA fallback under asset URLs, so a browser that loaded mid-deploy got a **permanent white screen** no reload could clear. Live since v0.14.0, observed in production on 2026-09-03. Two guards now — never write HTML under a non-navigation request, never serve it either — plus a cache-version bump that purges anyone already poisoned. |
 | **Membership** | v0.17.0. Owner-issued single-use invites, two gates (redeem → pending → host admits), per-campaign nicknames, opt-in Discord identity, and a read-only shared arsenal page. Writes were **not** widened — see below. |
 

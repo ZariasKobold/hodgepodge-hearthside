@@ -9,20 +9,14 @@ createRoot(document.getElementById('root')).render(
 )
 
 /**
- * Register the service worker, which is what makes this installable.
+ * The service worker is **not** registered here any more — see `index.html`.
  *
- * **Production only.** `npm run dev` serves `public/` too, so registering there
- * would put a worker in front of the dev server and start caching whatever Vite
- * happened to be serving at the time — which is the classic way to spend an
- * afternoon debugging a stale bundle that no longer exists on disk.
+ * It used to be, and that was the flaw that made v0.19.3's cache-poisoning bug
+ * unrecoverable rather than merely annoying. A poisoned cache stops this bundle
+ * from loading at all, so a registration living inside it never runs, the
+ * browser never checks for a new worker, and the fixed worker can never reach
+ * the browsers that need it. The registration has to survive the bundle
+ * failing, so it lives in an inline script in the document instead.
  *
- * Failure is silent on purpose: the app works perfectly well without a worker,
- * and a browser that refuses one (private windows in some browsers, an
- * unsupported version) should not see an error about a feature it did not ask
- * for.
+ * Do not move it back.
  */
-if (import.meta.env.PROD && 'serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => undefined)
-  })
-}
