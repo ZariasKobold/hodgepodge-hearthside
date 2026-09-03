@@ -3498,3 +3498,74 @@ RESOLVED: step 3 of the v3 plan; `campaignShape.js` retired as the plan required
 UNVERIFIED: a real week at a real table; sync against the new shape (off on
 purpose); the lift running on a device that is not this one.
 NEXT: play a week, then migration 0005 and the generalised sync, then the audit.
+
+---
+
+### Session 42 — v0.19.3
+Date: 2026-09-03
+
+**fix: the service worker could cache a white screen, permanently**
+
+Found by deploying. v0.19.2 went to production, the apex served a blank page,
+and the console said a module script had arrived as `text/html`.
+
+Production was fine — `curl` showed the apex serving the bundle correctly at
+200 with `application/javascript`, and the deployment-specific URL rendered
+v0.19.3's predecessor perfectly. The fault was in the browser, and inspecting
+Cache Storage found it exactly:
+
+```
+hh-v1-assets → index-l4yJKYu6.js → content-type: text/html
+```
+
+#### The mechanism, which has been live since v0.14.0
+
+Cloudflare Pages answers a missing path with `index.html` and a **200**. That is
+correct for a navigation and poison for anything else. During the window in a
+deploy where the new `index.html` is live but its content-hashed bundle has not
+propagated to the edge, a browser asks for `/assets/index-abc123.js` and gets
+HTML with a 200. The worker's rule was `if (res.ok && res.type === 'basic')`
+— which that response satisfies — so it filed the HTML under the JS URL.
+
+Cache-first then served it forever. The module fails its MIME check, nothing
+renders, and **reloading cannot fix it**, because the cache is authoritative and
+the navigation that would refresh `index.html` is not what is broken. A white
+screen with no way out short of clearing site data.
+
+`sw.js` is untouched by the v3 work; this bug predates all of it and every
+deploy since v0.14.0 has rolled the dice. It is worth writing down that it was
+found by *watching a deploy land* rather than by reading the code — the header
+comment above the bug confidently explained why cache-first was safe here
+("either content-hashed or immutable"), and that reasoning is right about URLs
+and silent about status codes.
+
+#### The fix
+
+Two guards, because either alone leaves a hole:
+
+- **Never write** an HTML body under a non-navigation request.
+- **Never serve** one either — caches poisoned before this shipped are already
+  on people's disks, and the read path has to defend itself.
+
+`isHtml` reads the content type, because the status code says nothing here.
+
+`VERSION` goes to `hh-v2`, and that is what actually rescues anyone already
+broken: `activate` deletes every cache not in `KEEP`, so the poisoned entry goes
+out with the old names.
+
+#### `skipWaiting`, deliberately, this once
+
+The worker had none, and the header explained why: a new worker should wait
+rather than swap assets under a page that is mid-campaign. That reasoning holds
+in general and fails exactly here — a poisoned browser renders nothing, so the
+old worker keeps serving the poison through every reload and the fix never
+activates. Nobody is mid-campaign on a blank page, and the assets are
+content-hashed, so an early swap cannot mismatch them. The header now says all
+of that rather than quietly contradicting itself.
+
+Files: `public/sw.js`, `CLAUDE.md`, `package.json`
+RESOLVED: a white screen that no reload could clear, live since v0.14.0.
+UNVERIFIED: that the fix survives the *next* deploy's propagation window — which
+is the only place the bug lives, and cannot be forced on demand.
+NEXT: unchanged — play a week on v3, then migration 0005 and the generalised
+sync, then the audit.

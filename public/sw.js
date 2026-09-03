@@ -29,11 +29,40 @@
  * cache-first is safe: a new deploy produces new URLs, and `index.html` is
  * fetched network-first so those new URLs are found.
  *
- * No `skipWaiting`. A new worker waits for the old one to be released rather
- * than swapping assets under a page that is mid-campaign.
+ * ## Why an SPA fallback must never be cached as an asset — v0.19.3
+ *
+ * This worker shipped in v0.14.0 caching any `res.ok` same-origin response
+ * under the URL that was asked for. Cloudflare Pages answers a missing path
+ * with `index.html` and a **200**, which is right for navigation and poison for
+ * anything else — so during the window in a deploy where the new `index.html`
+ * is live but its hashed bundle has not propagated, the browser asks for
+ * `/assets/index-abc123.js`, receives HTML with a 200, and this worker files
+ * that HTML under the JS URL. Cache-first then serves it forever: the module
+ * fails its MIME check, nothing renders, and **reloading cannot fix it**
+ * because the cache is authoritative. A white screen with no way out.
+ *
+ * Observed in production on 2026-09-03, on the first load after a deploy.
+ *
+ * Two guards, because either alone leaves a hole. Nothing HTML is written under
+ * a non-navigation request, and nothing HTML is *served* for one either — the
+ * second matters because caches poisoned before this shipped are already on
+ * people's disks.
+ *
+ * ## `skipWaiting`, this once
+ *
+ * This worker deliberately had none: a new worker waited for the old one to be
+ * released rather than swapping assets under a page mid-campaign. That
+ * reasoning holds in general and fails exactly here — a browser with a poisoned
+ * cache renders nothing, so the old worker keeps serving the poison through
+ * every reload and the fix never activates. Nobody is mid-campaign on a blank
+ * page. The assets are content-hashed, so an early swap cannot mismatch them.
+ *
+ * The cache version is bumped alongside, which is what actually rescues anyone
+ * already broken: `activate` deletes every cache not in `KEEP`, so the poisoned
+ * entry goes with the old names.
  */
 
-const VERSION = 'hh-v1'
+const VERSION = 'hh-v2'
 const SHELL = `${VERSION}-shell`
 const ASSETS = `${VERSION}-assets`
 const FONTS = `${VERSION}-fonts`
@@ -42,6 +71,9 @@ const KEEP = [SHELL, ASSETS, FONTS]
 const FONT_ORIGINS = ['https://fonts.googleapis.com', 'https://fonts.gstatic.com']
 
 self.addEventListener('install', (event) => {
+  // See the header. Only justified because the bug being fixed leaves the page
+  // blank, so waiting politely means never recovering.
+  self.skipWaiting()
   event.waitUntil(
     caches
       .open(SHELL)
@@ -60,6 +92,16 @@ self.addEventListener('activate', (event) => {
       .then(() => self.clients.claim())
   )
 })
+
+/**
+ * Is this response the SPA fallback wearing an asset's URL?
+ *
+ * Pages answers a missing path with `index.html` and a 200, so the status says
+ * nothing. The content type is the only honest signal.
+ */
+function isHtml(response) {
+  return (response.headers.get('content-type') || '').includes('text/html')
+}
 
 /** Put a copy away, ignoring failures — a full disk is not worth an error. */
 async function remember(cacheName, request, response) {
@@ -116,13 +158,18 @@ self.addEventListener('fetch', (event) => {
   // Everything else same-origin: hashed bundles, artwork, icons. Cache-first,
   // because these URLs never change meaning.
   event.respondWith(
-    caches.match(request).then(
-      (hit) =>
-        hit ||
-        fetch(request).then((res) => {
-          if (res.ok && res.type === 'basic') remember(ASSETS, request, res.clone())
-          return res
-        })
-    )
+    caches.match(request).then((hit) => {
+      // A cached HTML body under an asset URL is poison from a worker older
+      // than v0.19.3. Ignore it and go to the network, which is now correct.
+      if (hit && !isHtml(hit)) return hit
+      return fetch(request).then((res) => {
+        // Never file the SPA fallback under an asset URL. This is the write
+        // that broke the app in production.
+        if (res.ok && res.type === 'basic' && !isHtml(res)) {
+          remember(ASSETS, request, res.clone())
+        }
+        return res
+      })
+    })
   )
 })
