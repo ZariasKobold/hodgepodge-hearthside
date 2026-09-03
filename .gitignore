@@ -19,3 +19,14 @@ public/register.json
 # Wyrd's product, which is the fastest way to lose the fan-policy permission
 # this whole project stands on (CLAUDE.md §8).
 docs/*.pdf
+
+# Production backups. NEVER committed — this repository is public and a D1 dump
+# is the whole database in the clear: other players' Discord ids, display names
+# and avatar URLs, every campaign document, and the `sessions` table, whose `id`
+# column IS the session cookie value. Committing one would hand over live
+# credentials for other people's accounts, not merely leak their data.
+#
+# Added at v0.19.1, before the first backup was taken, so there was never a
+# moment when a dump existed and was committable.
+backups/
+*.d1.sql

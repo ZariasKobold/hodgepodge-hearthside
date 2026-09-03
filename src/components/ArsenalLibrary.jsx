@@ -1,7 +1,12 @@
 import { useState, useRef } from 'react'
 import { factionLabel } from '../data/factions.js'
 import { getArchetype } from '../data/archetypes.js'
-import { myArsenal, currentWeek, totalFor, liveModels } from '../lib/campaignShape.js'
+import {
+  totalFor, liveModels,
+} from '../lib/shape/arsenal.js'
+import {
+  currentWeek,
+} from '../lib/shape/campaign.js'
 import { importJSON, exportJSON } from '../lib/storage.js'
 import { deleteAccount } from '../lib/remote.js'
 import { forgetUser } from '../lib/session.js'
@@ -21,6 +26,48 @@ function SyncLine({ sync, count, offlineSession }) {
    * the work is safe and will sync, which is the opposite of the warning
    * below it.
    */
+  /**
+   * Sync is switched off on purpose while the v3 cutover runs (step 3 of
+   * `docs/data-model-v3.md`). Said plainly, and said first, because §12's rule
+   * is that the shelf tells the truth about where the data is — and "saved in
+   * this browser only" is the truth right now for everybody, signed in or not.
+   */
+  if (sync.status === 'paused') {
+    /**
+     * The empty case is the one that matters, and it is not the rare one: with
+     * sync paused nothing is *pulled* either, so a second device — or the same
+     * one after a cleared history — shows a shelf with nothing on it while the
+     * account's copy sits on the server perfectly intact.
+     *
+     * A person seeing that has to be told, on that screen, that their campaigns
+     * still exist. "These 0 leaders are saved in this browser only" is the app
+     * being both clumsy and quiet about the only thing they want to know.
+     */
+    if (count === 0) {
+      return (
+        <p className="note note--warn">
+          <strong>Nothing is showing here because syncing is paused</strong>{' '}
+          while the app moves to its new shape — this browser has no local copy
+          yet, and nothing is being pulled down from your account.{' '}
+          <strong>Your campaigns are safe on your account and nothing has been
+          deleted.</strong> They will come back when syncing returns. Until then
+          they are reachable on whichever device you last played on, and a JSON
+          export from that device will carry them here.
+        </p>
+      )
+    }
+    return (
+      <p className="note note--warn">
+        <strong>Syncing is paused while the app moves to its new shape.</strong>{' '}
+        {count === 1 ? 'This leader is' : `These ${count} leaders are`} saved in{' '}
+        <strong>this browser only</strong> and {count === 1 ? 'is' : 'are'} not
+        going to your account — clearing your history loses{' '}
+        {count === 1 ? 'it' : 'them'}. Your account's copy is untouched and still
+        there. Export the JSON to keep a copy elsewhere.
+      </p>
+    )
+  }
+
   if (sync.status === 'offline' && offlineSession) {
     return (
       <p className="note">
@@ -67,13 +114,19 @@ function SyncLine({ sync, count, offlineSession }) {
   return null
 }
 
-function LeaderCard({ campaign, onOpen, onExport, onDiscard }) {
-  const arsenal = myArsenal(campaign)
+/**
+ * One arsenal on the shelf, with the table it is playing at.
+ *
+ * `campaign` may be null — an arsenal outlives its campaign by design, so a
+ * leader who has left a table still has a card. The week line is the only thing
+ * that needs the table, and it says so rather than inventing a week.
+ */
+function LeaderCard({ arsenal, campaign, onOpen, onExport, onDiscard }) {
   if (!arsenal) return null
 
   const { leader } = arsenal
   const archetype = getArchetype(leader.archetype)
-  const week = currentWeek(campaign)
+  const week = campaign ? currentWeek(campaign) : null
   const models = liveModels(arsenal)
   const keywords = (arsenal.keywords || []).filter(Boolean)
 
@@ -91,7 +144,9 @@ function LeaderCard({ campaign, onOpen, onExport, onDiscard }) {
           {arsenal.faction ? factionLabel(arsenal.faction) : 'No faction yet'}
           {archetype ? ` · ${archetype.name}` : ''}
         </span>
-        <span className="record__file">Week {week} of {campaign.weeksTotal}</span>
+        <span className="record__file">
+          {campaign ? `Week ${week} of ${campaign.weeksTotal}` : 'Not at a table'}
+        </span>
       </div>
 
       <h3 className={`leafcard__name${named ? '' : ' leafcard__name--blank'}`}>
@@ -109,9 +164,9 @@ function LeaderCard({ campaign, onOpen, onExport, onDiscard }) {
       </div>
 
       <div className="leafcard__actions">
-        <Button onClick={() => onOpen(campaign.id)}>View arsenal</Button>
-        <button className="gate__link" onClick={() => onExport(campaign)}>Export</button>
-        <button className="gate__link leafcard__drop" onClick={() => onDiscard(campaign)}>Discard</button>
+        <Button onClick={() => onOpen(arsenal.id)}>View arsenal</Button>
+        <button className="gate__link" onClick={() => onExport({ arsenal, campaign })}>Export</button>
+        <button className="gate__link leafcard__drop" onClick={() => onDiscard({ arsenal, campaign })}>Discard</button>
       </div>
     </article>
   )
@@ -155,10 +210,19 @@ export default function ArsenalLibrary({ shelf, onOpen, onNew, onImport, onDisca
     }
   }
 
-  const exportOne = (campaign) => {
-    const arsenal = myArsenal(campaign)
-    const stem = (arsenal?.leader?.name || 'campaign').toLowerCase().replace(/\s+/g, '-')
-    exportJSON(campaign, `${stem}.json`)
+  /**
+   * One leader, as a file that can come back.
+   *
+   * Both documents go in the bundle. An arsenal alone would import as a leader
+   * with no weeks, no house rules and no game history, which is not the thing
+   * the player thinks they are exporting.
+   */
+  const exportOne = ({ arsenal, campaign }) => {
+    const stem = (arsenal?.leader?.name || 'leader').toLowerCase().replace(/\s+/g, '-')
+    exportJSON(
+      { campaigns: campaign ? [campaign] : [], arsenals: arsenal ? [arsenal] : [] },
+      `${stem}.json`
+    )
   }
 
   const chooseFile = async (event) => {
@@ -196,9 +260,10 @@ export default function ArsenalLibrary({ shelf, onOpen, onNew, onImport, onDisca
         </div>
       )}
 
-      {shelf.map((campaign) => (
+      {shelf.map(({ arsenal, campaign }) => (
         <LeaderCard
-          key={campaign.id}
+          key={arsenal.id}
+          arsenal={arsenal}
           campaign={campaign}
           onOpen={onOpen}
           onExport={exportOne}
@@ -210,12 +275,12 @@ export default function ArsenalLibrary({ shelf, onOpen, onNew, onImport, onDisca
           undo, so it asks — and it names who it is about to throw away. */}
       {pendingDiscard && (
         <div className="gap-note">
-          <strong>Discard {myArsenal(pendingDiscard)?.leader?.name || 'this leader'}?</strong>{' '}
-          This removes the campaign from this browser and cannot be undone. Export
+          <strong>Discard {pendingDiscard.arsenal?.leader?.name || 'this leader'}?</strong>{' '}
+          This removes the leader from this browser and cannot be undone. Export
           it first if you might want it back.
           <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
             <Button
-              onClick={() => { onDiscard(pendingDiscard.id); setPendingDiscard(null) }}
+              onClick={() => { onDiscard(pendingDiscard.arsenal.id); setPendingDiscard(null) }}
             >
               Discard it
             </Button>

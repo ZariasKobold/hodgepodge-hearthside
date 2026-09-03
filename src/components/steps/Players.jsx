@@ -290,7 +290,10 @@ function MyProfile({ me, membership }) {
  */
 function BringALeader({ campaign, shelf, arsenals, membership }) {
   const mine = arsenals.find((a) => a.isMine)
-  const candidates = shelf.filter((c) => c.arsenals?.[0]?.leader?.name)
+  // Shelf entries are { arsenal, campaign } since v3. Only a named leader that
+  // is actually sitting at a table can be brought — `membership.link` names a
+  // campaign row, which an unseated arsenal does not have.
+  const candidates = shelf.filter((e) => e.arsenal?.leader?.name && e.campaign)
 
   if (mine) {
     return (
@@ -302,10 +305,10 @@ function BringALeader({ campaign, shelf, arsenals, membership }) {
         </p>
         <div className="crew__bar">
           {candidates
-            .filter((c) => c.id !== campaign.id)
-            .map((c) => (
-              <Button key={c.id} ghost onClick={() => membership.link(c.id)}>
-                Bring {c.arsenals[0].leader.name} instead
+            .filter((e) => e.campaign.id !== campaign.id)
+            .map((e) => (
+              <Button key={e.arsenal.id} ghost onClick={() => membership.link(e.campaign.id)}>
+                Bring {e.arsenal.leader.name} instead
               </Button>
             ))}
           <Button ghost onClick={() => membership.link(null)}>
@@ -328,9 +331,9 @@ function BringALeader({ campaign, shelf, arsenals, membership }) {
         {candidates.length === 0 && (
           <span className="note">No finished leaders on your shelf yet.</span>
         )}
-        {candidates.map((c) => (
-          <Button key={c.id} ghost onClick={() => membership.link(c.id)}>
-            Bring {c.arsenals[0].leader.name}
+        {candidates.map((e) => (
+          <Button key={e.arsenal.id} ghost onClick={() => membership.link(e.campaign.id)}>
+            Bring {e.arsenal.leader.name}
           </Button>
         ))}
       </div>

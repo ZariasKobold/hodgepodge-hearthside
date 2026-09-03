@@ -3,7 +3,9 @@ import HankSays from '../HankSays.jsx'
 import FlipInput, { RED_JOKER } from '../FlipInput.jsx'
 import { barterGreeting, barterAcquired, barterEmpty } from '../../data/hank.js'
 import { barterStock, thirstStock, reachesThirst } from '../../lib/aftermath.js'
-import { heldEquipmentIds } from '../../lib/campaignShape.js'
+import {
+  heldEquipmentIds,
+} from '../../lib/shape/arsenal.js'
 import { ALWAYS } from '../../data/equipment.js'
 
 /**

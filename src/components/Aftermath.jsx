@@ -10,7 +10,9 @@ import {
   createAftermath, phasesFor, nextPhase, firstPhase, handFor,
   paydayBreakdown, experienceFor, withdrewEarly, boxesCrossed,
 } from '../lib/aftermath.js'
-import { weeksRemaining, isCampaignOver, gamesWon, gamesPlayed } from '../lib/campaignShape.js'
+import {
+  weeksRemaining, isCampaignOver, gamesWon, gamesPlayed,
+} from '../lib/shape/campaign.js'
 import { isThirst } from '../data/equipment.js'
 
 /**
@@ -36,7 +38,10 @@ import { isThirst } from '../data/equipment.js'
 export default function Aftermath({
   campaign, arsenal, leader, week, actions,
 }) {
-  const games = (campaign.games || []).filter((g) => g.arsenalId === campaign.localArsenalId)
+  // Scoped to the arsenal that is open. In v2 the campaign named its own
+  // local arsenal; in v3 the arsenal is the thing you have open and the
+  // campaign is a table that may seat several.
+  const games = (campaign.games || []).filter((g) => g.arsenalId === arsenal.id)
   const open = games.find((g) => g.aftermath?.phase && !g.aftermath?.done) || null
   const finished = games.filter((g) => g.aftermath?.done)
 
@@ -63,7 +68,7 @@ export default function Aftermath({
           <HankSays tone="grave">
             {campaignEnd({
               week,
-              outcome: gamesWon(campaign) * 2 >= gamesPlayed(campaign) ? 'triumph' : 'hard',
+              outcome: gamesWon(campaign, arsenal.id) * 2 >= gamesPlayed(campaign, arsenal.id) ? 'triumph' : 'hard',
             })}
           </HankSays>
         )}

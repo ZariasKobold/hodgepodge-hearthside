@@ -1,151 +1,163 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
-  saveCampaign, loadCampaign, campaignIds, removeCampaign,
-  activeCampaignId, setActiveCampaignId, adoptLegacyCampaign,
-  load, forgetVersion,
+  saveCampaign, removeCampaign, setActiveCampaignId,
+  saveArsenal, removeArsenal, activeArsenalId, setActiveArsenalId,
+  adoptLegacyCampaign, forgetVersion, arsenalIds,
 } from '../lib/storage.js'
 import {
-  createCampaign, createModel, createGame, createEquipment, createInjury,
-  createTotem, migrate, migrateLeaderToCampaign,
-  myArsenal as selectMyArsenal, currentWeek, totalFor, mustHireThisWeek,
-  belongsTo, shouldRelease,
+  liftLocalShelfToV3, readShelf, readSeated, createSeatedArsenal, saveSeated,
+  forgetSeated, participationForArsenal,
+} from '../lib/shelf.js'
+import {
+  createModel, createEquipment, createInjury, createTotem,
+  totalFor, mustHireThisWeek, startingScripPatch, owedStartingScrip,
+} from '../lib/shape/arsenal.js'
+import {
+  createCampaign, createGame, currentWeek, joinedWeekFor,
   setWeekPatch, stepWeekPatch, weekModePatch, canRegress,
   MIN_WEEKS_TOTAL, MAX_WEEKS_TOTAL,
-} from '../lib/campaignShape.js'
-
-const LEGACY_LEADER_KEY = 'leader:current'
+} from '../lib/shape/campaign.js'
+import { belongsTo, shouldRelease } from '../lib/shape/ownership.js'
+import { readBundle, refileForImport } from '../lib/shape/migrate.js'
 
 /**
- * A shelf of campaigns, one of which may be open.
+ * A shelf of arsenals, one of which may be open, each sitting at a table.
  *
- * Each campaign holds one leader and that leader's arsenal, so switching
- * leaders means opening a different campaign rather than editing a list inside
- * one. The `arsenals` array inside a campaign is for *other players* — max
- * encounter size compares both arsenals — so a second leader of your own could
- * never have lived there.
+ * **This is the v3 shape** (`docs/data-model-v3.md`). An arsenal is a durable
+ * personal object — a leader, their models, scrip, injuries, equipment and
+ * experience — that exists before and independently of any campaign. A campaign
+ * is the table: weeks, house rules, who is playing, and the games. The join
+ * between them is a participation.
  *
- * `campaign` is null when nothing is open, and every derived value degrades to
- * a safe empty rather than throwing. App renders the shelf in that state; the
- * wizard steps are only mounted once something is open.
+ * What a player has open is an **arsenal**; the campaign comes along because the
+ * arsenal names it. A solo player's campaign is created silently by
+ * `createSeatedArsenal` and never mentioned, so soloing and a table of five run
+ * exactly one code path.
  *
- * Local-first is not a stepping stone to remote — it's the fallback that has to
- * keep working. Permission from Wyrd is revocable, so a campaign must survive
- * this app disappearing.
+ * Both documents are held in state and written separately, because they are two
+ * documents. Everything derived — the week, the arsenal total, whether a hire is
+ * owed — is computed on read; a stored copy is a copy that goes stale.
+ *
+ * Local-first is not a stepping stone to remote, it is the fallback that has to
+ * keep working. **Arsenals do not sync yet** — step 5 of the plan generalises
+ * that machinery over a `kind` once, rather than copy-pasting the one piece of
+ * code here that can lose somebody's twelve weeks.
  */
 export function useCampaign({ userId = null, userReady = true, onSaved, onRemoved } = {}) {
-  const [ids, setIds] = useState(() => {
-    // One-time lifts, oldest first: the v0.1 single leader, then the
-    // single-campaign key everything before the shelf wrote to.
-    const legacyLeader = load(LEGACY_LEADER_KEY)
-    if (campaignIds().length === 0 && legacyLeader && !load('campaign:current')) {
-      const lifted = migrateLeaderToCampaign(legacyLeader)
-      if (lifted) {
-        saveCampaign(lifted)
-        setActiveCampaignId(lifted.id)
-      }
-    }
+  const [entries, setEntries] = useState(() => {
+    // One-time lifts, oldest first: the single-campaign key everything before
+    // the shelf wrote to, then the v2 → v3 split. Both are safe to re-run.
     adoptLegacyCampaign()
-    return campaignIds()
+    liftLocalShelfToV3()
+    return readShelf()
   })
 
   const [openId, setOpenId] = useState(() => {
-    const active = activeCampaignId()
-    return active && campaignIds().includes(active) ? active : null
+    const active = activeArsenalId()
+    return active && arsenalIds().includes(active) ? active : null
   })
 
   /**
-   * The exact object the save effect below has already persisted.
+   * The exact objects the save effects below have already persisted.
    *
-   * Seeded at every point a campaign is *read* from storage — on mount, on
-   * `open`, and after a sync pulls — because reading a campaign is not editing
-   * it. The comparison is by identity, which only works if every read path
-   * seeds this: `loadCampaign` builds a new object on each call, so an unseeded
-   * read is indistinguishable from an edit.
+   * Seeded at every point a document is *read* from storage — on mount, on
+   * `open`, and after a refresh — because reading is not editing. The comparison
+   * is by identity, which only works if every read path seeds it: the loaders
+   * build a new object on each call, so an unseeded read is indistinguishable
+   * from an edit.
    *
-   * This was the bug that repeatedly destroyed a leader portrait. None of the
-   * read paths seeded it, so the first render after a load wrote the campaign
-   * back with a fresh `updatedAt` and mirrored it to the account. Merely
-   * opening the app therefore made this device's copy the newest one in
-   * existence, and `planSync` — which picks a winner by comparing
-   * `updatedAt` — handed it every merge, including against copies that were
-   * genuinely newer. A device left on a stale copy overwrote good work every
-   * time its owner reloaded the page to see whether the good work had arrived.
+   * This was the bug that repeatedly destroyed a leader portrait (v0.18.4). No
+   * read path seeded it, so the first render after a load wrote the campaign
+   * back with a fresh `updatedAt` and mirrored it to the account — merely
+   * opening the app made this device's copy the newest in existence, and it won
+   * every merge, including against copies that were genuinely newer. The act of
+   * looking was the act of destroying. Two documents now, so two refs.
    */
-  const lastWritten = useRef(null)
+  const lastArsenal = useRef(null)
+  const lastCampaign = useRef(null)
 
-  const [campaign, setCampaign] = useState(() => {
-    const active = activeCampaignId()
-    const loaded = active ? migrate(loadCampaign(active)) : null
-    lastWritten.current = loaded
-    return loaded
+  const [{ arsenal, campaign }, setSeated] = useState(() => {
+    const active = activeArsenalId()
+    const seated = active ? readSeated(active) : { arsenal: null, campaign: null }
+    lastArsenal.current = seated.arsenal
+    lastCampaign.current = seated.campaign
+    return seated
   })
 
-  // Every campaign on the shelf, for rendering it. Re-read whenever the shelf
-  // or the open campaign changes, so a rename shows immediately.
+  const setArsenal = useCallback((patch) => {
+    setSeated((prev) => (prev.arsenal
+      ? { ...prev, arsenal: { ...prev.arsenal, ...(typeof patch === 'function' ? patch(prev.arsenal) : patch) } }
+      : prev))
+  }, [])
+
+  const setCampaign = useCallback((patch) => {
+    setSeated((prev) => (prev.campaign
+      ? { ...prev, campaign: { ...prev.campaign, ...(typeof patch === 'function' ? patch(prev.campaign) : patch) } }
+      : prev))
+  }, [])
+
   /**
-   * Scoped to the account — but only once there is an answer about who that is.
-   *
-   * `useAuth` reports `user: null` while its first /api/auth/me is in flight,
-   * and "nobody is signed in" and "we have not asked yet" are different
-   * answers. Treating the first as the second hid every claimed campaign for
-   * the length of that request.
+   * The shelf, scoped to the account — but only once there is an answer about
+   * who that is. `useAuth` reports `user: null` while its first /api/auth/me is
+   * in flight, and "nobody is signed in" and "we have not asked yet" are
+   * different answers. Treating the first as the second hid every claimed
+   * arsenal for the length of that request.
    */
   const shelf = useMemo(
-    () => ids
-      .map((id) => (id === openId && campaign ? campaign : migrate(loadCampaign(id))))
-      .filter(Boolean)
-      .filter((c) => (userReady ? belongsTo(c, userId) : true)),
-    [ids, openId, campaign, userId, userReady]
+    () => entries
+      .map((e) => (e.arsenal.id === openId && arsenal ? { arsenal, campaign } : e))
+      .filter((e) => (userReady ? belongsTo(e.arsenal, userId) : true)),
+    [entries, openId, arsenal, campaign, userId, userReady]
   )
 
   /**
-   * A campaign belonging to another account must not stay open across a
+   * An arsenal belonging to another account must not stay open across a
    * sign-in. Closing rather than deleting: their work is still theirs and is
    * still on the disk, it simply is not this account's to look at.
    *
-   * **Waits for auth to settle.** Without the guard this ran during the first
-   * /api/auth/me, when `userId` is null because the answer has not arrived —
-   * so a campaign claimed by the signed-in user looked foreign, was closed, and
-   * `setActiveCampaignId(null)` wrote that closure to storage. The campaign
-   * then stayed shut after sign-in resolved, and the masthead lost every tab
-   * except Leaders. Transient state that persists itself is the dangerous
-   * kind.
+   * Waits for auth to settle — without the guard this ran during the first
+   * /api/auth/me, closed a campaign the signed-in user owned, and wrote that
+   * closure to storage, so it stayed shut afterwards.
    */
   useEffect(() => {
-    if (!shouldRelease(campaign, userId, userReady)) return
-    setCampaign(null)
+    if (!shouldRelease(arsenal, userId, userReady)) return
+    setSeated({ arsenal: null, campaign: null })
     setOpenId(null)
+    setActiveArsenalId(null)
     setActiveCampaignId(null)
-  }, [campaign, userId, userReady])
+  }, [arsenal, userId, userReady])
 
-  // Writes the open campaign, but never one that was only just read — see
-  // `lastWritten` above for why that distinction is load-bearing.
+  // Two documents, two writes, each skipping one that was only just read.
+  useEffect(() => {
+    if (!arsenal) return
+    if (lastArsenal.current === arsenal) return
+    lastArsenal.current = arsenal
+    // Claim on first save while signed in. Only ever set on an unclaimed
+    // object — re-stamping one that already carries an id would be one account
+    // taking another's work rather than adopting loose work.
+    const claimed = userId && !arsenal.ownerUserId ? { ...arsenal, ownerUserId: userId } : arsenal
+    saveArsenal(claimed)
+  }, [arsenal, userId])
+
   useEffect(() => {
     if (!campaign) return
-    if (lastWritten.current === campaign) return
-    lastWritten.current = campaign
-    // Local first and synchronously; the mirror upward is best-effort and
-    // never gates the write. `saveCampaign` returns the stamped copy, which is
-    // what must go to the server — the unstamped one would lose every merge.
-    // Claim it on first save while signed in. Only ever set on an unclaimed
-    // campaign — re-stamping one that already carries an id would be one
-    // account taking another's work rather than adopting loose work.
+    if (lastCampaign.current === campaign) return
+    lastCampaign.current = campaign
     const claimed = userId && !campaign.ownerUserId ? { ...campaign, ownerUserId: userId } : campaign
     const stamped = saveCampaign(claimed)
     if (stamped) onSaved?.(stamped)
-  }, [campaign, onSaved])
+  }, [campaign, userId, onSaved])
 
   /** Re-reads the shelf from storage, after a sync pulled rows down. */
   const refresh = useCallback(() => {
-    setIds(campaignIds())
-    setCampaign((prev) => {
-      if (!prev) return prev
-      const fresh = migrate(loadCampaign(prev.id))
-      if (!fresh) return prev
-      // Straight from storage, so it must not be written back. This runs
-      // immediately after a pull, and re-stamping here would push the copy we
-      // were just handed back up as though this device had authored it.
-      lastWritten.current = fresh
+    setEntries(readShelf())
+    setSeated((prev) => {
+      if (!prev.arsenal) return prev
+      const fresh = readSeated(prev.arsenal.id)
+      if (!fresh.arsenal) return prev
+      // Straight from storage, so it must not be written back.
+      lastArsenal.current = fresh.arsenal
+      lastCampaign.current = fresh.campaign
       return fresh
     })
   }, [])
@@ -153,114 +165,105 @@ export function useCampaign({ userId = null, userReady = true, onSaved, onRemove
   /* ── the shelf ────────────────────────────────────────────────── */
 
   const open = useCallback((id) => {
-    const found = migrate(loadCampaign(id))
-    if (!found) return
-    if (!belongsTo(found, userId)) return
+    const found = readSeated(id)
+    if (!found.arsenal) return
+    if (!belongsTo(found.arsenal, userId)) return
     // Read, not edited.
-    lastWritten.current = found
-    setCampaign(found)
+    lastArsenal.current = found.arsenal
+    lastCampaign.current = found.campaign
+    setSeated(found)
     setOpenId(id)
-    setActiveCampaignId(id)
+    setActiveArsenalId(id)
+    if (found.campaign) setActiveCampaignId(found.campaign.id)
   }, [userId])
 
   const close = useCallback(() => {
-    setCampaign(null)
+    setSeated({ arsenal: null, campaign: null })
     setOpenId(null)
+    setActiveArsenalId(null)
     setActiveCampaignId(null)
   }, [])
 
   const startNew = useCallback(() => {
-    const fresh = createCampaign()
-    saveCampaign(fresh)
-    setIds(campaignIds())
-    setCampaign(fresh)
-    setOpenId(fresh.id)
-    setActiveCampaignId(fresh.id)
-    return fresh.id
-  }, [])
+    const fresh = createSeatedArsenal({ ownerUserId: userId ?? null })
+    saveSeated(fresh)
+    lastArsenal.current = fresh.arsenal
+    lastCampaign.current = fresh.campaign
+    setEntries(readShelf())
+    setSeated(fresh)
+    setOpenId(fresh.arsenal.id)
+    setActiveArsenalId(fresh.arsenal.id)
+    setActiveCampaignId(fresh.campaign.id)
+    return fresh.arsenal.id
+  }, [userId])
 
   const discard = useCallback((id) => {
-    removeCampaign(id)
-    // Or a later re-import of the same id would look like a copy this device
-    // had already seen, and be allowed to overwrite the server's.
-    forgetVersion(id)
+    forgetSeated(id, { removeArsenal, removeCampaign, forgetVersion })
     onRemoved?.(id)
-    setIds(campaignIds())
+    setEntries(readShelf())
     setOpenId((prev) => (prev === id ? null : prev))
-    setCampaign((prev) => (prev?.id === id ? null : prev))
+    setSeated((prev) => (prev.arsenal?.id === id ? { arsenal: null, campaign: null } : prev))
   }, [onRemoved])
 
   /**
-   * Files an imported campaign as a new entry rather than replacing anything.
+   * Files an imported file as new entries rather than replacing anything.
    *
-   * A fresh id is minted even when the file carries one, so importing the same
-   * export twice gives two campaigns instead of silently overwriting the first.
-   * Nothing already on the shelf can be lost by importing.
+   * `refileForImport` mints fresh ids for every arsenal and campaign and
+   * repoints every link between them, so importing the same export twice gives
+   * two of everything and nothing already on the shelf can be lost. An arsenal
+   * whose campaign is not in the file arrives detached and gets a table of its
+   * own, rather than pointing at a campaign id that may belong to somebody else
+   * on this browser.
    */
   const adopt = useCallback((data) => {
-    /**
-     * One campaign, or a bundle of them.
-     *
-     * The bundle shape exists because the sign-in gate's rescue has to be able
-     * to export a whole shelf — and an export this app cannot read back is not
-     * a rescue (audit v0.11.0, H2/H3). Accepting a bare campaign keeps every
-     * file exported before this change importable.
-     */
-    const list = Array.isArray(data)
-      ? data
-      : Array.isArray(data?.campaigns) ? data.campaigns : [data]
-
-    const filed = []
-    for (const one of list) {
-      const incoming = migrate(one)
-      if (!incoming?.arsenals?.length) continue
-      // `createCampaign` spreads its patch last, so passing `id: undefined`
-      // overwrites the id it just minted and the save silently no-ops. Strip
-      // the key instead of blanking it. The owner is stripped too: an imported
-      // file is this account's now, whoever exported it.
-      const { id: _discarded, ownerUserId: _wasTheirs, ...rest } = incoming
-      const one2 = createCampaign(rest)
-      saveCampaign(one2)
-      filed.push(one2)
+    const { campaigns, arsenals } = refileForImport(readBundle(data))
+    if (arsenals.length === 0) {
+      throw new Error('That file does not look like a leader or a campaign — no arsenals in it.')
     }
 
-    if (filed.length === 0) {
-      throw new Error('That file does not look like a campaign — no arsenals in it.')
-    }
+    const byId = new Map(campaigns.map((c) => [c.id, c]))
+    for (const c of campaigns) saveCampaign(c)
 
-    setIds(campaignIds())
-    setCampaign(filed[0])
-    setOpenId(filed[0].id)
-    setActiveCampaignId(filed[0].id)
-    return filed[0].id
-  }, [])
-
-  /* ── the open campaign ────────────────────────────────────────── */
-
-  const arsenal = useMemo(() => (campaign ? selectMyArsenal(campaign) : null), [campaign])
-  const week = useMemo(() => (campaign ? currentWeek(campaign) : 1), [campaign])
-
-  const updateArsenal = useCallback((patch) => {
-    setCampaign((prev) => {
-      if (!prev) return prev
-      return {
-        ...prev,
-        arsenals: prev.arsenals.map((a) =>
-          a.id === prev.localArsenalId
-            ? { ...a, ...(typeof patch === 'function' ? patch(a) : patch) }
-            : a
-        ),
+    let first = null
+    for (const a of arsenals) {
+      if (a.campaignId && byId.has(a.campaignId)) {
+        saveArsenal(a)
+        if (!first) first = { arsenal: a, campaign: byId.get(a.campaignId) }
+        continue
       }
-    })
+      // Detached: give it a table of its own, by the same silent path a new
+      // leader gets one.
+      const seated = createSeatedArsenal(a)
+      saveSeated(seated)
+      if (!first) first = seated
+    }
+
+    setEntries(readShelf())
+    if (first) {
+      lastArsenal.current = first.arsenal
+      lastCampaign.current = first.campaign
+      setSeated(first)
+      setOpenId(first.arsenal.id)
+      setActiveArsenalId(first.arsenal.id)
+      if (first.campaign) setActiveCampaignId(first.campaign.id)
+    }
+    return first?.arsenal.id ?? null
   }, [])
 
-  const setCampaignField = useCallback((patch) => {
-    setCampaign((prev) => (prev ? { ...prev, ...(typeof patch === 'function' ? patch(prev) : patch) } : prev))
-  }, [])
+  /* ── the open pair ────────────────────────────────────────────── */
+
+  const week = useMemo(() => (campaign ? currentWeek(campaign) : 1), [campaign])
+  const joinedWeek = useMemo(
+    () => (campaign && arsenal ? joinedWeekFor(campaign, arsenal.id) : 1),
+    [campaign, arsenal]
+  )
+
+  const updateArsenal = setArsenal
+  const setCampaignField = setCampaign
 
   const setHouseRules = useCallback((patch) => {
-    setCampaign((prev) => (prev ? { ...prev, houseRules: { ...prev.houseRules, ...patch } } : prev))
-  }, [])
+    setCampaign((prev) => ({ houseRules: { ...prev.houseRules, ...patch } }))
+  }, [setCampaign])
 
   /* ── wizard-facing adapter ────────────────────────────────────── */
 
@@ -292,252 +295,220 @@ export function useCampaign({ userId = null, userReady = true, onSaved, onRemove
       else leaderPatch[k] = v
     }
 
-    updateArsenal((a) => ({
-      ...arsenalPatch,
-      leader: Object.keys(leaderPatch).length ? { ...a.leader, ...leaderPatch } : a.leader,
-    }))
-  }, [leader, updateArsenal])
+    setArsenal((a) => {
+      const merged = {
+        ...a,
+        ...arsenalPatch,
+        leader: Object.keys(leaderPatch).length ? { ...a.leader, ...leaderPatch } : a.leader,
+      }
+      // Adding or dropping a starting model changes what p. 15 owes, and this
+      // is the one path the creation screen edits models through. Safe on every
+      // models patch: `startingScripPatch` reads week-0 models only, so a weekly
+      // hire cannot reach it, and it returns null when the grant has not moved.
+      const owed = 'models' in arsenalPatch ? startingScripPatch(merged) : null
+      return { ...arsenalPatch, leader: merged.leader, ...(owed || {}) }
+    })
+  }, [leader, setArsenal])
 
-  const setPick = useCallback((slot, entries) => {
-    updateArsenal((a) => ({
-      leader: { ...a.leader, picks: { ...a.leader.picks, [slot]: entries } },
-    }))
-  }, [updateArsenal])
+  const setPick = useCallback((slot, entriesForSlot) => {
+    setArsenal((a) => ({ leader: { ...a.leader, picks: { ...a.leader.picks, [slot]: entriesForSlot } } }))
+  }, [setArsenal])
+
+  /**
+   * Pay starting scrip to an arsenal built before this was fixed.
+   *
+   * Offered rather than applied on load. Moving the scrip on somebody's
+   * in-progress campaign without telling them is indistinguishable from a bug.
+   */
+  const creditStartingScrip = useCallback(() => {
+    setArsenal((a) => startingScripPatch(a) || {})
+  }, [setArsenal])
 
   /* ── arsenal actions ──────────────────────────────────────────── */
 
   const addModel = useCallback((model, { scripPaid = 0 } = {}) => {
-    updateArsenal((a) => ({
-      models: [...a.models, createModel({ ...model, addedWeek: week, scripPaid })],
-    }))
-  }, [updateArsenal, week])
+    setArsenal((a) => ({ models: [...a.models, createModel({ ...model, addedWeek: week, scripPaid })] }))
+  }, [setArsenal, week])
 
   const removeModel = useCallback((modelId) => {
-    updateArsenal((a) => ({ models: a.models.filter((m) => m.id !== modelId) }))
-  }, [updateArsenal])
+    setArsenal((a) => ({ models: a.models.filter((m) => m.id !== modelId) }))
+  }, [setArsenal])
 
   const spendScrip = useCallback((amount) => {
-    updateArsenal((a) => ({ scrip: Math.max(0, a.scrip - amount) }))
-  }, [updateArsenal])
+    setArsenal((a) => ({ scrip: Math.max(0, a.scrip - amount) }))
+  }, [setArsenal])
 
   const earnScrip = useCallback((amount) => {
-    updateArsenal((a) => ({ scrip: a.scrip + amount }))
-  }, [updateArsenal])
+    setArsenal((a) => ({ scrip: a.scrip + amount }))
+  }, [setArsenal])
 
-  /* ── the week ─────────────────────────────────────────────────── */
+  /* ── the week — a fact about the table, not the player ────────── */
 
-  /**
-   * Move the campaign to a week the calendar disagrees with.
-   *
-   * Writes an offset, never a week (see `offsetForWeek`), so the campaign goes
-   * on advancing by itself afterwards. Groups who play three weeks on one
-   * bank holiday, or skip a fortnight, need this constantly — the alternative
-   * is the app being confidently wrong about the one number every other number
-   * hangs off, since the week decides the hire discount and files each model
-   * under when it arrived.
-   */
   const setWeek = useCallback((target) => {
-    setCampaign((prev) => (prev ? { ...prev, ...setWeekPatch(prev, target) } : prev))
-  }, [])
+    setCampaign((prev) => setWeekPatch(prev, target))
+  }, [setCampaign])
 
   /** Forward or back a week. Regressing is as real a need as advancing. */
   const stepWeek = useCallback((delta) => {
-    setCampaign((prev) => {
-      if (!prev) return prev
-      if (delta < 0 && !canRegress(prev)) return prev
-      return { ...prev, ...stepWeekPatch(prev, delta) }
-    })
-  }, [])
+    setCampaign((prev) => (delta < 0 && !canRegress(prev) ? {} : stepWeekPatch(prev, delta)))
+  }, [setCampaign])
 
-  /**
-   * Calendar or manual, switched without the number on screen moving.
-   * `weekModePatch` carries the current week across, so the switch reads as a
-   * change of mechanism rather than as the campaign jumping.
-   */
   const setWeekMode = useCallback((mode) => {
-    setCampaign((prev) => (prev ? { ...prev, ...weekModePatch(prev, mode) } : prev))
-  }, [])
+    setCampaign((prev) => weekModePatch(prev, mode))
+  }, [setCampaign])
 
   /** Back to whatever the calendar says, discarding every past correction. */
   const resetWeek = useCallback(() => {
-    setCampaign((prev) => (prev ? { ...prev, weekOffset: 0 } : prev))
-  }, [])
+    setCampaign({ weekOffset: 0 })
+  }, [setCampaign])
 
   /**
-   * When the campaign actually began.
-   *
-   * Editable because the app is usually opened *after* the first game — the
-   * campaign started at the table, not when someone got round to typing it in,
-   * and in calendar mode every week since is measured from this.
+   * When the campaign actually began. Editable because the app is usually
+   * opened *after* the first game — the campaign started at the table, not when
+   * someone got round to typing it in.
    */
   const setStartedAt = useCallback((timestamp) => {
-    setCampaign((prev) => (prev ? { ...prev, startedAt: timestamp } : prev))
-  }, [])
+    setCampaign({ startedAt: timestamp })
+  }, [setCampaign])
 
   const setWeeksTotal = useCallback((n) => {
-    setCampaign((prev) => {
-      if (!prev) return prev
-      const total = Math.min(MAX_WEEKS_TOTAL, Math.max(MIN_WEEKS_TOTAL, Math.round(Number(n) || 1)))
-      return { ...prev, weeksTotal: total }
+    setCampaign({
+      weeksTotal: Math.min(MAX_WEEKS_TOTAL, Math.max(MIN_WEEKS_TOTAL, Math.round(Number(n) || 1))),
     })
-  }, [])
+  }, [setCampaign])
 
-  /* ── games and the aftermath ──────────────────────────────────── */
+  /* ── games and the aftermath — they live on the table ─────────── */
 
-  /**
-   * File a game against this arsenal and return it.
-   *
-   * Games are appended, never edited in place by anything but `updateGame`,
-   * because the aftermath is walked over several sittings — a player logs the
-   * result at the table and finishes the injury flips afterwards.
-   */
   const logGame = useCallback((patch = {}) => {
-    const game = createGame({ arsenalId: campaign?.localArsenalId ?? null, week, ...patch })
-    setCampaign((prev) => (prev ? { ...prev, games: [...prev.games, game] } : prev))
+    const game = createGame({ arsenalId: arsenal?.id ?? null, week, ...patch })
+    setCampaign((prev) => ({ games: [...prev.games, game] }))
     return game
-  }, [campaign?.localArsenalId, week])
+  }, [setCampaign, arsenal?.id, week])
 
   const updateGame = useCallback((gameId, patch) => {
-    setCampaign((prev) => {
-      if (!prev) return prev
-      return {
-        ...prev,
-        games: prev.games.map((g) =>
-          g.id === gameId ? { ...g, ...(typeof patch === 'function' ? patch(g) : patch) } : g
-        ),
-      }
-    })
-  }, [])
+    setCampaign((prev) => ({
+      games: prev.games.map((g) => (g.id === gameId ? { ...g, ...(typeof patch === 'function' ? patch(g) : patch) } : g)),
+    }))
+  }, [setCampaign])
 
   const removeGame = useCallback((gameId) => {
-    setCampaign((prev) => (prev ? { ...prev, games: prev.games.filter((g) => g.id !== gameId) } : prev))
-  }, [])
+    setCampaign((prev) => ({ games: prev.games.filter((g) => g.id !== gameId) }))
+  }, [setCampaign])
 
   /* ── equipment ────────────────────────────────────────────────── */
 
   const buyEquipment = useCallback((entry, cost) => {
-    updateArsenal((a) => ({
+    setArsenal((a) => ({
       equipment: [...a.equipment, createEquipment({ ...entry, acquiredWeek: week })],
       scrip: Math.max(0, a.scrip - cost),
     }))
-  }, [updateArsenal, week])
+  }, [setArsenal, week])
 
   /**
    * Equipment leaves the arsenal outright when annihilated — it "may not be
-   * used until purchased again" — so this deletes rather than flagging. An
-   * equipment row that lingered would keep counting toward a campaign rating.
+   * used until purchased again" — so this deletes rather than flagging.
    */
   const removeEquipment = useCallback((id) => {
-    updateArsenal((a) => ({ equipment: a.equipment.filter((e) => e.id !== id) }))
-  }, [updateArsenal])
+    setArsenal((a) => ({ equipment: a.equipment.filter((e) => e.id !== id) }))
+  }, [setArsenal])
 
   /* ── injuries ─────────────────────────────────────────────────── */
 
   const addInjury = useCallback((entry) => {
-    updateArsenal((a) => ({ injuries: [...a.injuries, createInjury({ ...entry, gainedWeek: week })] }))
-  }, [updateArsenal, week])
+    setArsenal((a) => ({ injuries: [...a.injuries, createInjury({ ...entry, gainedWeek: week })] }))
+  }, [setArsenal, week])
 
   /**
    * Healed rather than deleted. The doctor's ledger is part of the story, and
-   * an injury that was paid to remove still happened — `injuriesFor` already
-   * filters on `removedAt`, so nothing downstream counts it.
+   * an injury that was paid to remove still happened.
    */
   const healInjury = useCallback((injuryId) => {
-    updateArsenal((a) => ({
+    setArsenal((a) => ({
       injuries: a.injuries.map((i) => (i.id === injuryId ? { ...i, removedAt: Date.now() } : i)),
     }))
-  }, [updateArsenal])
+  }, [setArsenal])
 
   /**
-   * Deleted, not healed — for an injury that was never gained.
-   *
-   * The one case is Fate intervening: when miraculous recovery cancels a
-   * leader's annihilation, "no new injury is gained but the previous two
-   * remain". A `removedAt` would be a lie in the ledger, saying the doctor
-   * mended something that never happened.
+   * Deleted, not healed — for an injury that was never gained. The one case is
+   * Fate intervening: "no new injury is gained but the previous two remain". A
+   * `removedAt` would put a visit to Dr. Mo in the ledger that never happened.
    */
   const dropInjury = useCallback((injuryId) => {
-    updateArsenal((a) => ({ injuries: a.injuries.filter((i) => i.id !== injuryId) }))
-  }, [updateArsenal])
+    setArsenal((a) => ({ injuries: a.injuries.filter((i) => i.id !== injuryId) }))
+  }, [setArsenal])
 
   /**
-   * Three injuries and the model is out — checked at the END of phase 6, never
-   * during it, which is why this is called by the flow rather than by
-   * `addInjury`.
-   *
-   * Flagged, not deleted: it stays on the roster so the week it arrived and
-   * the scrip it cost are still legible, and `liveModels` keeps it out of the
-   * arsenal total and out of every hire.
+   * Three injuries and the model is out — checked at the END of phase 6, which
+   * is why this is called by the flow rather than by `addInjury`. Flagged, not
+   * deleted: the week it arrived and the scrip it cost stay legible.
    */
   const annihilateModel = useCallback((modelId) => {
-    updateArsenal((a) => ({
+    setArsenal((a) => ({
       models: a.models.map((m) => (m.id === modelId ? { ...m, annihilated: true } : m)),
     }))
-  }, [updateArsenal])
+  }, [setArsenal])
 
   /* ── advancement ──────────────────────────────────────────────── */
 
   /**
-   * Check experience boxes and record what each one bought.
-   *
-   * Boxes and advancements move together on purpose. They are two halves of
-   * one fact — the leader is three boxes along *because* of these three
-   * advancements — and letting either be written without the other is how a
-   * track ends up disagreeing with the list beside it.
+   * Check experience boxes and record what each one bought. Boxes and
+   * advancements move together on purpose — they are two halves of one fact,
+   * and letting either be written without the other is how a track ends up
+   * disagreeing with the list beside it.
    */
   const advanceLeader = useCallback(({ boxes = 0, taken = [] }) => {
-    updateArsenal((a) => ({
+    setArsenal((a) => ({
       leader: {
         ...a.leader,
         experience: { ...a.leader.experience, boxesChecked: (a.leader.experience?.boxesChecked || 0) + boxes },
         advancements: [...(a.leader.advancements || []), ...taken],
       },
     }))
-  }, [updateArsenal])
+  }, [setArsenal])
 
-  /** An advancement handed to the totem instead of the leader. */
   const advanceTotem = useCallback((entry) => {
-    updateArsenal((a) => (a.totem
-      ? { totem: { ...a.totem, advancements: [...a.totem.advancements, entry] } }
-      : {}))
-  }, [updateArsenal])
+    setArsenal((a) => (a.totem ? { totem: { ...a.totem, advancements: [...a.totem.advancements, entry] } } : {}))
+  }, [setArsenal])
 
   const setTotem = useCallback((patch) => {
-    updateArsenal((a) => ({ totem: a.totem ? { ...a.totem, ...patch } : createTotem(patch) }))
-  }, [updateArsenal])
+    setArsenal((a) => ({ totem: a.totem ? { ...a.totem, ...patch } : createTotem(patch) }))
+  }, [setArsenal])
 
   const addCrewCardAdvancement = useCallback((entry) => {
-    updateArsenal((a) => ({ crewCardAdvancements: [...(a.crewCardAdvancements || []), entry] }))
-  }, [updateArsenal])
+    setArsenal((a) => ({ crewCardAdvancements: [...(a.crewCardAdvancements || []), entry] }))
+  }, [setArsenal])
 
   /**
-   * Fate intervenes, once. The second annihilation stands.
-   *
-   * Recorded on the leader rather than inferred from the games, because the
-   * box on the arsenal sheet is a box: it is ticked or it is not, and a player
-   * who reconstructs a campaign by hand has to be able to tick it.
+   * Fate intervenes, once. The second annihilation stands. Recorded on the
+   * leader rather than inferred from the games, because the box on the arsenal
+   * sheet is a box: it is ticked or it is not.
    */
   const useMiraculousRecovery = useCallback(() => {
-    updateArsenal((a) => ({ leader: { ...a.leader, miraculousRecoveryUsed: true } }))
-  }, [updateArsenal])
+    setArsenal((a) => ({ leader: { ...a.leader, miraculousRecoveryUsed: true } }))
+  }, [setArsenal])
 
   return {
-    // the shelf
+    // the shelf — entries are { arsenal, campaign }
     shelf, openId, open, close, startNew, discard, adopt, refresh,
-    // the open campaign
+    // the open pair
     campaign, setCampaignField, setHouseRules,
     arsenal, updateArsenal,
-    week, setWeek, stepWeek, setWeekMode, resetWeek, setStartedAt, setWeeksTotal,
+    week, joinedWeek,
+    setWeek, stepWeek, setWeekMode, resetWeek, setStartedAt, setWeeksTotal,
     totalCost: arsenal ? totalFor(arsenal) : 0,
-    mustHire: arsenal ? mustHireThisWeek(arsenal, week) : false,
+    mustHire: arsenal ? mustHireThisWeek(arsenal, week, { joinedWeek }) : false,
     // wizard adapter — same surface the step components already expect
     leader, set: setLeader, setPick,
     addModel, removeModel, spendScrip, earnScrip,
+    creditStartingScrip,
+    owedStartingScrip: arsenal ? owedStartingScrip(arsenal) : 0,
     // games and the aftermath
     logGame, updateGame, removeGame,
     buyEquipment, removeEquipment,
     addInjury, healInjury, dropInjury, annihilateModel,
     advanceLeader, advanceTotem, setTotem, addCrewCardAdvancement,
     useMiraculousRecovery,
+    // the participation, for anything that needs the seat rather than the player
+    participation: campaign && arsenal ? participationForArsenal(campaign, arsenal.id) : null,
   }
 }

@@ -5,8 +5,9 @@ import FlipInput, { isJoker } from '../FlipInput.jsx'
 import { injuryLine, annihilationLine, miraculousRecovery, leaderLost } from '../../data/hank.js'
 import { resolveInjuryFlip, resolveLuckyMiss, ANNIHILATION_THRESHOLD } from '../../lib/aftermath.js'
 import { REFLIP_REASONS } from '../../data/injuries.js'
-import { injuryNamesFor, injuriesFor } from '../../lib/campaignShape.js'
-
+import {
+  injuryNamesFor, injuriesFor,
+} from '../../lib/shape/arsenal.js'
 /**
  * Phase 6 — one flip per model that died, and the only phase a forfeited
  * aftermath still plays.

@@ -4,8 +4,9 @@ import {
   saveCampaign, loadCampaign, campaignIds, knownVersion, rememberVersion,
   isDirty, markDirty,
 } from '../lib/storage.js'
-import { belongsTo } from '../lib/campaignShape.js'
-
+import {
+  belongsTo,
+} from '../lib/shape/ownership.js'
 /**
  * Keeps the local shelf and the account's shelf in step.
  *
@@ -20,6 +21,32 @@ import { belongsTo } from '../lib/campaignShape.js'
  * built while signed out becomes theirs: anything on this browser that the
  * account has never seen is pushed up and associated with them.
  */
+/**
+ * ⚠ SYNC IS OFF FOR THE v3 CUTOVER, AND MUST STAY OFF UNTIL STEP 5.
+ *
+ * `docs/data-model-v3.md`, step 3: *"The UI, against local storage only, with
+ * sync switched off."* This constant is that switch, and the reason is specific
+ * rather than cautious.
+ *
+ * The local shelf is now v3: a campaign is a table with `participants`, and the
+ * leader, models, scrip and injuries live in a **separate arsenal document**.
+ * The server still holds v2 documents, where all of that was nested inside the
+ * campaign, and `useSync` only knows how to push campaigns. So a single
+ * successful push would replace a player's server copy with a campaign that has
+ * no arsenal in it at all, and their arsenal — the only remaining copy —
+ * would never be sent. Another device pulling that would find a leader-shaped
+ * hole.
+ *
+ * That is not a hypothetical: it is the same class of loss as v0.18.4, and this
+ * time it would be five other people rather than one.
+ *
+ * Turning it back on is step 5, and step 5 is **not** "delete this line". It is
+ * generalising `knownVersion` / `markDirty` / `planSync` over a `kind` once,
+ * adding `version` to `arsenals` in migration 0005, and teaching the server both
+ * shapes. Until all of that exists, this stays true.
+ */
+export const SYNC_DISABLED = true
+
 export function useSync({ user, available, onChanged }) {
   const [state, setState] = useState({
     status: 'idle',      // idle | syncing | synced | failed | offline
@@ -64,6 +91,12 @@ export function useSync({ user, available, onChanged }) {
    * which is why the data got up but never came back down.
    */
   const reconcile = useCallback(async () => {
+    // See SYNC_DISABLED. Refused here rather than at the call sites, so there is
+    // exactly one place that decides and nothing can route around it.
+    if (SYNC_DISABLED) {
+      setState({ status: 'paused', pushed: 0, pulled: 0, adopted: 0, error: null, at: Date.now() })
+      return
+    }
     // The guard the effect cannot provide: it holds a fresh `user`, this holds
     // whatever it was built with, and only this one can check the one it will
     // actually use.
@@ -246,6 +279,11 @@ export function useSync({ user, available, onChanged }) {
    * status line, never a lost edit or a blocked interaction.
    */
   const mirror = useCallback((campaign) => {
+    // The one that would actually do the damage — see SYNC_DISABLED. `mirror`
+    // fires on every local save, so without this guard the first keystroke
+    // after the cutover would push an arsenal-less campaign over a player's
+    // only server copy.
+    if (SYNC_DISABLED) return
     if (!user || !available || !campaign?.id) return
     remote.put(campaign, { baseVersion: knownVersion(campaign.id) })
       .then(({ saved }) => {
@@ -282,6 +320,7 @@ export function useSync({ user, available, onChanged }) {
   }, [user, available, reconcile])
 
   const forget = useCallback((id) => {
+    if (SYNC_DISABLED) return
     if (!user || !available) return
     remote.remove(id).catch(() => {
       // A campaign discarded locally but still on the server will come back on

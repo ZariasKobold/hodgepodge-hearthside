@@ -1,12 +1,12 @@
 # CLAUDE.md — Hodgepodge Hearthside project context
 
-<!-- HH v0.18.2 | Last updated: 2026-08-31 -->
+<!-- HH v0.19.2 | Last updated: 2026-09-03 -->
 
 ---
 
-## Current Version: 0.18.5
+## Current Version: 0.19.2
 
-## Last Updated: 2026-09-01
+## Last Updated: 2026-09-03
 
 **Live at hodgepodgehearthside.com** (Cloudflare Pages, auto-deploys on push to
 `main`). Repo: `ZariasKobold/hodgepodge-hearthside`.
@@ -72,20 +72,30 @@ a crash because nobody notices it.
 Feature sessions ship features and miss cross-file drift. Audit whenever any
 of these fire:
 
-- Every 10 sessions, counted from the numbered entries in `docs/VERSION_HISTORY.md`
-  (next scheduled: **Session 39**). The Session 20 audit was missed and finally
-  ran at Session 29; four of that audit's findings were introduced during the
-  nine sessions it was late, which is the argument for treating "audit due" as
-  blocking rather than as a queue item. Sessions are counted rather than version
-  numbers because a minor bump skips a patch series and makes a version-based
-  target unreachable — which is exactly what happened to the old v0.3.10 target.
+- Every 10 sessions, counted from the numbered entries in `docs/VERSION_HISTORY.md`.
+  The Session 20 audit was missed and finally ran at Session 29; four of that
+  audit's findings were introduced during the nine sessions it was late, which is
+  the argument for treating "audit due" as blocking rather than as a queue item.
+  Sessions are counted rather than version numbers because a minor bump skips a
+  patch series and makes a version-based target unreachable — which is exactly
+  what happened to the old v0.3.10 target.
+
+  **It has happened again. The Session 39 audit is overdue.** Sessions 39, 39b,
+  39c, 39d, 39e and 39f all shipped without it, and this is Session 40. The
+  lettered-suffix habit is how it got missed: six sessions all called "39" look
+  like one session, and the counter that decides when an audit is due stops
+  counting. Number sessions plainly — 40, 41, 42 — and let the version carry the
+  patch series. See `## ⚠️ NEXT SESSION` for when to run it.
 - Before any milestone that widens blast radius: first D1 write, first
   non-you user, submitting to Wyrd's Community Creators page
-- After a session touching 8+ files or adding a shared module — **this one is
-  suspect.** It fired at Sessions 34, 35 and 37 and was ignored each time,
-  because nearly every feature session touches eight files. See the note in
-  `## ⚠️ NEXT SESSION`: rewrite it to something that fires rarely, or drop it.
-  A trigger nobody acts on devalues the two above it.
+- **A new top-level module, a change under `functions/`, or the first write of a
+  shape that persists.** Rewritten at Session 40, as the previous entry demanded.
+  It used to read "8+ files or a shared module", which fired at Sessions 34, 35
+  and 37 and was ignored every time because nearly every feature session touches
+  eight files. A trigger that fires always and is obeyed never devalues the two
+  above it. This wording fires rarely and means something when it does — Session
+  40 tripped it (`src/lib/shape/`), and the audit it points at is the one already
+  overdue above.
 
 Ritual: read this file and `docs/VERSION_HISTORY.md` in full, then every file
 in `src/`, then catalogue findings by priority **before** writing fix code.
@@ -98,7 +108,7 @@ Save to `docs/audits/audit-vX.Y.Z.md`.
 
 ## ⚠️ NEXT SESSION — pending
 
-### Where things stand — v0.18.0
+### Where things stand — v0.19.2
 
 Sessions 14–38 took this from a local-only leader builder to a synced,
 multi-leader campaign tracker that plays a whole campaign week, game and
@@ -120,9 +130,11 @@ aftermath. Shipped and live:
 | **The aftermath** | v0.16.0. All six phases as one stateful flow, walked once per game, the record stored on the game so it survives a closed tab and syncs like anything else. Barter with the full equipment table, leader advancement across all six tables, Dr. Mo, injury flips with their reflip conditions, and annihilation checked at the end of phase 6. |
 | **The week is yours** | v0.17.0. Calendar or manual, per campaign. Forward *and back* in both. Campaign length, week length and start date are all editable. Calendar mode still writes an offset, not a week, so it keeps advancing underneath. |
 | **The build stamp** | v0.18.0. Version, commit and build date in the footer, baked in by `vite.config.js`. The commit is the half that matters — `CF_PAGES_COMMIT_SHA` cannot be forgotten the way a version bump can, and it answers "is what I pushed what is live?" from the page itself. |
+| **The v3 shape** | v0.19.2. Arsenals are top-level objects and campaigns are tables. **The app runs on this now** — `campaignShape.js` is deleted. The lift runs on load and was verified against all six live campaigns. ⚠ **Sync is off** while it beds in; see below. |
+| **The starting scrip** | v0.19.1. p. 15's grant is finally *paid* rather than only displayed. Reconciled from the week-0 models, so editing the starting arsenal adjusts the balance instead of paying twice; arsenals that predate the fix are **offered** the scrip they were never given. |
 | **Membership** | v0.17.0. Owner-issued single-use invites, two gates (redeem → pending → host admits), per-campaign nicknames, opt-in Discord identity, and a read-only shared arsenal page. Writes were **not** widened — see below. |
 
-331 tests.
+396 tests.
 
 ### The book is on disk, and must not be committed
 
@@ -138,25 +150,56 @@ Wyrd's product — the fastest available way to lose the fan-site permission thi
 whole project depends on (§8). The session rules' `git add .` would have swept
 it in.
 
-### The next audit is Session 39, as scheduled — carry this into it
+### ⚠⚠ SYNC IS OFF. Read this before anything else.
 
-Session 37 was large (22 files, four new modules) and §5's third trigger fired.
-It is **not** being treated as blocking, and the reasoning is worth keeping
-because it is a correction to §5 rather than an exception to it.
+`useSync` is gated behind `SYNC_DISABLED = true` (`src/hooks/useSync.js`), and it
+must stay that way until step 5 of `docs/data-model-v3.md` is done.
 
-**The "8+ files or a shared module" trigger is too loose to function.** It fired
-at Session 34 (10 files), Session 35 (10 files) and Session 37 (22), and nobody
-acted on the first two. A trigger that fires on nearly every feature session and
-is ignored every time is not a trigger — it is noise that teaches you to skip
-the ones that matter, including the 10-session cadence, which is the rule
-actually doing the work. Either tighten it to something that fires rarely (a new
-top-level module, or a change to `functions/`, or the first write of a shape
-that persists) or drop it. Do not leave it as written.
+**Why, specifically.** The local shelf is v3: a campaign is a table with
+`participants`, and the leader, models, scrip and injuries live in a separate
+arsenal document. The server still holds **v2** documents where all of that was
+nested inside the campaign, and `useSync` only knows how to push campaigns. One
+successful push would replace a player's server copy with a campaign that has no
+arsenal in it, and their arsenal — by then the only copy — would never be sent.
+Another device pulling that finds a leader-shaped hole. Same class of loss as
+v0.18.4, except this time it is five other people rather than one.
 
-**A general audit is also the wrong instrument for this session's risk.** The §5
-ritual reads `src/` for cross-file drift; it would not re-derive a barter rating
-from the book. So the narrow check below is worth more than a full pass, and
-Session 39 can cover the rest of Session 37 along with 30–38.
+**Turning it back on is not deleting that line.** It is: generalise
+`knownVersion` / `markDirty` / `planSync` over a `kind` exactly once (never
+copy-paste them for arsenals), add `version` to `arsenals` in migration 0005,
+and teach the server both shapes. Until all three exist, the constant stays true.
+
+The shelf says so on screen — `sync.status === 'paused'` renders a plain warning
+that the data is in this browser only and the account's copy is untouched. That
+is §12's rule about telling the truth about where the data is, and it is not
+optional while this is the state.
+
+**The backup taken before the cutover is in `backups/`** (gitignored, sessions
+stripped). It is the restore point if the lift turns out to be wrong on a real
+device.
+
+### ⚠ The audit is overdue, and here is when to run it
+
+It was scheduled for Session 39. Sessions 39, 39b, 39c, 39d, 39e and 39f went by
+without it, and Session 40 added a new top-level module on top. §5 has been
+rewritten to say why the counter stopped counting (six sessions all called "39"
+read as one) and its third trigger has been tightened to the wording the old note
+demanded. **Number sessions plainly from here — 41, 42, 43.**
+
+**Run it after the v3 cutover, not before**, and this is a judgment rather than a
+deferral. The §5 ritual reads every file in `src/` for cross-file drift; a
+substantial fraction of `src/` — `campaignShape.js`, `useCampaign.js`, the shelf,
+the wizard steps — is being replaced by item 0 in the next session or two.
+Auditing code that is about to be deleted spends the audit's attention on the one
+part of the codebase where it cannot pay off, and the audit that matters is the
+one that reads the *new* shape with the book open.
+
+What that means concretely: **the cutover is the trigger.** The moment
+`src/lib/shape/` is what the app runs on, audit before anything else ships. If
+the cutover slips past two more sessions, run it anyway — the argument above
+expires the moment "about to be replaced" stops being true.
+
+Carry all of the below into it.
 
 Two places the risk is concentrated:
 
@@ -251,18 +294,70 @@ Two facts from that setup worth keeping, because both cost time to learn:
 
 #### 0. Split arsenals from campaigns — `docs/data-model-v3.md`
 
-**Designed, not started.** Owner's proposal and it is the right one: an arsenal
-becomes a durable personal object that exists before any campaign, and a campaign
-becomes the table — who is playing, which arsenal each of them brought, and
-aftermath writing back into those arsenals.
+**Step 1 of 5 is built and tested (v0.19.0). Nothing in the running app imports
+it yet.** An arsenal is now a durable personal object that exists before any
+campaign, and a campaign is the table — who is playing, which arsenal each of
+them brought, and aftermath writing back into those arsenals.
 
 It is not a matter of taste. One campaign per leader is why there are six
 campaign rows for five users, why `campaigns.member_of` is a campaign row
-pointing at another campaign row, and why `CLAUDE.md` has to warn you not to put
+pointing at another campaign row, and why this file used to warn you not to put
 your own second leader in `campaign.arsenals[]`. **D1 already models it
 correctly** — `arsenals` has had its own table with `campaign_id` and
 `user_id` since 0001 — so this is moving the client document toward the schema
 already beneath it.
+
+**What exists now**, all pure, all tested, importing nothing from React:
+
+```
+src/lib/shape/arsenal.js    the durable personal object + its selectors
+src/lib/shape/campaign.js   the table: weeks, house rules, participations, games
+src/lib/shape/ownership.js  belongsTo / shouldRelease / claim — shared by both kinds
+src/lib/shape/migrate.js    v2 → v3 split, and the export/import trio
+scripts/migrate-check.mjs   dry-runs the lift against a real export, read-only
+```
+
+93 tests across the three. `src/lib/campaignShape.js` is untouched and is still
+what the app runs on; it retires at the cutover.
+
+**Two rules of the shape worth not undoing:**
+
+- **`shape/` and `campaignShape.js` must not import each other.** The whole point
+  of the new module having no dependency on the old one is that the old one can
+  be deleted outright at step 3. The v0.1 leader lift was re-inlined as
+  `migrateLeaderToArsenal` rather than chained through the old function for
+  exactly this reason.
+- **`belongsTo` lives in one file for both kinds of object.** Two kinds of owned
+  thing answering "may I see this?" in two places is how they eventually answer
+  it differently.
+
+**Next, in this order:**
+
+0. ~~**The pure shape**~~ and ~~**the UI cutover**~~ are **done** (v0.19.0,
+   v0.19.2). What is left is the sync half — see the sync warning above, and
+   items 4 and 5 of the plan.
+
+1. ~~**Run `migrate-check` against a real export.**~~ **Done 2026-09-03, and it
+   passed.** Run against all six live campaigns pulled from remote D1 — every
+   model, injury, equipment row, scrip total, experience box, advancement and
+   game survived, every model carried an id, and both ids were preserved on all
+   six. `backups/hodgepodge-2026-09-03-campaigns.json` is the input; re-run it
+   any time with:
+   `node scripts/migrate-check.mjs backups/hodgepodge-2026-09-03-campaigns.json`
+2. ~~**The UI, local storage only, sync off.**~~ **Done, v0.19.2.** The lift, the
+   two-document hook, the shelf of arsenals, and every component moved off
+   `campaignShape.js`, which is deleted. Verified in the browser: a seeded v2
+   campaign lifted with its scrip, models, injuries, kit, experience and game
+   history intact; a week was played (a hire at the right discounted price)
+   and persisted; a reload re-ran the lift as a no-op; a new leader got its own
+   table.
+
+   **What has not happened is a real week on the *new shape*.** A real game was
+   played on 2026-09-02 — Mads v Dalton, and it is what item 0b came out of —
+   but that was on v2, before the cutover. So the shape has been exercised by a
+   browser and not yet by an evening. That is the next thing and it is the whole
+   point of the step.
+3. **Migration 0005**, then generalise sync **last**.
 
 Two things from the plan that are easy to get wrong and expensive to undo:
 
@@ -276,6 +371,66 @@ Two things from the plan that are easy to get wrong and expensive to undo:
 
 The conflict-resolution screen listed under Known issues should probably ship
 **first**: an arsenal changes every week, so conflicts get more likely, not less.
+
+#### 0a. The first real game also *confirmed* the arithmetic
+
+Mads v Dalton, 2026-09-02, recorded in the `campaign-play` channel. Two people
+worked the aftermath out by hand at the table and posted the numbers; the app
+agrees with all four:
+
+| | table | `src/lib/campaign.js` |
+|---|---|---|
+| Dalton, 4 VP, won | 3 scrip | `payday` → 3 |
+| Madeline, 3 VP, lost | 1 scrip | `payday` → 1 |
+| Dalton's hand (2 schemes) | 3 cards | `aftermathHandSize` → 3 |
+| Madeline's hand (1 scheme) | 2 cards | `aftermathHandSize` → 2 |
+
+Worth writing down because it is a different *kind* of evidence from the tests.
+`payday` and `aftermathHandSize` have always been tested against fixtures
+transcribed from the same book the code was — which cannot catch a
+misreading — and this is the first time either has been checked against a game
+two people actually played and settled between themselves. §6's "where a claim
+is about an external source, go and look" applies to the table as much as to the
+register.
+
+It also shows what the app is *not* holding. Both barter flips, both aftermath
+hands and both advancement flips were posted as photographs in Discord, because
+there is nowhere in the app to put them — which is item 0b's first bullet
+arriving as evidence rather than as a feature request.
+
+#### 0b. What the first real game asked for — `docs/data-model-v3.md`
+
+The owner played a game with this app on 2026-09-01 and came back with four
+things. All four are designed at the end of the plan doc; none is built.
+
+- **A crew builder with a shared session.** Start an encounter, the opponent
+  joins, both sides pick from their arsenals and equipment and then reveal. No
+  other tool can do this, because no other tool can hold a leader that does not
+  exist on a card. It belongs to v3: an encounter happens between two *arsenals*
+  at a *table*, which is what a participation joins. It also makes the campaign
+  rating computable instead of typed.
+- **Record the aftermath hand, and spend it.** Today phase 1 stores a number and
+  the player holds four real cards the app knows nothing about. `hand: [{ value,
+  suit, spentOn }]`, offered at every later flip. **This does not weaken the rule
+  that the app owns no fate deck** — every card is still typed in, and there must
+  never be a "flip for me" button.
+- ~~**Scrip from an under-spent hire**~~ — **it was the starting arsenal, and it
+  was a real bug. Fixed v0.19.1.** Two rules, one scrip, and do not re-derive
+  either:
+  - **p. 15, starting arsenal** — "Each soulstone a player chooses not to spend
+    during this step becomes one scrip, up to a maximum of three scrip."
+    `Record` has *displayed* that number since v0.1 and never written it to the
+    arsenal: the screen said "22/25 spent · 3 scrip" and the campaign began with
+    zero. See `startingScripPatch`.
+  - **p. 19, hiring for an encounter** — "Players may use excess soulstones from
+    hiring to increase their pool as normal." Those become soulstones in that
+    game's pool and never scrip. If anyone wants them as scrip it is a house
+    rule, and the still-missing half is that nothing shows the leftover at all.
+- **The aftermath must go backwards, then lock.** Not a Back button — a change
+  of where the truth lives. Every phase's effect on the arsenal has to be
+  *derived from the record and reconciled*, not appended when a button is
+  pressed. Only `paid` and `advance.applied` guard anything today; barter, the
+  doctor and the injury flips all append and would double on a revisit.
 
 #### 1. ~~Campaign membership~~ — shipped v0.17.0
 
@@ -436,7 +591,13 @@ he visibly changes when a leader dies — it costs one line of code.
   local D1 — every count to zero, a second account untouched, the dead session
   refused — but deliberately never run against the live database, because the
   only real account on it is the owner's.
-- **`migrateLeaderToCampaign`.** Tested against a synthetic record only.
+- **`migrateLeaderToCampaign`.** Tested against a synthetic record only. The
+  *v3* lift on top of it is no longer in this category — `splitLegacyCampaign`
+  was run against all six real campaigns on 2026-09-03 and lost nothing.
+- **Restoring a backup to *remote*.** The 2026-09-03 dump was restored into a
+  throwaway SQLite database and verified row for row, which proves the file. It
+  has never been applied to the live database, and doing so means dropping what
+  is there first — see `backups/README.md`.
 - **The corrected PDF.** The three v0.6.0 print fixes are CSS and `.noprint`
   classes verified in the DOM; no print dialogue has ever been opened from this
   environment. The owner's next export is the proof. Same for the new arsenal
@@ -609,6 +770,12 @@ hodgepodge-hearthside/
 │   │   ├── injuries.js     injury chart, Lucky Miss, back-alley doctor
 │   │   └── advancements.js six tables + the leadership experience track
 │   ├── lib/                pure logic, imports nothing from React
+│   │   ├── shape/          THE SHAPE — v3, and what the app runs on
+│   │   │   ├── arsenal.js    the durable personal object
+│   │   │   ├── campaign.js   the table — weeks, participations, games
+│   │   │   ├── ownership.js  belongsTo, shared by both kinds
+│   │   │   └── migrate.js    v2→v3 split + export/import; the dangerous one
+│   │   ├── shelf.js        storage ↔ shape seam; holds the v2→v3 lift
 │   │   ├── aftermath.js    the six phases, as arithmetic
 │   │   ├── rules.js        live rules text, memory-only (§4)
 │   │   ├── remote.js       the D1 client + planSync, the merge that can lose data
@@ -631,7 +798,9 @@ hodgepodge-hearthside/
 │   ├── data-model-v3.md    THE PLAN: split arsenals from campaigns — read first
 │   ├── hank-dialogue.md    numbered reading copy of the narration
 │   └── SETUP_D1_AUTH.md    one-time dashboard setup
-└── scripts/seed.mjs        optional bulk register pull
+└── scripts/
+    ├── seed.mjs            optional bulk register pull
+    └── migrate-check.mjs   dry-runs the v2→v3 lift on a real export; read-only
 ```
 
 ---
@@ -917,7 +1086,7 @@ every session. `docs/VERSION_HISTORY.md` holds how it got this way.
 npm install
 cp .env.example .env
 npm run dev      # Vite only — NO Functions, NO database. useAuth degrades to signed out.
-npm run test     # 331 tests; `functions/` is in the run too, for the authz tests
+npm run test     # 396 tests; `functions/` is in the run too, for the authz tests
 npm run build    # production bundle — the dev proxy does NOT exist here
 npm run seed     # optional local register file; ask BiggerHat's maintainer first
 
@@ -1063,30 +1232,53 @@ Two rules it establishes that are easy to violate:
 - **Never loop a query per arsenal or per model.** D1's free plan caps a Worker
   invocation at 50 queries. Fetch sets.
 
-**Five views, and Leaders is not an exit.** `library` (the shelf), `arsenal`
-(the standing view of one campaign — leader record, roster by week, crew cards),
+**Five views, and Leaders is not an exit.** `library` (the shelf of *arsenals*),
+`arsenal` (the standing view of one — leader record, roster by week, crew cards),
 `sheet` (the arsenal sheet), `create` (the wizard) and `campaign` — which since
 v0.16.0 holds the weekly hire *and* the aftermath as two sub-tabs under one
 week control, because the evening runs hire, play, aftermath, hire again.
-Switching to the shelf must not close the open campaign: doing so made the
-other tabs vanish, which reads as losing your place. Opening a different leader
-is the only close.
+Switching to the shelf must not close what is open: doing so made the other tabs
+vanish, which reads as losing your place. Opening a different leader is the only
+close. Since v0.19.2 what is open is an **arsenal**, and its campaign comes with
+it — `App` still opens the most recently updated arsenal when nothing is open,
+without navigating.
 
-**Campaigns live on a shelf, one per leader.** Since v0.6.0 storage holds
-`campaigns:index` (ids only), `campaign:<id>` per campaign, and
-`campaigns:active`. The index deliberately stores no leader name or faction —
-those are derived and would go stale on a rename, so the shelf reads each
-campaign to draw its card.
+**Arsenals live on the shelf; campaigns are the tables they sit at.** Changed at
+v0.19.2, and this section used to say the opposite — read `docs/data-model-v3.md`
+before changing any of it. Storage holds six keys:
 
-A campaign's `arsenals` array is for **other players**, not your other leaders:
-max encounter size is min(both arsenals) + 6, so opponents have to live there.
-Your second leader is a second campaign. Do not add leaders to that array.
+```
+arsenals:index   ids only        campaigns:index   ids only
+arsenal:<id>     the arsenal     campaign:<id>     the table
+arsenals:active  what is open    campaigns:active  its table
+```
 
-`schemaVersion` is **2**. v1 let the creation wizard write bare
-`{slug,name,cost}` into `arsenal.models`; `migrate` backfills what `createModel`
-provides, and files those models under `STARTING_ARSENAL_WEEK` (0) so the
-starting arsenal is not mistaken for week-1 hires — which would eat the
-first-of-week discount.
+Neither index stores a leader name or faction — those are derived and would go
+stale on a rename, so the shelf reads each document to draw its card.
+
+**What a player opens is an arsenal.** The campaign comes along because the
+arsenal names it in `campaignId`. A solo player's campaign is created silently by
+`createSeatedArsenal` and never mentioned, so soloing and a table of five run one
+code path rather than two.
+
+**An arsenal is in at most one campaign at a time.** `joinCampaignPatch` throws
+rather than reassigning. Scrip, weeks and experience are per-campaign quantities;
+a leader at two tables has two contradictory histories and the arsenal sheet can
+print neither. The same leader at a second table is `duplicateArsenal` — identity
+and surviving models, none of the history.
+
+**`campaign.arsenals[]` is gone**, and with it the warning that used to live
+here telling you not to put your own second leader in it. A second leader is a
+second arsenal on the shelf. Encounter size reads across the participations
+(`encounterCapFor`) rather than into a nested array.
+
+`schemaVersion` is **3** on both kinds of document. `shape/migrate.js` chains
+every earlier shape into it: v0.1's single leader (`migrateLeaderToArsenal`),
+v1's bare `{slug,name,cost}` models (`repairModel`, filed under
+`STARTING_ARSENAL_WEEK` so they cannot eat a first-of-week discount), and v2's
+nested arsenal (`splitLegacyCampaign`). `shelf.js` runs the lift on load, parks
+the untouched v2 document under `v2-backup:campaign:<id>` first, and is safe to
+run every time.
 
 Build order matters: get the `Campaign` shape right locally and play a few real
 weeks *before* writing a migration. Schema built on guesses is expensive to fix

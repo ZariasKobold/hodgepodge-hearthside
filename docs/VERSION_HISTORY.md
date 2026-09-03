@@ -3078,3 +3078,423 @@ fix: `pulls even when the local clock claims to be far newer` (a device with
 `updatedAt: 9999999999` and a stale version still pulls) and `pushes an edit
 whose clock is behind the server it is based on` (a slow clock no longer costs
 you your unsent work). Both were wrong before this session.
+
+---
+
+### Session 40 — v0.19.0
+Date: 2026-09-02
+
+**feat: the arsenal becomes its own object, in a module nothing imports yet**
+
+Step 1 of `docs/data-model-v3.md`. The pure shape and the v2→v3 migration, with
+tests, and **no component touched**. `src/lib/campaignShape.js` is still what the
+running app uses; the new module sits beside it until the cutover.
+
+That restraint is the whole shape of this session. The plan doc's order of work
+says build the shape, migrate locally, play a real week, *then* touch D1 — and
+the reason is written into three separate places in `CLAUDE.md`: schema built on
+guesses is expensive once anyone has saved data, and other people have now saved
+data. Wiring the UI in the same session as the shape would have made both
+untestable at once.
+
+#### What the split actually is
+
+Three concepts where there were one and a half:
+
+- **Arsenal** (`src/lib/shape/arsenal.js`) — the durable personal object. The
+  book's arsenal sheet: leader, models, scrip, injuries, equipment, experience,
+  advancements, totem. Owned by one person, exists before any campaign.
+- **Campaign** (`shape/campaign.js`) — the table. Weeks, week mode, house rules,
+  participants, games. Nothing personal.
+- **Participation** — `(campaign, user, arsenal)` plus nickname, `shareIdentity`,
+  `status` and `joinedWeek`. This is what `campaign_members` already is.
+
+It retires `campaign.arsenals[]`, `campaign.localArsenalId`, `campaign.members[]`
+and the reason `campaigns.member_of` existed at all.
+
+**D1 has believed this since migration 0001** — `arsenals` has always had its own
+table with both `campaign_id` and `user_id`. This is the client document moving
+toward the schema already underneath it, which is a much smaller claim than a
+rewrite and is the strongest argument for doing it.
+
+#### The four open questions, settled
+
+1. **A solo player gets an implicit campaign of one**, created silently.
+   `createCampaign` starts with no participants and gains one when an arsenal is
+   seated, so soloing and a table of five are one code path. The special case is
+   the thing that rots.
+2. **The campaign owns the week; the participation owns `joinedWeek`.** A group
+   agrees when week four is — two players disagreeing about it *is* the bug. But
+   an arsenal that joined in week four was not delinquent in weeks two and three,
+   so `mustHireThisWeek` takes `joinedWeek` and defaults it to 1.
+3. **A deleted campaign never cascades.** The arsenal survives with
+   `campaignId: null` and its history intact. Deliberately a patch on the arsenal
+   rather than a cascade on the campaign: two documents are two writes, and a
+   function pretending otherwise would be pretending to a transaction it cannot
+   have.
+4. **A host may not see a pending member's arsenal.** `visibleArsenalIds` runs
+   the rule both ways — a pending player sees only their own, a stranger sees
+   nothing — and it is asserted. If admitting did not gate reading, the first of
+   the two membership gates would be decorative.
+
+Also settled, and it is a restraint rather than a feature: **an arsenal may be in
+at most one campaign at a time.** `joinCampaignPatch` throws rather than
+reassigning. Scrip, weeks and experience are per-campaign quantities; a leader in
+two campaigns has two contradictory histories and the arsenal sheet cannot print
+either. Wanting the same leader at a second table is `duplicateArsenal` — the
+identity and the surviving models, none of the history, new ids throughout.
+
+#### The trap the migration found in itself
+
+`readBundle` decided "is this a bundle?" by looking for an `arsenals` array. **A
+v2 campaign is also an object with an `arsenals` array.** So a bare v2 export —
+the oldest and most likely file anyone still has — was read as a bundle: the
+campaign discarded, and the arsenals that had been *inside* it filed as though
+they were top-level. Silent loss, on the one path whose entire purpose is to
+prevent loss.
+
+Caught by its own test, before anything imported it. The fix is that the bundle
+test is narrow (`format`, or a `campaigns` array) and the legacy-campaign test
+runs first. Worth remembering: the two shapes overlap on exactly one field name,
+and the next person to touch that function will meet it again.
+
+The same care shows up as `defined()` in `shape/arsenal.js`. Every factory here
+spreads its patch last, so `{ id: undefined }` overwrites the id it just minted
+and the save silently no-ops — the `createCampaign` bug from audit v0.5.2. The
+rule is strip keys, do not blank them, and now there is a tool for it and a test
+that says so.
+
+#### `scripts/migrate-check.mjs`
+
+The plan doc's step 2 is blunt: *"`migrateLeaderToCampaign` has never been run
+against anything but a synthetic record. Do not add a second unverified lift on
+top of it. Run v3's migration against real exported JSON from the live account
+before trusting it."*
+
+So there is now a script for exactly that. It reads a real export and asserts
+**conservation** per campaign — models, injuries, equipment, scrip, experience
+boxes, advancements and games all still present, every model carrying an id,
+every arsenal seated at the table it came out of, and both ids unchanged. It
+writes nothing, opens no network connection and touches no browser storage, so it
+is safe to point at the only copy of somebody's twelve weeks. Exit code 1 if
+anything broke.
+
+Ids are the part worth being loud about: **the lift preserves them.** The arsenal
+keeps its `ars_…` and the campaign keeps its `cmp_…`, because `arsenals` rows
+already exist on D1 under those ids. Re-minting would have doubled every row on
+the server the first time a device synced after upgrading.
+
+#### Went to the book rather than reasoning about it
+
+The owner asked for scrip from an under-spent pre-game hire. Checked the PDF
+instead of deciding it sounded right, per §6's *"where a claim is about an
+external source, go and look"*, and the answer is no. Two rules, one scrip:
+
+- **p. 18, starting arsenal** — each unspent soulstone becomes one scrip, max
+  three. Already implemented as `startingScrip`.
+- **p. 19, hiring for an encounter** — *"Players may use excess soulstones from
+  hiring to increase their pool as normal."* Leftovers become soulstones in that
+  game's pool and never scrip. The book's worked example has Jack and Jill
+  underspending by 3 between them and starting with 3 stones to share.
+
+So it is a house rule (`unspentHireBecomesScrip`, default off, with a
+`.gap-note`), not a missing feature — the same treatment §13 gives the hire-cost
+gap. The genuinely missing half is that nothing currently *shows* the leftover at
+all, which is why it read as lost value.
+
+#### Designed, not built
+
+`docs/data-model-v3.md` gained two sections from the owner's first real game:
+
+- **The crew builder with a shared session.** An encounter is a thing that
+  happens between two *arsenals* at a *table*, which is what a participation
+  joins — it could not have been modelled cleanly before this split. Four rules
+  written down before anyone writes the screen: hidden-then-revealed hiring
+  (p. 19 works the rating out *after* revealing), hire only from your arsenal
+  with leader and totem at 0, the campaign rating stops being typed in because
+  the encounter finally knows every term of it, and resolving an encounter
+  creates the game.
+- **Three aftermath changes.** Record the hand as cards and spend them (still no
+  fate deck — every card typed in, no "flip for me" button, ever); show the
+  leftover soulstones; and make the aftermath go backwards and then lock. The
+  third is not a Back button — it is a change of where truth lives. Every phase's
+  effect on the arsenal must be *derived from the record and reconciled*, not
+  appended when a button is pressed. Only `paid` and `advance.applied` guard
+  anything today; barter, the doctor and the injury flips all append and would
+  double on a revisit.
+
+#### The audit, and why §5 stopped working
+
+§5 said the next audit was Session 39. Sessions 39, 39b, 39c, 39d, 39e and 39f
+shipped without it. **The lettered-suffix habit is the mechanism**: six sessions
+all called "39" read as one session, and the counter that decides when an audit
+is due quietly stopped counting. Sessions are numbered plainly from here.
+
+§5's third trigger has also been rewritten to the wording the previous note
+demanded — *a new top-level module, a change under `functions/`, or the first
+write of a shape that persists* — instead of "8+ files or a shared module", which
+fired on nearly every feature session and was ignored every time. This session
+trips the new wording, which is the point of it.
+
+The audit itself is recommended **after the v3 cutover**, on the argument that
+the §5 ritual reads every file in `src/` and a large fraction of `src/` is about
+to be deleted by item 0. If the cutover slips more than two sessions, run it
+anyway — that argument expires the moment "about to be replaced" stops being
+true.
+
+Files (v0.19.0): `src/lib/shape/{arsenal,campaign,ownership,migrate}.js` + three
+       test files, `scripts/migrate-check.mjs`, `docs/data-model-v3.md`, `CLAUDE.md`
+
+#### Then, same session — v0.19.1: the starting scrip was never paid
+
+The owner clarified what they had actually meant by "scrip from the pre-game",
+and quoted p. 15. It was the **starting arsenal**, not hiring for an encounter,
+and the earlier answer in this entry — "the book says no, so it is a house rule"
+— was answering the wrong rule.
+
+Both are worth keeping straight, because the app must behave differently for
+each:
+
+| | |
+|---|---|
+| **p. 15**, starting arsenal | unspent soulstones → **scrip**, capped at 3 |
+| **p. 19**, hiring for an encounter | excess soulstones → the **soulstone pool** for that game, never scrip |
+
+The p. 19 finding stands and is unchanged. The p. 15 half was a real bug.
+
+**`Record` has computed the number since v0.1 and never written it anywhere.**
+The creation screen printed "22/25 spent · 3 scrip" in its tally and
+`arsenal.scrip` stayed at zero. That is the worst form of this bug: the display
+was right, so a player has no reason to doubt it and every reason to wonder why
+the campaign disagrees. Confirmed in the browser before touching anything — a
+seeded 22ss arsenal showed `22SS · 0 SCRIP` on the shelf.
+
+There was a quieter second half. The tally totalled **every** model rather than
+the week-0 ones. During creation those are the same list, so it looked correct
+forever; open the same screen in week three and a 40ss roster reads as the
+starting arsenal, the grant computes to zero, and a player who *had* been paid
+would have had it taken back off them. `startingArsenalSpend` counts week 0 only
+— and deliberately still counts a starting model that has since been
+annihilated, because the soulstones were spent and a death in week four does not
+make the starting arsenal retroactively cheaper. That is the opposite of what
+`totalFor` needs, which is why they are two functions over one list rather than
+one function with a flag.
+
+**Reconciled, not appended.** `startingScripPatch` derives the grant from the
+starting arsenal, `startingScripGranted` records what has already been paid, and
+the patch moves the balance by the difference. Adding a model afterwards takes
+the change back; removing one pays the difference; calling it ten times pays
+once. Appending would have been three lines shorter and would have double-paid
+the first time anyone edited their starting arsenal twice — the same mistake the
+aftermath phases are queued up to be fixed for, and worth not making twice in one
+session.
+
+`startingScripGranted: null` means *never reconciled*, which is deliberately not
+`0` (*reconciled, and the grant was nothing*) — the same null-versus-false
+distinction `isDirty` makes in `storage.js`, for the same reason: guessing
+"already paid" about an arsenal nobody has asked would quietly keep somebody's
+scrip.
+
+**Existing arsenals are offered it, not given it.** Everyone already playing is
+owed up to 3. Paying on load would move a number in an in-progress campaign with
+no explanation, which is indistinguishable from a bug, and the database is no
+longer only the owner's. So `owedStartingScrip` drives a note on the creation
+screen that states the rule and offers a button; the player decides.
+
+Verified in the browser, not asserted: the note rendered as "This arsenal is owed
+3 scrip", the button wrote `{ scrip: 3, startingScripGranted: 3 }` to
+localStorage, the note then disappeared (so it cannot double-pay), and the shelf
+re-read `22SS · 3 SCRIP`.
+
+Sixteen new tests across both shapes — the v2 one the app runs on today and the
+v3 one it will run on after the cutover, so the fix survives item 0 rather than
+having to be found again.
+
+Files: `src/lib/campaignShape.js`, `src/lib/shape/arsenal.js`,
+       `src/hooks/useCampaign.js`, `src/components/steps/Record.jsx`,
+       `src/App.jsx`, both test files, `docs/data-model-v3.md`, `CLAUDE.md`
+RESOLVED: data-model-v3's four open questions; §5's loose third trigger; the
+p. 15 starting scrip, unpaid since v0.1.
+UNVERIFIED: the v2→v3 lift against a **real** export — the script exists, the run
+has not happened. Everything in `shape/` is still unexercised by the app.
+NEXT: run `migrate-check` on a real export, then the UI cutover with sync off,
+then the audit.
+
+#### Then, 2026-09-03 — a restore point, and step 2 finally run for real
+
+Before the v3 cutover touches anything, the live database was backed up. Two
+artifacts, both in `backups/`, which was added to `.gitignore` **before either
+file existed** so there was never a moment when a dump was committable.
+
+`wrangler d1 export --remote` gave the full schema and data: 11 tables, 58 rows,
+5 users, 6 campaigns, 6 arsenals, 23 arsenal models. `injuries`, `equipment` and
+`games` came back **empty**, exactly as migration 0002 predicted — they were
+never normalised, so the real campaign data lives entirely inside
+`campaigns.doc`. That is why a second artifact exists: the six documents pulled
+out into the app's own import format, which is the one a player can actually be
+handed back.
+
+**The dump is a credential file, not just data.** `sessions` has 16 rows and its
+`id` column *is* the session cookie value, so anyone holding the file can sign in
+as any of those five people until the rows expire. `users` carries other people's
+Discord ids, display names and avatar URLs. This repository is public. Hence the
+gitignore-first ordering, and `backups/README.md` saying so at the top rather
+than in a footnote.
+
+**Verified rather than assumed, in both directions.** The `.sql` was loaded into
+a throwaway SQLite database: it applied without error, produced all 11 tables
+with the expected row counts, and all six campaign documents parsed with a leader
+intact. A backup nobody has restored is not a backup.
+
+Then **step 2 of `docs/data-model-v3.md` was finally run against real data** —
+the thing the plan called not optional, and that had been sitting as UNVERIFIED
+since the shape was written. `migrate-check` passed on all six live campaigns:
+every model, injury, equipment row, scrip total, experience box, advancement and
+game survived the split, every model carried an id, every arsenal was seated at
+the table it came out of, and **both ids were preserved on all six** — which is
+the one that matters, because a re-mint would have doubled every row on the
+server the first time a device synced after upgrading.
+
+Step 3, the UI cutover, is now unblocked.
+
+Two facts worth carrying into it:
+
+- **Every campaign on the server is `version: 0`.** Nobody has been handed a
+  server version since migration 0004, so by v0.18.5's rule the first write from
+  any device will be refused until it has pulled once. That is the intended
+  behaviour and it will look like a failure the first time it happens.
+- **The v0.19.1 starting-scrip fix owes the five players 11 scrip between them** —
+  2, 0, 2, 3, 3 and 1. One of those is an arsenal with no models at all, which is
+  offered the full 3 and will reconcile downward as soon as it is built; that is
+  the delta behaving correctly rather than a bug.
+
+Files: `.gitignore`, `backups/README.md`, `CLAUDE.md`, `docs/data-model-v3.md`
+RESOLVED: step 2 of the v3 plan; `splitLegacyCampaign` is no longer unverified.
+UNVERIFIED: restoring a backup to *remote* — proven against a scratch SQLite
+database only, and doing it for real means dropping the live one first.
+NEXT: the UI cutover on local storage with sync off, then the audit.
+
+---
+
+### Session 41 — v0.19.2
+Date: 2026-09-03
+
+**feat: the app runs on the v3 shape, and `campaignShape.js` is gone**
+
+Step 3 of `docs/data-model-v3.md`. The arsenal is now a top-level document, the
+campaign is the table it sits at, and every component reads the new shape. The
+old module was deleted rather than deprecated — two shapes in circulation is the
+thing this whole change exists to end.
+
+#### ⚠ Sync is off, and that is the most important line in this entry
+
+`SYNC_DISABLED = true` in `src/hooks/useSync.js`, gating `reconcile`, `mirror`
+and `forget`.
+
+The reason is specific rather than cautious. The local shelf is v3; the **server
+still holds v2 documents**, and `useSync` only knows how to push campaigns. One
+successful push would replace a player's server copy with a campaign that has no
+arsenal in it — the leader, models, scrip and injuries now live in a separate
+document that nothing sends — and their arsenal would by then be the only copy.
+Another device pulling that finds a leader-shaped hole. That is the v0.18.4 class
+of loss again, except with five other people's campaigns on the database.
+
+Turning it back on is step 5 and is **not** deleting the constant: generalise
+`knownVersion` / `markDirty` / `planSync` over a `kind` once, add `version` to
+`arsenals` in 0005, teach the server both shapes. The shelf says the state out
+loud in the meantime (`status: 'paused'`), because §12's rule is that the screen
+tells the truth about where the data is.
+
+#### The shape of the cutover
+
+- **`src/lib/shelf.js`** is new: the seam between `storage.js` (which knows
+  nothing about shapes) and `shape/` (which knows nothing about storage). It
+  holds `createSeatedArsenal`, `readShelf`, `forgetSeated` and the lift.
+- **`useCampaign` holds two documents**, with two `lastWritten` refs rather than
+  one. The v0.18.4 identity guard is preserved on both — reading is not editing,
+  and every read path seeds the ref, or merely opening the app writes the
+  document back and claims authorship of a change nobody made.
+- **Shelf entries are `{ arsenal, campaign }`.** `campaign` may be null: an
+  arsenal outlives its table by design, so the card renders "Not at a table"
+  rather than inventing a week.
+- **A solo player gets a silent campaign of one.** `createSeatedArsenal` makes
+  both halves together, so soloing and a table of five are one code path.
+- **The export is a bundle now.** One leader exports as
+  `{ campaigns: [...], arsenals: [...] }`, because an arsenal without its table
+  imports as a leader with no weeks, no house rules and no game history — which
+  is not the thing the player thought they were exporting. The crash rescue in
+  `ErrorBoundary` does the same, and still reads both indexes straight out of
+  localStorage with no hooks and no shape module, so nothing it depends on can
+  be part of what just broke.
+
+#### The lift, and its safety net
+
+`liftLocalShelfToV3` runs on every load and is idempotent — `migrateCampaign`
+passes a v3 document straight through and `isLegacyCampaign` skips anything
+already split.
+
+**The v3 campaign is written back to `campaign:<id>`, the same key the v2 one
+occupied.** Keeping two keys would have put two shapes in circulation, so the
+original is parked at `v2-backup:campaign:<id>` first — the precedent
+`adoptLegacyCampaign` set, for the reason it set it: *if this goes wrong, the
+only copy of somebody's twelve weeks should still be where it was.* The snapshot
+is never overwritten, so a second run cannot park an already-migrated document as
+though it were the original.
+
+Written with `keepTimestamp`, so the lift does not claim to be a local edit. It
+reshaped a document the account has never seen in this form; restamping would
+tell the sync layer this device authored it.
+
+#### Verified in the browser, not asserted
+
+A v2 campaign of the exact shape production holds — 3 models, 1 injury, 1 piece
+of kit, 4 scrip, 2 experience boxes, 1 advancement, 1 finished game — was seeded
+and the app loaded:
+
+- The lift produced `arsenal:ars_…` at `schemaVersion: 3` with **no `arsenals`
+  array**, and `campaign:cmp_…` with a host participation and **no
+  `localArsenalId`**. Both ids preserved. The v2 snapshot was intact.
+- Every screen rendered on the new shape: the shelf (week 3, 22ss, 4 scrip), the
+  arsenal view with the roster grouped by arrival week, the campaign view
+  reading "1 games won" — which is `gamesWon(campaign, arsenal.id)`, the call
+  that needed an explicit arsenal id in v3 — and the aftermath finding the
+  historical game by `arsenalId`.
+- **A week was played.** A hand-typed hire priced at 4 scrip (9ss less the
+  first-of-week 5) took the balance 4 → 0, filed the model under week 3, cleared
+  the mandatory-hire nag, and landed **on the arsenal document, not the
+  campaign**. It survived a reload, and the re-run lift was a no-op.
+- "Build a new leader" produced a second arsenal with its own table, seated as
+  host, leaving the first untouched.
+
+#### What is left of the old module
+
+Nothing. `campaignShape.js` and its 84 tests are deleted; their coverage is
+replaced by 113 tests across `shape/arsenal`, `shape/campaign`, `shape/migrate`
+and the new `shelf.test.js`. 396 tests, build clean.
+
+`shelf.test.js` is the one worth reading: it covers the lift against a realistic
+v2 document, the snapshot, idempotence under repeated loads, the v0.1 leader
+path, and that discarding a leader takes a solo table with it but leaves a
+shared one standing.
+
+#### Still to do, in order
+
+1. **Play a real week on the new shape.** Worth stating precisely, because the
+   first draft of this entry said "play a real week" and that was wrong: a real
+   game *was* played on 2026-09-02 (Mads v Dalton), and it is where every feature
+   request in Session 40's item 0b came from. It was played on **v2**, before the
+   cutover. So what is untested is v3 in front of two people, not the app in
+   front of two people.
+2. **Migration 0005**, then generalise sync last.
+3. **The audit**, which is overdue and whose trigger — the cutover — has now
+   fired.
+
+Files: `src/lib/shelf.js` + test, `src/hooks/useCampaign.js` (rewritten),
+       `src/hooks/useSync.js`, `src/lib/storage.js`, `src/App.jsx`,
+       `src/components/{Aftermath,ArsenalLibrary,ArsenalSheet,ErrorBoundary,WeekControl}.jsx`,
+       `src/components/aftermath/*`, `src/components/steps/*`,
+       **deleted** `src/lib/campaignShape.js` and its test
+RESOLVED: step 3 of the v3 plan; `campaignShape.js` retired as the plan required.
+UNVERIFIED: a real week at a real table; sync against the new shape (off on
+purpose); the lift running on a device that is not this one.
+NEXT: play a week, then migration 0005 and the generalised sync, then the audit.

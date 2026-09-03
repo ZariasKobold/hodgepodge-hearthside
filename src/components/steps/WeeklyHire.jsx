@@ -1,6 +1,11 @@
 import { useState, useMemo } from 'react'
 import { hireCost, FIRST_HIRE_DISCOUNT, OUT_OF_KEYWORD_SURCHARGE } from '../../lib/campaign.js'
-import { hireRules, isOutOfKeyword, hiresInWeek } from '../../lib/campaignShape.js'
+import {
+  isOutOfKeyword, hiresInWeek,
+} from '../../lib/shape/arsenal.js'
+import {
+  hireRules,
+} from '../../lib/shape/campaign.js'
 import { isVersatile as versatileModel } from '../../lib/indexing.js'
 import { factionLabel } from '../../data/factions.js'
 import { Label, Field, Button, Input, Select } from '../ui.jsx'

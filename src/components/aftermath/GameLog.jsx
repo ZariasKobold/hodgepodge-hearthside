@@ -2,7 +2,9 @@ import { useState } from 'react'
 import { Label, Field, Button, Input, Select } from '../ui.jsx'
 import HankSays from '../HankSays.jsx'
 import { aftermathGreeting } from '../../data/hank.js'
-import { liveModels, ratingForGame } from '../../lib/campaignShape.js'
+import {
+  liveModels, ratingForGame,
+} from '../../lib/shape/arsenal.js'
 import { maxEncounterSize } from '../../lib/campaign.js'
 
 /**

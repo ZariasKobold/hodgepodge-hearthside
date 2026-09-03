@@ -4,8 +4,9 @@ import HankSays from '../HankSays.jsx'
 import FlipInput from '../FlipInput.jsx'
 import { healGreeting, healed, healCantAfford } from '../../data/hank.js'
 import { doctorOutcome, doctorAffordable, DOCTOR_FEE_PER_ATTEMPT } from '../../lib/aftermath.js'
-import { injuriesFor, liveModels, activeInjuryCount } from '../../lib/campaignShape.js'
-
+import {
+  injuriesFor, liveModels, activeInjuryCount,
+} from '../../lib/shape/arsenal.js'
 /**
  * Phase 5 — Dr. Mo.
  *

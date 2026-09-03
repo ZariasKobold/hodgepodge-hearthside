@@ -3,8 +3,12 @@ import WeekControl from '../WeekControl.jsx'
 import WeeklyHire from './WeeklyHire.jsx'
 import Aftermath from '../Aftermath.jsx'
 import Players from './Players.jsx'
-import { standingRating, gamesWon, activeInjuryCount } from '../../lib/campaignShape.js'
-
+import {
+  standingRating, activeInjuryCount,
+} from '../../lib/shape/arsenal.js'
+import {
+  gamesWon,
+} from '../../lib/shape/campaign.js'
 /**
  * The campaign view: what happens between games and what happens after one.
  *
@@ -30,7 +34,7 @@ export default function Campaign({
   const [tab, setTab] = useState('hire')
 
   const openGame = (campaign.games || []).find(
-    (g) => g.arsenalId === campaign.localArsenalId && g.aftermath?.phase && !g.aftermath?.done
+    (g) => g.arsenalId === arsenal.id && g.aftermath?.phase && !g.aftermath?.done
   )
 
   const pendingCount = membership.isHost
@@ -54,7 +58,7 @@ export default function Campaign({
 
       <div className="hire__ledger">
         <span><strong>{arsenal.scrip}</strong> scrip</span>
-        <span><strong>{gamesWon(campaign)}</strong> games won</span>
+        <span><strong>{gamesWon(campaign, arsenal.id)}</strong> games won</span>
         <span>rating <strong>{standingRating(arsenal)}</strong> + kit hired</span>
         <span><strong>{activeInjuryCount(arsenal)}</strong> injuries</span>
       </div>

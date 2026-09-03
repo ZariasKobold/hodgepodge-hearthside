@@ -1,10 +1,8 @@
 import { useState } from 'react'
 import { Button, Input, Label, Select } from './ui.jsx'
 import {
-  elapsedWeek, weekAdjustment, weekMode, canRegress,
-  MIN_WEEKS_TOTAL, MAX_WEEKS_TOTAL,
-} from '../lib/campaignShape.js'
-
+  elapsedWeek, weekAdjustment, weekMode, canRegress, MIN_WEEKS_TOTAL, MAX_WEEKS_TOTAL,
+} from '../lib/shape/campaign.js'
 /**
  * The week, the means to disagree with it, and the settings underneath it.
  *

@@ -53,6 +53,7 @@ export default function App() {
     shelf, openId, open, close, startNew, discard, adopt, refresh,
     leader, set, setPick,
     campaign, arsenal, week, mustHire, addModel, spendScrip, earnScrip,
+    creditStartingScrip, owedStartingScrip,
     setWeek, stepWeek, setWeekMode, resetWeek, setStartedAt, setWeeksTotal,
     setHouseRules,
     logGame, updateGame, buyEquipment, addInjury, healInjury, dropInjury, annihilateModel,
@@ -170,8 +171,12 @@ export default function App() {
      * from the shelf still replaces it, which remains the only close.
      */
     if (shelf.length > 0) {
-      const mostRecent = [...shelf].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))[0]
-      if (mostRecent) open(mostRecent.id)
+      // Shelf entries are { arsenal, campaign } since v3, and it is the
+      // *arsenal* that gets opened — the campaign comes along because the
+      // arsenal names it.
+      const mostRecent = [...shelf]
+        .sort((a, b) => (b.arsenal.updatedAt ?? 0) - (a.arsenal.updatedAt ?? 0))[0]
+      if (mostRecent) open(mostRecent.arsenal.id)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [admitted, openId, shelf.length, shelfSettled])
@@ -345,6 +350,8 @@ export default function App() {
             roster={roster}
             rules={rules}
             fileNumber={fileNumber(leader)}
+            owedStartingScrip={owedStartingScrip}
+            onCreditStartingScrip={creditStartingScrip}
             onDone={() => setView('arsenal')}
           />
         )}

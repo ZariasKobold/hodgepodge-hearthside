@@ -2,8 +2,11 @@ import { SLOTS } from '../data/archetypes.js'
 import { getEffect } from '../data/crewCards.js'
 import { factionLabel } from '../data/factions.js'
 import {
-  totalFor, liveModels, activeInjuryCount, injuriesFor, standingRating, gamesWon,
-} from '../lib/campaignShape.js'
+  totalFor, liveModels, activeInjuryCount, injuriesFor, standingRating,
+} from '../lib/shape/arsenal.js'
+import {
+  gamesWon,
+} from '../lib/shape/campaign.js'
 import { EXPERIENCE_TRACK } from '../data/advancements.js'
 import { sourceSlug, findEntry, actionColumns } from '../lib/rules.js'
 import { PrintLegal } from './ui.jsx'

@@ -2,7 +2,9 @@ import { useState } from 'react'
 import { SLOTS, slotLabel } from '../../data/archetypes.js'
 import { getEffect } from '../../data/crewCards.js'
 import { factionLabel } from '../../data/factions.js'
-import { totalFor, liveModels, activeInjuryCount, STARTING_ARSENAL_WEEK } from '../../lib/campaignShape.js'
+import {
+  totalFor, liveModels, activeInjuryCount, STARTING_ARSENAL_WEEK,
+} from '../../lib/shape/arsenal.js'
 import { exportJSON } from '../../lib/storage.js'
 import { buildSheet, sheetToPNG, printSheet } from '../../lib/recordImage.js'
 import { Label, Button } from '../ui.jsx'

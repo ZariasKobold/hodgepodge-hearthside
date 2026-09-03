@@ -99,7 +99,7 @@ export function importJSON(file) {
 
    The index stores ids and nothing else. Leader name, faction and keywords all
    live in the campaign, and a copy in the index is a copy that goes stale the
-   moment someone renames their leader (campaignShape.js: nothing derived is
+   moment someone renames their leader (shape/arsenal.js: nothing derived is
    stored). Rendering the shelf reads each campaign; there are a handful, and
    they are already in localStorage. */
 
@@ -234,4 +234,106 @@ export function isDirty(id) {
 export function markDirty(id, dirty = true) {
   if (!id) return
   save(DIRTY_PREFIX + id, !!dirty)
+}
+
+/* ── the arsenal shelf (v3) ──────────────────────────────────────────
+   Arsenals became top-level objects in schemaVersion 3: an arsenal is a
+   durable personal thing that exists before, and independently of, any
+   campaign. See docs/data-model-v3.md.
+
+   Same three-key pattern as campaigns, for the same reasons — an index of ids
+   only, one key per document, and one key naming what is open. The index
+   deliberately stores no leader name: it would go stale on a rename, and the
+   shelf reads each arsenal to draw its card anyway. */
+
+const ARSENAL_INDEX_KEY = 'arsenals:index'
+const ARSENAL_ACTIVE_KEY = 'arsenals:active'
+
+const arsenalKey = (id) => `arsenal:${id}`
+
+export function arsenalIds() {
+  const ids = load(ARSENAL_INDEX_KEY, [])
+  return Array.isArray(ids) ? ids.filter((id) => typeof id === 'string') : []
+}
+
+export function loadArsenal(id) {
+  return id ? load(arsenalKey(id)) : null
+}
+
+/**
+ * Writes the arsenal and makes sure its id is on the shelf.
+ *
+ * Mirrors `saveCampaign`, including `keepTimestamp` — but deliberately does
+ * **not** mark anything dirty. Arsenals do not sync yet: step 5 of the v3 plan
+ * generalises the sync machinery over a `kind` exactly once, and the plan is
+ * emphatic that copy-pasting it for a second object type is the worst available
+ * outcome, because two divergent copies of the code that can lose twelve weeks
+ * is worse than one. Until then an arsenal is local, and the shelf says so.
+ */
+export function saveArsenal(arsenal, { keepTimestamp = false } = {}) {
+  if (!arsenal?.id) return null
+  const stamped = keepTimestamp ? arsenal : { ...arsenal, updatedAt: Date.now() }
+  save(arsenalKey(stamped.id), stamped)
+  const ids = arsenalIds()
+  if (!ids.includes(stamped.id)) save(ARSENAL_INDEX_KEY, [...ids, stamped.id])
+  return stamped
+}
+
+export function removeArsenal(id) {
+  remove(arsenalKey(id))
+  save(ARSENAL_INDEX_KEY, arsenalIds().filter((x) => x !== id))
+  if (activeArsenalId() === id) setActiveArsenalId(null)
+}
+
+export function activeArsenalId() {
+  return load(ARSENAL_ACTIVE_KEY, null)
+}
+
+export function setActiveArsenalId(id) {
+  if (id) save(ARSENAL_ACTIVE_KEY, id)
+  else remove(ARSENAL_ACTIVE_KEY)
+}
+
+/* ── the v2 → v3 lift, and its safety net ───────────────────────────── */
+
+/** Set once the local shelf has been split. Carries the timestamp, for humans. */
+const V3_LIFTED_KEY = 'v3:liftedAt'
+/** Where the untouched v2 document is parked before it is overwritten. */
+const V2_SNAPSHOT_PREFIX = 'v2-backup:campaign:'
+
+export function v3LiftedAt() {
+  return load(V3_LIFTED_KEY, null)
+}
+
+export function markV3Lifted(at = Date.now()) {
+  save(V3_LIFTED_KEY, at)
+}
+
+/**
+ * Parks the pre-split document under its own key, once.
+ *
+ * The v3 campaign is written back to `campaign:<id>` — the same key the v2 one
+ * occupied — because both are campaigns and a second key would mean two shapes
+ * in circulation. That overwrites the only local copy, so it is snapshotted
+ * first.
+ *
+ * This is the pattern `adoptLegacyCampaign` already set: *"leaves the old key
+ * alone rather than deleting it — if this goes wrong, the only copy of
+ * somebody's twelve weeks should still be where it was."* A few kilobytes
+ * against the one class of bug this project cannot take back.
+ *
+ * Never overwrites an existing snapshot. Running the lift twice must not let
+ * the second run park an already-migrated document as though it were the
+ * original.
+ */
+export function snapshotV2Campaign(doc) {
+  if (!doc?.id) return null
+  const key = V2_SNAPSHOT_PREFIX + doc.id
+  if (load(key)) return null
+  save(key, doc)
+  return key
+}
+
+export function loadV2Snapshot(id) {
+  return id ? load(V2_SNAPSHOT_PREFIX + id) : null
 }

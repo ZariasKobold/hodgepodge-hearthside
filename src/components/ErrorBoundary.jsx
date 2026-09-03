@@ -1,5 +1,7 @@
 import { Component } from 'react'
-import { campaignIds, loadCampaign, exportJSON } from '../lib/storage.js'
+import {
+  campaignIds, loadCampaign, arsenalIds, loadArsenal, exportJSON,
+} from '../lib/storage.js'
 
 /**
  * Catches a render crash so one bad field cannot cost the whole page.
@@ -50,22 +52,32 @@ export default class ErrorBoundary extends Component {
     console.error('Hodgepodge Hearthside caught a render error:', error, info)
   }
 
+  /**
+   * Everything on this browser, as one file.
+   *
+   * Deliberately dumb: it reads both indexes straight out of localStorage, with
+   * no hooks, no React state and no shape module, so nothing it depends on can
+   * be part of what just broke. It does not even migrate — whatever is on the
+   * disk is what comes out, and `readBundle` on the way back in knows every
+   * shape this app has ever written.
+   *
+   * One bundle rather than a file per campaign, because since v3 a rescue has
+   * two kinds of document to save and an arsenal without its table (or a table
+   * without its arsenals) is half a rescue.
+   */
   rescue = () => {
-    let saved = 0
-    for (const id of campaignIds()) {
-      const campaign = loadCampaign(id)
-      if (!campaign) continue
-      const name = campaign.arsenals?.[0]?.leader?.name || id
-      exportJSON(campaign, `${String(name).toLowerCase().replace(/\s+/g, '-')}.json`)
-      saved += 1
-    }
-    this.setState({ rescued: saved })
+    const campaigns = campaignIds().map(loadCampaign).filter(Boolean)
+    const arsenals = arsenalIds().map(loadArsenal).filter(Boolean)
+    if (campaigns.length === 0 && arsenals.length === 0) return
+    const stamp = new Date().toISOString().slice(0, 10)
+    exportJSON({ campaigns, arsenals }, `hodgepodge-rescue-${stamp}.json`)
+    this.setState({ rescued: arsenals.length || campaigns.length })
   }
 
   render() {
     if (!this.state.error) return this.props.children
 
-    const count = campaignIds().length
+    const count = arsenalIds().length || campaignIds().length
 
     return (
       <div className="gap-note" role="alert">
@@ -76,8 +88,8 @@ export default class ErrorBoundary extends Component {
         <p style={{ marginTop: 12 }}>
           Reloading usually clears it. If it comes back on the same screen every
           time, take a copy of your data first: the button below reads your
-          campaigns straight out of this browser and downloads one JSON file
-          each, without going near the part that just failed.
+          leaders and campaigns straight out of this browser into one JSON file,
+          without going near the part that just failed.
         </p>
 
         <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
@@ -86,16 +98,15 @@ export default class ErrorBoundary extends Component {
           </button>
           {count > 0 && (
             <button className="btn btn--ghost" onClick={this.rescue}>
-              Download my {count === 1 ? 'campaign' : `${count} campaigns`}
+              Download my {count === 1 ? 'leader' : `${count} leaders`}
             </button>
           )}
         </div>
 
         {this.state.rescued > 0 && (
           <p style={{ marginTop: 12 }}>
-            Downloaded {this.state.rescued}. Import them from the Leaders screen
-            on any device — an import is filed as a new leader and overwrites
-            nothing.
+            Saved {this.state.rescued}. Import the file from the Leaders screen
+            on any device — an import is filed as new and overwrites nothing.
           </p>
         )}
 

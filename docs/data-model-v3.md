@@ -1,6 +1,23 @@
 # Splitting arsenals from campaigns — the plan for `schemaVersion: 3`
 
-Status: **proposed, not started.** Written 2026-09-01, at v0.18.5.
+Status: **steps 1, 2 and 3 done; 4 and 5 outstanding.** Written 2026-09-01 at
+v0.18.5; step 1 landed 2026-09-02 at v0.19.0, steps 2 and 3 on 2026-09-03 at
+v0.19.2.
+
+⚠ **Sync is switched off** (`SYNC_DISABLED` in `src/hooks/useSync.js`) and must
+stay off until step 5. The server still holds v2 documents; one push of a v3
+campaign would overwrite a player's copy with a campaign that has no arsenal in
+it. See `CLAUDE.md`.
+
+The shape lives in `src/lib/shape/` — `arsenal.js`, `campaign.js`,
+`ownership.js` and `migrate.js` — with `src/lib/shelf.js` as the seam between it
+and storage. **This is what the app runs on.** `src/lib/campaignShape.js` was
+deleted at the cutover, as this plan said it would be.
+
+**Step 2 passed on real data, 2026-09-03.** The lift was run against all six live
+campaigns pulled out of remote D1 and lost nothing; both ids were preserved on
+every one. The backup that made it possible is in `backups/` (gitignored — it
+contains live session cookies). Step 3, the UI cutover, is unblocked.
 
 Read `docs/data-model.md` first — it is the original design and this supersedes
 part of it. Read `## 12` and `## 12b` of `CLAUDE.md` too; several rules there
@@ -161,9 +178,11 @@ should probably ship **before** this work rather than after.
 
 Build it in this order, and do not skip step 1 or reorder 4 and 5.
 
-1. **The pure shape first.** `createArsenal`, `createCampaign`, `migrate` v2→v3,
-   `belongsTo`, encounter-size arithmetic — all in `src/lib/`, all tested, before
-   any component moves. This is §6, and it is the reason the campaign arithmetic
+1. ~~**The pure shape first.**~~ **Done, v0.19.0.** `src/lib/shape/arsenal.js`,
+   `campaign.js`, `ownership.js`, `migrate.js`; 93 tests. `createArsenal`,
+   `createCampaign`, `createParticipation`, `splitLegacyCampaign`, `belongsTo`,
+   `encounterCapFor`, and the export/import trio `bundle` / `readBundle` /
+   `refileForImport`. This is §6, and it is the reason the campaign arithmetic
    was debuggable when a scrip total was disputed.
 
 2. **`migrate` v2 → v3, locally, both directions in mind.** Each existing
@@ -177,8 +196,19 @@ Build it in this order, and do not skip step 1 or reorder 4 and 5.
    top of it. Run v3's migration against **real exported JSON from the live
    account** before trusting it.
 
-3. **The UI, against local storage only**, with sync switched off. Play a real
-   week. The shape is wrong in some way nobody can predict from here, and finding
+   **The tool for that now exists**: `node scripts/migrate-check.mjs <export.json>`.
+   It reads only — no writes, no network, no browser storage — and per campaign
+   asserts conservation: models, injuries, equipment, scrip, experience boxes,
+   advancements and games all still present, every model carrying an id, every
+   arsenal seated at the table it came out of, and **both ids unchanged**. It
+   exits non-zero if anything broke. Point it at the real export before step 3;
+   that run is the difference between a tested lift and a trusted one.
+
+3. ~~**The UI, against local storage only**, with sync switched off.~~ **Done,
+   v0.19.2.** Still outstanding: a real week on the **new** shape. The real game
+   this plan's last two sections came from (Mads v Dalton, 2026-09-02) was played
+   on v2, before the cutover — so v3 has been exercised by a browser, not by an
+   evening. The shape is wrong in some way nobody can predict from here, and finding
    that out before a schema is on the remote database is the entire lesson of
    `## 12b`'s "build order matters".
 
@@ -219,23 +249,253 @@ accident.
 
 ---
 
-## Open questions, to settle before writing code
+## Open questions — settled 2026-09-02, and where each one lives
 
-1. **Does a solo player have a campaign at all?** A leader you are building
-   alone still needs weeks, house rules and an aftermath. Either every arsenal
-   gets an implicit campaign of one, or the campaign fields collapse onto a
-   soloing arsenal. The first is more uniform; the second is less to explain.
-   Recommendation: implicit campaign of one, created silently, so there is
-   exactly one code path.
+1. **Does a solo player have a campaign at all?** Yes: an implicit campaign of
+   one, created silently. `createCampaign` starts with **no** participants at
+   all and gains one when an arsenal is seated, so soloing and a table of five
+   are the same code path and there is no special case to rot.
 
-2. **Who owns the week?** Today it is per campaign, which is right for a table
-   playing together. If arsenals join mid-campaign, week 1 for them is not week 1
-   for the host. The book assumes everyone starts together; decide whether to
-   enforce that or record a join week per participation.
+2. **Who owns the week?** The **campaign** owns the week — a group agrees when
+   week four is, and two players disagreeing about it is the bug. What is
+   per-player is `participation.joinedWeek`, read by
+   `mustHireThisWeek(arsenal, week, { joinedWeek })`. An arsenal that arrived in
+   week four is not delinquent for weeks two and three, and telling its owner it
+   owes three hires would be the app being confidently wrong about weeks the
+   player was not present for. Defaults to 1, which is the book's assumption
+   that everybody starts together.
 
-3. **What happens to an arsenal when its campaign is deleted?** Not a cascade —
-   that is the mistake this document exists to avoid repeating. The arsenal
-   should survive with `campaignId: null` and its history intact.
+3. **What happens to an arsenal when its campaign is deleted?** It survives with
+   `campaignId: null` and its history intact. `leaveCampaignPatch` is the whole
+   of it, and it is deliberately a patch on the arsenal rather than a cascade on
+   the campaign — the two documents are two writes and a function pretending
+   otherwise would be pretending to a transaction it cannot have.
 
-4. **Can a host see a member's arsenal before admitting them?** No. Say so in a
-   test.
+4. **Can a host see a member's arsenal before admitting them?** No, and it is
+   asserted in `campaign.test.js`. `visibleArsenalIds` runs the rule both ways:
+   a pending player sees their own arsenal and nothing else, and a stranger sees
+   nothing at all.
+
+### One thing the migration deliberately does not do
+
+**Several v2 campaigns belonging to one person are not merged into one campaign**
+— even though "six campaign rows for five users" is the mess that motivated
+this. Merging means guessing that two leaders played at the same table, and
+reconciling two week counts, two start dates and two sets of house rules by
+picking a winner. That is the shape of every bug this project has had. Each v2
+campaign becomes one campaign and one arsenal, faithfully; moving an arsenal to
+another table afterwards is a deliberate act by a person who knows whether it
+belongs there.
+
+### The trap that step 1 found on its own
+
+`readBundle` originally decided "is this a bundle?" by looking for an `arsenals`
+array — and **a v2 campaign is also an object with an `arsenals` array**. Reading
+one as a bundle discarded the campaign and filed the arsenals that had been
+nested inside it as though they were top-level. Silent loss, on the one path that
+exists to prevent loss. Caught by its own test; the fix is that the bundle test
+is narrow (`format`, or a `campaigns` array) and the campaign test is checked
+first. Worth remembering, because the two shapes overlap on exactly one field
+name and the next person to touch that function will meet it again.
+
+---
+
+## The crew builder, and what it is really for
+
+Added 2026-09-02, after the first real game played with this app. The owner's
+words:
+
+> There was no way to easily have your whole crew available. Other tools such as
+> BiggerHat or TheoryFaux have a crew builder, but they don't allow you to create
+> a custom leader like you have to do for campaign play. So a crew builder where
+> you can start a session and have your opponent join it, so that you can see
+> each other's crews selected from your arsenals and equipment as well as your
+> leaders, would be very helpful.
+
+That gap is real and it is specific to this app: **every other crew builder can
+build a crew, and none of them can hold a leader that does not exist on a card.**
+Campaign leaders are built, not hired, so the one tool that could show both
+crews at once is this one.
+
+It also belongs to v3 rather than beside it. An encounter is a thing that happens
+between two *arsenals* at a *table* — which is exactly what a participation joins
+— and it could not have been modelled cleanly while an arsenal was something that
+lived inside a campaign.
+
+### The Encounter
+
+A game in preparation, living on the campaign beside `games[]`. Sketch, not yet
+built and deliberately not written into `shape/` until it has been argued about:
+
+```js
+createEncounter({
+  id: 'enc_…',
+  week,
+  status: 'hiring' | 'revealed' | 'played',
+  encounterSize: null,            // agreed; `encounterCapFor` is the ceiling
+  strategy: '',
+  crews: [{
+    arsenalId,
+    modelIds: [],                 // must be in that arsenal
+    equipment: [{ equipmentId, modelId }],
+    soulstonesSpent: 0,
+    revealed: false,
+  }],
+  gameId: null,                   // set when it resolves into a game
+})
+```
+
+Four rules that fall straight out of the book and should be written down before
+anyone writes the screen:
+
+- **Hidden, then revealed.** Malifaux hires simultaneously and then reveals, and
+  p. 19 is explicit that the campaign rating is worked out "after hiring and
+  revealing crews". So `revealed` is per crew, and the opposing list is not
+  readable until both sides have set theirs. A crew builder that leaked the
+  opponent's list while you were still hiring would be a worse tool than a
+  notebook.
+- **You may only hire out of your arsenal**, and the leader and totem cost 0
+  (p. 19). The arsenal has always been the constraint; this is the first screen
+  that actually enforces it.
+- **The campaign rating stops being typed in.** It is equipment selected at hire,
+  +1 per leader and totem advancement, minus injuries — every term of which the
+  encounter now knows. `ratingForGame` already computes it; today the aftermath
+  asks the player for the number only because nothing had the inputs.
+- **Resolving an encounter creates the game**, carrying `arsenalId`,
+  `opponentArsenalId`, `encounterSize`, both ratings and `equipmentHired` across.
+  The aftermath then starts from facts rather than from typing.
+
+Sharing works the way membership already works: the host's campaign is the row,
+`campaign_members` says who may read it, and `publicMember` stays the one
+function that decides what leaves. No new privacy surface, and **no user ids
+cross** — an encounter shows nicknames and arsenals, like the shared page.
+
+---
+
+## Three things the first real game exposed in the aftermath
+
+Also 2026-09-02. All three sit on the path a player walks every week, which is an
+argument for doing them before the crew builder.
+
+### 1. The hand should be recorded, and spent
+
+Phase 1 records `handSize`, a number. The player then has up to four real cards
+in their hand and no way to tell the app which one they cheated a flip with.
+
+The record should hold the cards:
+
+```js
+hand: [{ value, suit, spentOn: null }]   // 'barter' | 'advance:0' | 'doctor:2' | 'injury:mdl_1'
+```
+
+and every flip after phase 1 offers the unspent ones. This is not decoration. The
+whole reason the aftermath is one flow and not six screens is that **the hand is
+a single economy spent across six phases** — and the app currently tracks the
+size of that economy and none of its contents. Recording it turns the rule the
+book actually states, *"you must decide whether or not to cheat a flip before
+moving on to another flip"*, into something the app can hold you to rather than
+something you hold in your head.
+
+**It does not weaken the standing rule that the app owns no fate deck.** Every
+card is still typed in, because it was flipped on a table in front of an
+opponent. Recording what you drew is not dealing it, and there must still be no
+"flip for me" button.
+
+### 2. The starting scrip was never paid — fixed in v0.19.1
+
+The owner's note: *"it also currently does not allow for you to have scrip from
+the pre-game; like if you hired a list that doesn't take your full 25 points then
+you ought to have scrip for that."*
+
+**"25 points" is the tell.** That is the starting arsenal, and the book grants
+the scrip outright:
+
+> Each player has 25 soulstones to add models into their starting arsenal. […]
+> Each soulstone a player chooses not to spend during this step becomes one
+> scrip, up to a maximum of three scrip.
+> — *Index of the Untold*, p. 15
+
+This was read as a request about hiring for an encounter first, and answered
+"the book says no". That was the wrong rule. Both are worth keeping straight,
+because the app has to behave differently for each:
+
+| | |
+|---|---|
+| **p. 15**, starting arsenal | unspent soulstones → **scrip**, capped at 3. Real rule, and we were not paying it. |
+| **p. 19**, hiring for an encounter | excess soulstones → the **soulstone pool** for that game, never scrip |
+
+#### What was actually wrong
+
+`Record` has computed this number since v0.1 and printed it in the tally —
+"22/25 spent · **3 scrip**" — and never written it anywhere. `arsenal.scrip`
+stayed at 0. The display was right and the arsenal was wrong, which is the worst
+version of this bug: the screen tells you you have the scrip, so you spend an
+evening wondering why the campaign disagrees.
+
+There was a second, quieter half. The tally totalled **every** model in the
+arsenal, not the starting ones. During creation those are the same list, so it
+looked correct forever; open the same screen in week three and a 40ss roster
+reads as the starting arsenal, the grant computes to zero, and a player who had
+been paid would have it taken back.
+
+#### How it is fixed
+
+`startingArsenalSpend` counts week-0 models only — and deliberately still counts
+a starting model that has since been annihilated, because the soulstones were
+spent and a death in week four does not make the starting arsenal retroactively
+cheaper. That is the opposite of what `totalFor` needs, which is why they are two
+functions over one list rather than one function with a flag.
+
+`startingScripPatch` then **reconciles rather than appends**. The grant is
+derived from the starting arsenal, `startingScripGranted` records what has
+already been paid, and the patch moves the balance by the difference — so adding
+a model afterwards takes the change back, removing one pays the difference, and
+calling it ten times pays once. Appending would have been shorter and would
+double-pay the first time anybody edited their starting arsenal twice, which is
+the same mistake §3 below is about.
+
+`startingScripGranted: null` means *never reconciled*, which is deliberately not
+`0` (*reconciled, and the grant was nothing*) — the same distinction `isDirty`
+makes in `storage.js`. Every arsenal on the database predates this and carries
+null.
+
+#### Why existing arsenals are offered it rather than given it
+
+Everyone already playing is owed up to 3 scrip. Paying it on load would move a
+number in somebody's in-progress campaign with no explanation, which is
+indistinguishable from a bug — and there are other people's campaigns on the
+database now. So `owedStartingScrip` drives a note on the creation screen that
+says what the rule is and offers a button. The player decides.
+
+#### Still missing, and genuinely a house rule
+
+Nothing shows the **encounter** leftover — the p. 19 soulstones — at all. That
+is worth building. If a group wants those as scrip instead, that is
+`unspentHireBecomesScrip` in `houseRules`, defaulting off, with the reasoning in
+a `.gap-note` so it shows in both Hank modes (§5).
+
+### 3. The aftermath must go backwards, and then lock
+
+`nextPhase` is the only way to move, and there is no way back. A player who
+mistypes a flip in phase 3 finds out in phase 5 and has nowhere to go.
+
+The fix is not "add a Back button". It is a change in where the truth lives:
+
+> **Every phase's effect on the arsenal must be derived from the record and
+> reconciled — not appended when a button is pressed.**
+
+Today the writes are fire-and-forget: `buyEquipment`, `addInjury`, `spendScrip`
+and `advanceLeader` all fire on confirm, and only `paid` and `advance.applied`
+guard against firing twice. Barter, the doctor and the injury flips all append to
+arrays and would double on a revisit. `CLAUDE.md` already flags this ("every
+write has to be idempotent against a reopened phase — check the rest"); adding a
+way back makes it certain rather than likely.
+
+So: the aftermath record is the source of truth for the whole walk, the arsenal
+effect is computed from it, and moving between phases re-derives rather than
+re-applies. `done: true` then means what it says — **the decisions lock**, the
+scrip and the injuries stand, and the record becomes history.
+
+This is the rule the rest of the project already lives by (nothing derived is
+stored; one place decides), applied to the one flow that has been getting away
+with the opposite because it only ever ran forwards.

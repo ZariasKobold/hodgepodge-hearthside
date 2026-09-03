@@ -2,8 +2,10 @@ import { useState, useMemo } from 'react'
 import { SLOTS, slotLabel } from '../../data/archetypes.js'
 import { getEffect } from '../../data/crewCards.js'
 import { factionLabel } from '../../data/factions.js'
-import { arsenalTotal, startingScrip, STARTING_SOULSTONES } from '../../lib/campaign.js'
-import { createModel, liveModels, STARTING_ARSENAL_WEEK } from '../../lib/campaignShape.js'
+import { startingScrip, STARTING_SOULSTONES } from '../../lib/campaign.js'
+import {
+  createModel, STARTING_ARSENAL_WEEK, startingArsenalSpend,
+} from '../../lib/shape/arsenal.js'
 import { exportJSON } from '../../lib/storage.js'
 import { isVersatile } from '../../lib/indexing.js'
 import { buildSheet, sheetToPNG, printSheet } from '../../lib/recordImage.js'
@@ -23,11 +25,20 @@ const byCost = (models) => [...models].sort((a, b) => a.cost - b.cost)
  * The record itself is `LeaderRecord`, shared with the standing arsenal view so
  * the two cannot drift into different documents.
  */
-export default function Record({ campaign, leader, set, archetype, roster, rules, fileNumber, onDone }) {
-  // Through `liveModels`, like every other total in the app — `arsenalTotal`
-  // on the raw list counted annihilated models, which is harmless only until
-  // Aftermath exists to annihilate one (audit L10).
-  const spent = arsenalTotal(liveModels({ models: leader.arsenal }))
+export default function Record({
+  campaign, leader, set, archetype, roster, rules, fileNumber,
+  owedStartingScrip = 0, onCreditStartingScrip, onDone,
+}) {
+  // Week 0 only. This used to total the whole roster, which is the same number
+  // during creation and quietly wrong afterwards: opening this screen in week
+  // three read a 40ss roster as the starting arsenal, so the grant computed to
+  // zero and the tally claimed you had no starting scrip.
+  //
+  // Annihilated models still count — the soulstones were spent, and a model
+  // dying in week four does not make the starting arsenal retroactively
+  // cheaper. That is why this is not `liveModels` (cf. audit L10, which was
+  // about the *arsenal total*, a different number with the opposite need).
+  const spent = startingArsenalSpend({ models: leader.arsenal })
   const scrip = startingScrip(spent)
   const over = spent > STARTING_SOULSTONES
   const effect = getEffect(leader.crewCard.effect)
@@ -158,6 +169,24 @@ export default function Record({ campaign, leader, set, archetype, roster, rules
         {over && (
           <p className="note note--warn">
             Over budget by {spent - STARTING_SOULSTONES}ss. Drop something before the first game.
+          </p>
+        )}
+
+        {/* An arsenal built before v0.19.1 was shown this number and never paid
+            it. Offered rather than applied on load: moving the scrip on a
+            campaign in progress without saying so is indistinguishable from a
+            bug, and there are other people's campaigns on the database now. */}
+        {owedStartingScrip > 0 && onCreditStartingScrip && (
+          <p className="note note--warn">
+            <strong>This arsenal is owed {owedStartingScrip} scrip.</strong>{' '}
+            Each starting soulstone you chose not to spend becomes one scrip, up
+            to three (p.&nbsp;15). This screen has shown that number since the
+            first version and never paid it into the arsenal — fixed now, but
+            yours predates the fix, so it is offered rather than moved for you.
+            {' '}
+            <Button onClick={onCreditStartingScrip}>
+              Credit {owedStartingScrip} scrip
+            </Button>
           </p>
         )}
       </section>
