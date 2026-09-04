@@ -312,6 +312,33 @@ campaign and arsenal were created, the campaign deleted, and the arsenal survive
 with `campaign_id IS NULL`. Both probe rows were then removed and the final counts
 match the pre-state exactly.
 
+### ⚠ Pull-only is not automatically safe. Read this before writing step E.
+
+The obvious implementation loses a week of play, and `planSync` will not stop it.
+
+Playing a week writes the **arsenal**. `saveArsenal` deliberately does not mark
+anything dirty, and `planSync` decides pull-versus-push from the **campaign's**
+dirty flag. So a device that played a week has a clean campaign and a changed
+arsenal, `planSync` says *clean, and the server is ahead of my base → pull*, and
+the pull lifts the v2 document — which writes `arsenal:<id>` and overwrites the
+week.
+
+Nothing in `planSync` is wrong. It was never told the arsenal exists. This is the
+same shape as every data-loss bug this project has had: **a guard phrased about
+one document and enforced against another** (v0.18.4, and the `baseVersion`
+correction above).
+
+Two changes close it, and neither is optional:
+
+- **`saveArsenal` marks dirty**, exactly as `saveCampaign` does. It was written
+  not to because arsenals did not sync; the moment a pull can overwrite one, the
+  flag is what protects it. This is needed for step F anyway.
+- **The lift-on-pull refuses to overwrite a dirty arsenal.** It reports a
+  conflict instead — which is now a thing the app can actually do, because
+  `ConflictNotice` exists. A pull that silently replaces a leader is the failure
+  this whole plan is written to avoid, and it does not become acceptable just
+  because the write arrived from the server.
+
 **E. Ship sync in read-only mode: pull and lift, never push.** This is the step
 that most reduces risk and it is the one most likely to be skipped. It restores
 cross-device visibility — which is what the sync pause currently costs everyone —
