@@ -454,6 +454,45 @@ wrangler and running the migrations there.
 
 ---
 
+## Membership is half-connected today, and v3 is what finishes it
+
+Observed on 2026-09-03, from the live database, and worth writing down because it
+is the clearest case for the participation rewrite.
+
+**The membership row is intact and correct.** `campaign_members` holds one row:
+Madeline (`Arginix`) is `active` on the owner's campaign `cmp_msz7vwn65g62vf`.
+`roleIn` returns `owner` for the owner and the members list renders her. Nothing
+about the v3 cutover touched any of it.
+
+**But her arsenal does not appear**, and cannot. The shared read is:
+
+```sql
+SELECT ... FROM campaigns WHERE id = ? OR member_of = ?
+```
+
+and `member_of` is **NULL on every campaign in the database**. Being an admitted
+member and having your arsenal visible are two separate steps, and only the first
+has happened. Demonstrated against a local restore: with `member_of` NULL the
+shared view returns one arsenal (the owner's); setting it returns two, Santa
+Muerte appearing immediately with her 5 models and 1 scrip.
+
+That second step exists **only because a player's "campaign" had to be attached
+to the host's "campaign"** — the conflation this whole document is about. It is
+the same fact `docs/data-model-v3.md` opens with: *`campaigns.member_of` is a
+campaign row pointing at another campaign row.*
+
+In v3 there is nothing to link. `campaign_members.arsenal_id` — added in 0005 —
+names the arsenal directly, so being admitted and choosing what you brought are
+the only two acts, and the second is a choice rather than a hidden prerequisite.
+It also answers "which of my leaders am I bringing?" natively: the column holds
+one arsenal id, and changing it is how you switch leaders at that table.
+
+**Step F should rewire the shared read to `campaign_members.arsenal_id` and stop
+consulting `member_of` at all.** Until then, a host can admit somebody and still
+see nothing of theirs, which reads as the invite having failed.
+
+---
+
 ## The safety rules, collected
 
 1. **The server never converts shapes.** Migration 0005 and 0006 do not touch
