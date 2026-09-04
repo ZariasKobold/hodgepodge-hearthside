@@ -214,7 +214,14 @@ Build it in this order, and do not skip step 1 or reorder 4 and 5.
    that out before a schema is on the remote database is the entire lesson of
    `## 12b`'s "build order matters".
 
-4. **Migration 0005**, once the local shape has survived a real week:
+4. **Migration 0005 — and 0006.** `docs/sync-v3-plan.md` is the full design for
+   steps 4 and 5; what follows is the sketch it grew out of. The one thing that
+   sketch missed: `arsenals.campaign_id` is `NOT NULL` **and `ON DELETE
+   CASCADE`**, so a deleted campaign takes its arsenals with it — the opposite of
+   open question 3. SQLite cannot change either without a table rebuild, which is
+   0006.
+
+   Once the local shape has survived a real week:
    `ALTER TABLE arsenals ADD COLUMN version INTEGER NOT NULL DEFAULT 0;`
    `ALTER TABLE campaign_members ADD COLUMN arsenal_id TEXT REFERENCES arsenals(id);`
    plus `arsenals.campaign_id` becoming nullable if SQLite will allow it — and if

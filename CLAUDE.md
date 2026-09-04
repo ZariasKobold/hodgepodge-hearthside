@@ -166,10 +166,13 @@ arsenal in it, and their arsenal — by then the only copy — would never be se
 Another device pulling that finds a leader-shaped hole. Same class of loss as
 v0.18.4, except this time it is five other people rather than one.
 
-**Turning it back on is not deleting that line.** It is: generalise
-`knownVersion` / `markDirty` / `planSync` over a `kind` exactly once (never
-copy-paste them for arsenals), add `version` to `arsenals` in migration 0005,
-and teach the server both shapes. Until all three exist, the constant stays true.
+**Turning it back on is not deleting that line.** `docs/sync-v3-plan.md` is the
+full design — read it before touching any of this. In short: two migrations
+(0005 additive, **0006 a table rebuild** to make `arsenals.campaign_id` nullable
+and `ON DELETE SET NULL`, because today it CASCADEs and would delete a player's
+leader with their campaign), an `arsenalStore.js` written to `campaignStore.js`'s
+one-gate rule, `planSync` **parameterised rather than rewritten** and called once
+per kind, and a read-only pull phase proven before any push is enabled.
 
 The shelf says so on screen — `sync.status === 'paused'` renders a plain warning
 that the data is in this browser only and the account's copy is untouched. That
@@ -798,6 +801,7 @@ hodgepodge-hearthside/
 │   ├── VERSION_HISTORY.md  why things were done this way
 │   ├── data-model.md       campaign shape + D1 schema design
 │   ├── data-model-v3.md    THE PLAN: split arsenals from campaigns — read first
+│   ├── sync-v3-plan.md     steps 4 and 5: the schema, the sync, and not losing data
 │   ├── hank-dialogue.md    numbered reading copy of the narration
 │   └── SETUP_D1_AUTH.md    one-time dashboard setup
 └── scripts/
