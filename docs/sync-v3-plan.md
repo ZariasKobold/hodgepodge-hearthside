@@ -14,7 +14,11 @@ v0.19.4; the conflict screen it calls for landed at v0.20.0.
 **On the server**, as of the 2026-09-03 backup:
 
 - 6 campaigns. `doc` holds a **v2** document — the leader nested inside.
-  `schema_version = 2`, and **`version = 0` on every single row.**
+  `schema_version = 2`. Versions are **9, 5, 0, 0, 0, 0** — the two non-zero
+  ones are the owner's own campaigns, the pair that actually synced across a
+  phone and a computer. An earlier draft of this document said "version 0 on
+  every single row", which was read off a truncated query and was wrong; the
+  correction matters, and is spelled out under step F.
 - 6 `arsenals` rows, which are a **projection, not a document**: faction,
   keywords, scrip, `leader` JSON, `crew_card`, `total_cost`, `injuries`,
   `equipment`, `totem`. No `doc` column. Lossy — it has no `crewCardAdvancements`,
@@ -300,11 +304,36 @@ while making it structurally impossible to damage the server. Prove on the
 owner's own account, on two devices, that pulling a **v2** row produces a correct
 local v3 pair.
 
-**F. Enable pushes.** The `baseVersion` gate does the sequencing for free: every
-row is `version = 0`, no client has ever been handed 0, so **the first push from
-every device is refused until that device has pulled.** That is not a workaround,
-it is 0004 working exactly as designed, and it means pull-before-push is enforced
-by the server rather than by everyone remembering.
+**F. Enable pushes — and do not lean on the version gate to sequence it.**
+
+An earlier draft claimed the `baseVersion` gate gave pull-before-push for free,
+because every row was at version 0 and no client had ever been handed a 0. Both
+halves of that were wrong, and a future session leaning on it would get a nasty
+surprise:
+
+- **Two rows are not at 0** (9 and 5), so a device already holding those numbers
+  satisfies the gate today.
+- **A client can hold 0 anyway.** `useSync` records the version for every
+  campaign straight off the *listing*, before `planSync` decides anything, and
+  `rememberVersion` stores 0 happily because `Number.isFinite(0)` is true. So
+  "has been handed a version" is satisfied by having listed, which is not the
+  same as having pulled the document.
+
+That second point is the same class of gap CLAUDE.md already records from
+v0.18.5 — *a guard phrased about a client but enforced against a document will
+pass every time* — and it is not a bug in the gate. The gate's job is "is my copy
+based on the current version?", and a listing genuinely answers it. It was never
+going to answer "have I seen the current *shape*".
+
+So the shape safety has to be explicit, and it is the server's job:
+
+> `putCampaign` refuses a campaign whose `schemaVersion` is 3 or higher while the
+> stored row is still at 2, unless the same request carries the arsenal — or the
+> arsenal already exists as a v3 document.
+
+Without that, a v3 client that has merely listed can push a campaign with no
+leader in it over one of those two rows. That is T1, and `SYNC_DISABLED` is
+currently the only thing preventing it.
 
 **G. Watch a week, then retire the bridge** — `planSync`'s `updatedAt` fallback
 and `SYNC_DISABLED` both go once no device is still arriving without version
@@ -339,7 +368,10 @@ facts.
 
    When `planSync` is called once per kind, the conflict entries must carry
    `kind` so the screen picks the right summary. It already does; keep it.
-6. **Refuse a write that lowers `schema_version`.**
+6. **Refuse a write that lowers `schema_version`** — and refuse one that *raises*
+   it past a row whose arsenal has not been stored separately yet. The first
+   closes T3, the second closes T1; an earlier draft had only the first, because
+   it wrongly assumed the version gate covered the other direction.
 7. **`v2-backup:campaign:<id>` stays on every device.** It costs a few kilobytes
    and it is the per-device undo for the entire cutover.
 8. **`SYNC_DISABLED` stays a one-line kill switch** through the whole rollout, so
