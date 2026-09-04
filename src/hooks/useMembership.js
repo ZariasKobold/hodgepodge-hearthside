@@ -15,6 +15,16 @@ export function useMembership({ campaignId, signedIn }) {
   const [arsenals, setArsenals] = useState([])
   const [invites, setInvites] = useState([])
   const [viewerRole, setViewerRole] = useState(null)
+  /**
+   * Has the account ever seen this campaign?
+   *
+   * `null` until asked. `false` means the server returned a 404 — there is no
+   * such campaign row, which since the sync pause is the ordinary state of
+   * anything created on this device. That is a different fact from "nobody has
+   * been invited", and telling a player the second when the first is true reads
+   * as their invite having failed.
+   */
+  const [knownToServer, setKnownToServer] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   /** The token shown once, after issuing. Never stored; never re-fetchable. */
@@ -25,6 +35,7 @@ export function useMembership({ campaignId, signedIn }) {
   const refresh = useCallback(async () => {
     if (!campaignId || !signedIn) {
       setMembers([]); setArsenals([]); setInvites([]); setViewerRole(null)
+      setKnownToServer(null)
       return
     }
     abortRef.current?.abort()
@@ -37,6 +48,7 @@ export function useMembership({ campaignId, signedIn }) {
       const memberList = await api.members(campaignId, { signal: controller.signal })
       setMembers(memberList.members || [])
       setViewerRole(memberList.viewerRole || null)
+      setKnownToServer(true)
 
       const shared = await api.sharedArsenals(campaignId, { signal: controller.signal })
       setArsenals(shared.arsenals || [])
@@ -54,6 +66,7 @@ export function useMembership({ campaignId, signedIn }) {
       // A 404 here means "this campaign has no shared side yet", which is the
       // ordinary state of every solo campaign — not something to alarm anyone.
       setError(err.notFound ? null : err.message)
+      setKnownToServer(err.notFound ? false : null)
       setMembers([]); setArsenals([]); setInvites([]); setViewerRole(null)
     } finally {
       setLoading(false)
@@ -75,7 +88,7 @@ export function useMembership({ campaignId, signedIn }) {
   }, [refresh])
 
   return {
-    members, arsenals, invites, viewerRole, loading, error, freshInvite,
+    members, arsenals, invites, viewerRole, loading, error, freshInvite, knownToServer,
     isHost: viewerRole === 'owner',
     isMember: viewerRole === 'owner' || viewerRole === 'active',
     refresh,

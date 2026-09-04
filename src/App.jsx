@@ -82,7 +82,20 @@ export default function App() {
    * says so and everything else carries on.
    */
   const membership = useMembership({
-    campaignId: openId,
+    /**
+     * The **campaign's** id, not `openId`.
+     *
+     * `openId` names the open *arsenal* — it has since the v3 cutover, when the
+     * thing a player opens stopped being a campaign. This passed `openId`
+     * straight through for three versions, so every membership lookup asked the
+     * server about an arsenal id, found no campaign, and was refused. The
+     * symptom was a host being told "This campaign is yours alone" about a
+     * campaign with an admitted member sitting in it.
+     *
+     * A rename that changes what a variable *means* is not a rename, and the
+     * sweep that moved the components over checked `shelf` and not this.
+     */
+    campaignId: campaign?.id ?? null,
     signedIn: Boolean(auth.user),
   })
   const invite = useInviteRedemption({

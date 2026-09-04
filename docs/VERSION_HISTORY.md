@@ -3824,3 +3824,71 @@ restored from the real backup, which is the same data and the same engine, but
 not the same machine.
 NEXT: step F — `arsenalStore.js`, the arsenal routes, `putCampaign` taught the v3
 shape, and `planSync` called once per kind. Then the audit.
+
+---
+
+### Session 46 — v0.20.2
+Date: 2026-09-03
+
+**fix: the host was told nobody had been invited, for three versions**
+
+Reported from production: a campaign with an admitted member showed *"This
+campaign is yours alone. Nobody has been invited to it, and nothing about it is
+visible to anyone else."*
+
+Nothing was lost. `campaign_members` held the row all along — Madeline
+(`Arginix`), status `active`, on `cmp_msz7vwn65g62vf` — and the endpoint returned
+`viewerRole: "owner"` correctly when asked the right question.
+
+#### The bug
+
+`App.jsx` passed `openId` to `useMembership` as `campaignId`. **`openId` has
+named the open *arsenal* since the v3 cutover (v0.19.2)**, when the thing a
+player opens stopped being a campaign. So every membership lookup asked the
+server about an arsenal id, `roleIn` found no campaign row, `canRead(null)`
+refused, and the client's catch turned that into `viewerRole: null` — which the
+Players screen renders as "yours alone".
+
+Mine, introduced in the cutover. The sweep that moved components onto the new
+shape checked every use of `shelf` and never asked what `openId` now meant. **A
+rename that changes what a variable means is not a rename**, and a variable whose
+meaning changed while its name did not is invisible to grep.
+
+It hid for three versions because the failure is silent by design: a 404 from
+this endpoint is the ordinary state of a solo campaign, so `useMembership`
+deliberately sets `error` to null for one. Correct for the case it was written
+for, and it swallowed a real fault.
+
+#### The second half, which is now a real state
+
+With pushes off, a campaign built on this device genuinely is not on the server,
+and "nobody has been invited" is misleading there too. `useMembership` now
+reports `knownToServer`, and the Players screen says *"This campaign has not
+reached your account yet"* for a 404, keeping "yours alone" for a campaign the
+account does know and nobody has joined.
+
+#### What this also proved about membership
+
+Investigating it demonstrated the gap the v3 rewire exists to close. Madeline is
+an **active member**, and her arsenal still cannot appear, because the shared
+read is `WHERE id = ? OR member_of = ?` and `member_of` is NULL on every campaign
+in the database. Being admitted and having your arsenal visible are two separate
+steps and only the first ever happened. Proven on a restore: with `member_of`
+NULL the shared view returns one arsenal, and setting it returns two.
+
+`campaign_members.arsenal_id` (0005) removes that second step, and it is also the
+answer to "which of my leaders am I bringing?". Step F should rewire the shared
+read to it and stop consulting `member_of`. Recorded in `docs/sync-v3-plan.md`.
+
+Verified against a local D1 restored from the real backup with a forged session:
+the Players screen now shows the redeemed invite ("Madeline · used by Arginix"),
+the member row, and the host's own arsenal.
+
+431 tests.
+
+Files: `src/App.jsx`, `src/hooks/useMembership.js`,
+       `src/components/steps/Players.jsx`, `CLAUDE.md`, `docs/sync-v3-plan.md`
+RESOLVED: membership invisible since v0.19.2.
+UNVERIFIED: that her *arsenal* appears — it cannot until `member_of` or
+`arsenal_id` is wired, which is step F.
+NEXT: step F.

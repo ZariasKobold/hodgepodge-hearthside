@@ -31,7 +31,7 @@ import SharedArsenal from '../SharedArsenal.jsx'
  */
 export default function Players({ campaign, shelf, membership, signedIn }) {
   const {
-    members, arsenals, invites, isHost, isMember, loading, error, freshInvite,
+    members, arsenals, invites, isHost, isMember, loading, error, freshInvite, knownToServer,
   } = membership
 
   const [note, setNote] = useState('')
@@ -218,7 +218,21 @@ export default function Players({ campaign, shelf, membership, signedIn }) {
         </section>
       )}
 
-      {!isMember && !loading && (
+      {/* A campaign the account has never seen cannot have members, and saying
+          "nobody has been invited" about one reads as the invite having failed.
+          Since the sync pause this is the ordinary state of anything built on
+          this device. */}
+      {!isMember && !loading && knownToServer === false && (
+        <div className="empty">
+          <strong>This campaign has not reached your account yet.</strong>{' '}
+          Sending work up is switched off while the sync rebuild finishes, so it
+          exists in this browser only — and a campaign the account has never seen
+          cannot have anyone invited to it. Invitations will work again once
+          syncing resumes.
+        </div>
+      )}
+
+      {!isMember && !loading && knownToServer !== false && (
         <div className="empty">
           This campaign is yours alone. Nobody has been invited to it, and
           nothing about it is visible to anyone else.
