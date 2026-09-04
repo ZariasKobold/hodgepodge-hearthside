@@ -4,7 +4,8 @@ Companion to `docs/data-model-v3.md`, which covers steps 1–3 (done). This cove
 what is left, and it is the dangerous half: steps 1–3 only ever wrote to the
 device in front of you, and these two write to a database five people share.
 
-Status: **not started.** Written 2026-09-03 at v0.19.4.
+Status: **not started, except its one prerequisite.** Written 2026-09-03 at
+v0.19.4; the conflict screen it calls for landed at v0.20.0.
 
 ---
 
@@ -308,10 +309,21 @@ facts.
 4. **Conflicts are reported, never resolved.** Both copies untouched. The rule is
    unchanged and matters more now: an arsenal changes every week, so it will
    conflict more often than a campaign ever did.
-5. **The conflict screen should ship before F**, not after. It is currently the
-   only open Known Issue and `docs/data-model-v3.md` already argues it belongs
-   first. Without it the honest failure — "these disagree, a person must choose" —
-   has nowhere to appear.
+5. ~~**The conflict screen should ship before F**~~ — **built, v0.20.0**, ahead
+   of the migrations exactly as this argued. `src/lib/shape/compare.js` describes
+   a conflict in the player's terms and `src/components/ConflictNotice.jsx` shows
+   it on the shelf with keep mine / take theirs / keep both.
+
+   Two things it changed that matter here. `useSync` now carries `conflicts` as
+   **structured state** rather than an English sentence folded into `error`, so
+   the per-kind generalisation below has something to widen rather than a string
+   to parse. And the old on-screen advice — *"open it on one device and save to
+   settle it"* — was **impossible to follow**: a conflict means the copy is
+   already dirty and the base version already differs, so saving changes neither
+   and the next reconcile reports the same conflict for ever.
+
+   When `planSync` is called once per kind, the conflict entries must carry
+   `kind` so the screen picks the right summary. It already does; keep it.
 6. **Refuse a write that lowers `schema_version`.**
 7. **`v2-backup:campaign:<id>` stays on every device.** It costs a few kilobytes
    and it is the per-device undo for the entire cutover.

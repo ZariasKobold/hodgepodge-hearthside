@@ -3627,3 +3627,109 @@ poisoned cache. It was reasoned from a reproduction, not triggered on a stranger
 device, and by its nature the situation cannot be manufactured on demand.
 NEXT: unchanged — play a week on v3, then migration 0005 and the generalised
 sync, then the audit.
+
+---
+
+### Session 44 — v0.20.0
+Date: 2026-09-03
+
+**feat: a conflict is a question with two answers, and now it asks**
+
+Built ahead of the migrations, which is what `docs/sync-v3-plan.md` argued for:
+an arsenal changes every week, so it will conflict far more often than a
+campaign ever did, and the honest failure — *these disagree, a person must
+choose* — had nowhere to appear.
+
+#### The advice it replaces could not be followed
+
+`planSync` has reported conflicts correctly since v0.18.5. `useSync` turned each
+one into a sentence:
+
+> "…Nothing was overwritten; open it on one device and save to settle it."
+
+Saving cannot settle it. A conflict means `isDirty` is already true and
+`knownVersion` already differs from the server's, and saving again changes
+neither — so the next reconcile reports the same conflict, every push is refused
+with a 409, and the dirty flag is only ever cleared by a successful push, which
+is the one thing that cannot happen. The app was telling people, indefinitely, to
+do the single action that could not work. Nothing was lost — both copies stay
+intact, which is the design working — but there was no way out except two
+undocumented ones: discard the local copy, or export and re-import.
+
+#### Whose conflict it is
+
+Worth stating because it makes the whole feature smaller than it sounds. A
+conflict is **always between one person's own two devices**, never between two
+players: `useSync` only reconciles documents where `belongsTo(doc, user.id)`, and
+`campaignStore` refuses any write where `owner_user_id !== userId`. Madeline
+cannot edit your arsenal — membership is a read-only pointer and writes were
+never widened. So it is not a merge negotiation, it is "you did something on two
+devices; which did you mean?", and the only person with anything at stake is the
+one being asked.
+
+#### What it shows
+
+`src/lib/shape/compare.js` — pure, 17 tests. It turns two documents into the
+numbers a player recognises (scrip, models, arsenal total, injuries, experience,
+advancements) and, the half that actually settles it, **what each side has that
+the other does not**: *"yours has Nekima hired in week 3; theirs has a broken arm
+on the Terror Tot."* That is a five-second decision. "Version 4 versus version 7"
+is a coin toss.
+
+`canonical()` sorts keys so a server round trip is not mistaken for an edit, and
+drops `updatedAt` at the top level only — nested, it is somebody's data rather
+than a save clock.
+
+#### Three rules in the screen worth not undoing
+
+- **It never interrupts.** No modal, no redirect. The conflicted state is safe,
+  so it sits on the shelf until its owner wants it. Being asked which copy of
+  your leader is real, three phases into an aftermath at a table, is the app
+  picking the worst possible moment for a question that could have waited.
+- **"Keep both" is the recommendation**, because it is the only answer that
+  cannot be wrong: the local copy forks to a new id and stays on the shelf, so
+  the choice becomes reversible and the loser can be discarded next week. It uses
+  `forkDocument`, **not** `duplicateArsenal` — that one deliberately drops scrip,
+  injuries and experience because it answers a different question ("same leader,
+  new table"). A conflict fork is verbatim; both sides are real histories.
+  Offered for arsenals only: a forked campaign leaves its participations pointing
+  at the original table, turning one conflict into several.
+- **Identical copies settle themselves.** `sameInSubstance` catches two devices
+  that made the same edit, or a dirty flag from a save that changed nothing.
+  Provably lossless, so asking would be diligence performed rather than
+  exercised. It is the *only* automatic resolution, and it is deliberately strict
+  — a reordered array reads as different, which errs toward asking. Being asked
+  needlessly costs a click; auto-resolving wrongly costs an evening.
+
+#### The version bookkeeping, which is the easy thing to get wrong
+
+"Keep mine" has to satisfy `baseVersion`, and the tempting fix is a `force` flag
+on the server. It records the server's current version as the one this device has
+**seen** instead, and pushes normally.
+
+That is not a bypass. The gate asks *"have you seen the copy you are
+replacing?"*, and on this screen the answer is genuinely yes — a person was shown
+it and chose. A `force` flag answers a different question, and that is the one
+that destroyed a leader portrait twice.
+
+#### Verified
+
+421 tests. The pure layer is fully covered; the screen was driven in a browser
+against an injected conflict — both columns, the difference table, the mobile
+stack at 375px with no horizontal overflow, and a click confirmed to reach
+`resolve` with the right choice. The temporary probe used to inject it was
+removed and its absence asserted before commit.
+
+**Not verified, and it cannot be yet:** an actual conflict. Sync is off, so no
+two devices can currently disagree. This ships ready for step F rather than
+proven by it.
+
+Files: `src/lib/shape/compare.js` + test, `src/lib/shelf.js` (+`resolveConflict`,
+       `forkDocument`, `conflictExport`) + tests, `src/hooks/useSync.js`,
+       `src/components/ConflictNotice.jsx`, `src/components/ArsenalLibrary.jsx`,
+       `src/styles/app.css`, `docs/sync-v3-plan.md`, `CLAUDE.md`
+RESOLVED: the last open Known Issue, and an on-screen instruction that could
+never have worked.
+UNVERIFIED: everything about it under a real conflict.
+NEXT: unchanged — play a week on v3, then migrations 0005/0006 and the
+generalised sync, then the audit.

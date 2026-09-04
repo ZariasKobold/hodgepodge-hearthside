@@ -1366,3 +1366,66 @@ body::after {
 .buildstamp__commit { color: var(--mute); }
 .buildstamp__sep { opacity: .5; }
 @media print { .buildstamp { display: none; } }
+
+/* ── sync conflicts ──────────────────────────────────────────────────
+   Two copies side by side, on the shelf, waiting. Built on `.gap-note`
+   because this is substance rather than narration: it must show whether or
+   not Hank is switched off (§5). */
+
+.conflict__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin: 14px 0 4px;
+}
+
+/* One column under the other on a phone. Side-by-side at 360px wide is two
+   columns of nothing, and this screen is read at a table as often as at a
+   desk. */
+@media (max-width: 640px) {
+  .conflict__grid { grid-template-columns: 1fr; }
+}
+
+.conflict__col {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: var(--panel);
+  min-width: 0;
+}
+
+.conflict__table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 12px;
+  font-size: 13px;
+}
+
+.conflict__table th,
+.conflict__table td {
+  text-align: left;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.conflict__table thead th {
+  color: var(--mute);
+  font-weight: 400;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.conflict__table tbody th {
+  color: var(--mute);
+  font-weight: 400;
+}
+
+.conflict__table tbody td { color: var(--text); font-variant-numeric: tabular-nums; }
+
+.conflict__actions {
+  display: flex;
+  gap: 10px;
+  margin: 14px 0 8px;
+  flex-wrap: wrap;
+}

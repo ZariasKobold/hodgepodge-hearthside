@@ -15,7 +15,7 @@ import {
   snapshotV2Campaign, v3LiftedAt, markV3Lifted,
   load, remove,
 } from './storage.js'
-import { createArsenal } from './shape/arsenal.js'
+import { createArsenal, uid } from './shape/arsenal.js'
 import { createCampaign, seatArsenal, participationForArsenal } from './shape/campaign.js'
 import { migrateCampaign, isLegacyCampaign, migrateLeaderToArsenal } from './shape/migrate.js'
 
@@ -185,4 +185,97 @@ export function forgetSeated(arsenalId, { removeArsenal, removeCampaign, forgetV
 /** Only used by the tests and the rescue path; not part of the normal flow. */
 export function dropV2Snapshot(id) {
   remove(`v2-backup:campaign:${id}`)
+}
+
+/* ── settling a sync conflict ───────────────────────────────────── */
+
+/**
+ * A verbatim copy of a document under a new id.
+ *
+ * **Not `duplicateArsenal`.** That one deliberately drops scrip, injuries,
+ * experience and advancements, because it answers "I want to play this leader at
+ * a second table". This answers "both of these are real histories and I am not
+ * ready to throw either away", so it keeps every field exactly as it is and
+ * changes only the identity.
+ *
+ * `forkedFrom` is provenance rather than decoration: two cards showing the same
+ * leader name are otherwise told apart only by their tallies, and a person
+ * coming back to the shelf on Thursday will not remember which was which.
+ */
+export function forkDocument(doc) {
+  if (!doc) return null
+  const prefix = doc.id?.split('_')[0] || 'ars'
+  return {
+    ...JSON.parse(JSON.stringify(doc)),
+    id: uid(prefix),
+    forkedFrom: doc.id,
+    forkedAt: Date.now(),
+  }
+}
+
+/**
+ * Settle a conflict the way the owner chose, and never destroy the loser.
+ *
+ * Three outcomes, and the third is the one worth defaulting to:
+ *
+ * - `mine`   — the local copy replaces the account's. The version bookkeeping is
+ *              the interesting half: it records the server's current version as
+ *              the one this device has *seen*, which is what `baseVersion` asks
+ *              for. That is not a bypass. The gate's question is "have you seen
+ *              the copy you are replacing?", and on this screen the answer is
+ *              genuinely yes — a person was shown it and chose. A `force` flag
+ *              would answer a different question, and that is the one that
+ *              destroyed a leader portrait twice.
+ * - `theirs` — the account's copy replaces the local one, written with
+ *              `keepTimestamp` because it is the server's document and this
+ *              device did not author it.
+ * - `both`   — the local copy is forked to a new id and stays on the shelf, then
+ *              the account's copy takes the original id. Nothing is overwritten
+ *              in either direction, and the fork pushes later as an ordinary
+ *              adoption because the account has no row under its new id.
+ *
+ * **`both` is only offered for arsenals.** A forked campaign would leave its
+ * participations pointing at arsenals that still name the original table, and
+ * repointing them turns one conflict into three. Campaigns are rarer and lower
+ * stakes — weeks and house rules rather than twelve weeks of history — so they
+ * get the two honest choices and no clever third one.
+ */
+export function resolveConflict({ kind, choice, mine, theirs }, deps) {
+  const { rememberVersion, markDirty, saveDoc } = deps
+  if (!mine && !theirs) return { resolved: null }
+
+  if (choice === 'theirs' || choice === 'both') {
+    if (choice === 'both' && kind !== 'arsenal') {
+      throw new Error('Keeping both is only available for leaders, not for campaigns.')
+    }
+    const fork = choice === 'both' ? saveDoc(kind, forkDocument(mine)) : null
+    // The server's document, written as the server's: no restamp, not dirty,
+    // and based on exactly the version it arrived carrying.
+    const taken = saveDoc(kind, theirs, { keepTimestamp: true })
+    rememberVersion(theirs.id, theirs.version)
+    markDirty(theirs.id, false)
+    return { resolved: choice, kept: taken, fork }
+  }
+
+  if (choice === 'mine') {
+    // Seen, and deliberately replaced. Still dirty, so the next push sends it.
+    rememberVersion(mine.id, theirs?.version)
+    markDirty(mine.id, true)
+    return { resolved: 'mine', kept: mine, fork: null }
+  }
+
+  throw new Error(`Unknown conflict resolution: ${choice}`)
+}
+
+/** Both documents in one file, so the loser is recoverable whatever was chosen. */
+export function conflictExport({ kind, mine, theirs }) {
+  const key = kind === 'arsenal' ? 'arsenals' : 'campaigns'
+  return {
+    format: 'hodgepodge-hearthside',
+    exportedAt: Date.now(),
+    note: 'Both sides of a sync conflict. Importing files them as new; nothing is overwritten.',
+    campaigns: [],
+    arsenals: [],
+    [key]: [mine, theirs].filter(Boolean),
+  }
 }

@@ -11,6 +11,7 @@ import { importJSON, exportJSON } from '../lib/storage.js'
 import { deleteAccount } from '../lib/remote.js'
 import { forgetUser } from '../lib/session.js'
 import { Button, Label } from './ui.jsx'
+import ConflictNotice from './ConflictNotice.jsx'
 import HankSays from '../components/HankSays.jsx'
 import { CREATION } from '../data/hank.js'
 
@@ -85,6 +86,23 @@ function SyncLine({ sync, count, offlineSession }) {
         {count === 1 ? 'This campaign is' : `These ${count} campaigns are`} saved in{' '}
         <strong>this browser only</strong> — clearing your history loses{' '}
         {count === 1 ? 'it' : 'them'}. Export the JSON to keep a copy.
+      </p>
+    )
+  }
+
+  /**
+   * A conflict is not a failure and must not be dressed as one. The detail
+   * lives in `ConflictNotice` below the shelf; this line only says how many and
+   * that nothing has been lost.
+   */
+  if (sync.status === 'conflicted') {
+    const n = sync.conflicts?.length || 0
+    return (
+      <p className="note note--warn">
+        <strong>{n === 1 ? 'One leader was' : `${n} leaders were`} edited in two
+        places.</strong>{' '}
+        Nothing has been overwritten and both copies are safe. Pick which to keep
+        below — there is no hurry, and it can wait until after the game.
       </p>
     )
   }
@@ -259,6 +277,15 @@ export default function ArsenalLibrary({ shelf, onOpen, onNew, onImport, onDisca
           export.
         </div>
       )}
+
+      {(sync?.conflicts || []).map((conflict) => (
+        <ConflictNotice
+          key={conflict.id}
+          conflict={conflict}
+          onResolve={sync.resolve}
+          onDownload={sync.downloadConflict}
+        />
+      ))}
 
       {shelf.map(({ arsenal, campaign }) => (
         <LeaderCard

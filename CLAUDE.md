@@ -1,10 +1,10 @@
 # CLAUDE.md — Hodgepodge Hearthside project context
 
-<!-- HH v0.19.4 | Last updated: 2026-09-03 -->
+<!-- HH v0.20.0 | Last updated: 2026-09-03 -->
 
 ---
 
-## Current Version: 0.19.4
+## Current Version: 0.20.0
 
 ## Last Updated: 2026-09-03
 
@@ -108,7 +108,7 @@ Save to `docs/audits/audit-vX.Y.Z.md`.
 
 ## ⚠️ NEXT SESSION — pending
 
-### Where things stand — v0.19.4
+### Where things stand — v0.20.0
 
 Sessions 14–38 took this from a local-only leader builder to a synced,
 multi-leader campaign tracker that plays a whole campaign week, game and
@@ -132,11 +132,12 @@ aftermath. Shipped and live:
 | **The build stamp** | v0.18.0. Version, commit and build date in the footer, baked in by `vite.config.js`. The commit is the half that matters — `CF_PAGES_COMMIT_SHA` cannot be forgotten the way a version bump can, and it answers "is what I pushed what is live?" from the page itself. |
 | **The v3 shape** | v0.19.2. Arsenals are top-level objects and campaigns are tables. **The app runs on this now** — `campaignShape.js` is deleted. The lift runs on load and was verified against all six live campaigns. ⚠ **Sync is off** while it beds in; see below. |
 | **The starting scrip** | v0.19.1. p. 15's grant is finally *paid* rather than only displayed. Reconciled from the week-0 models, so editing the starting arsenal adjusts the balance instead of paying twice; arsenals that predate the fix are **offered** the scrip they were never given. |
+| **Conflicts have a screen** | v0.20.0. Two copies side by side in the player's own terms — scrip, models, injuries, and what each side has the other lacks — with keep mine / take theirs / **keep both**. Never a modal: the conflicted state is safe, so it waits on the shelf. Identical copies settle themselves. Unexercised against a real conflict until sync returns. |
 | **Booting is defended** | v0.19.4. The worker is registered from `index.html`, not from the bundle — a registration living inside the bundle cannot repair a browser that cannot load the bundle, which is what made the v0.19.3 bug unrecoverable. Plus a one-shot recovery: an empty `#root` after five seconds clears caches, unregisters workers and reloads once, guarded by sessionStorage so it can never loop. |
 | **The service worker** | v0.19.3. It cached Pages' SPA fallback under asset URLs, so a browser that loaded mid-deploy got a **permanent white screen** no reload could clear. Live since v0.14.0, observed in production on 2026-09-03. Two guards now — never write HTML under a non-navigation request, never serve it either — plus a cache-version bump that purges anyone already poisoned. |
 | **Membership** | v0.17.0. Owner-issued single-use invites, two gates (redeem → pending → host admits), per-campaign nicknames, opt-in Discord identity, and a read-only shared arsenal page. Writes were **not** widened — see below. |
 
-396 tests.
+421 tests.
 
 ### The book is on disk, and must not be committed
 
@@ -623,12 +624,31 @@ with a real "you paid nothing" moment could use it.
 
 **High:** none currently.
 
-**Unresolved by design — conflicts need a person.** `planSync` now reports a
-conflict instead of guessing, and `useSync` surfaces it on the shelf, but
-there is no UI to *settle* one: the local edit stays local and the account keeps
-its copy until someone saves on one device. That is the safe failure and it is
-deliberate, but a "keep mine / take theirs" screen is the honest finish. Until
-it exists, the escape hatch is the JSON export, which is always reachable.
+~~**Unresolved by design — conflicts need a person.**~~ **Built, v0.20.0.**
+`ConflictNotice` shows both copies in the player's own terms and offers keep
+mine / take theirs / keep both, with a download of both sides first. The old
+advice this section described — "open it on one device and save to settle it" —
+was **impossible to follow**: a conflict means the copy is already dirty and the
+base version already differs, so saving changes neither and the next reconcile
+reports the same conflict for ever. It is gone.
+
+Three rules in it worth not undoing:
+
+- **It never interrupts.** The conflicted state is safe — both copies intact —
+  so it waits on the shelf. Being asked which copy of your leader is real, three
+  phases into an aftermath at a table, is the worst possible moment for a
+  question that could have waited until Thursday.
+- **"Keep both" is the recommended answer**, and is the only one that cannot be
+  wrong: the local copy forks to a new id and stays on the shelf, so the decision
+  becomes reversible. Offered for arsenals only — a forked campaign leaves its
+  participations pointing at the original table, which turns one conflict into
+  several.
+- **Identical copies settle themselves** (`sameInSubstance`), and nothing else
+  ever does. That is provably lossless; everything else is the owner's call.
+
+**Still unexercised against a real conflict**, because sync is off. The pure
+layer has 38 tests and the screen was driven in a browser against an injected
+conflict; neither is the same as two devices disagreeing.
 
 **Medium:**
 - **`road-horizon.svg` is still placeholder art**, drawn in code as a
@@ -1092,7 +1112,7 @@ every session. `docs/VERSION_HISTORY.md` holds how it got this way.
 npm install
 cp .env.example .env
 npm run dev      # Vite only — NO Functions, NO database. useAuth degrades to signed out.
-npm run test     # 396 tests; `functions/` is in the run too, for the authz tests
+npm run test     # 421 tests; `functions/` is in the run too, for the authz tests
 npm run build    # production bundle — the dev proxy does NOT exist here
 npm run seed     # optional local register file; ask BiggerHat's maintainer first
 

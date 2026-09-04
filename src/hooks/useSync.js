@@ -7,6 +7,9 @@ import {
 import {
   belongsTo,
 } from '../lib/shape/ownership.js'
+import { sameInSubstance } from '../lib/shape/compare.js'
+import { resolveConflict, conflictExport } from '../lib/shelf.js'
+import { exportJSON } from '../lib/storage.js'
 /**
  * Keeps the local shelf and the account's shelf in step.
  *
@@ -49,10 +52,21 @@ export const SYNC_DISABLED = true
 
 export function useSync({ user, available, onChanged }) {
   const [state, setState] = useState({
-    status: 'idle',      // idle | syncing | synced | failed | offline
+    // idle | syncing | synced | failed | offline | paused | conflicted
+    status: 'idle',
     pushed: 0,
     pulled: 0,
     adopted: 0,
+    /**
+     * Structured, and deliberately not folded into `error`.
+     *
+     * It used to be an English sentence stuffed into `error`, which made a
+     * conflict indistinguishable from a failure and gave the UI nothing to
+     * render but prose. A conflict is neither a failure nor a success: it is a
+     * state with two documents in it that a person has to choose between, so it
+     * is carried as the two documents.
+     */
+    conflicts: [],
     error: null,
     at: null,
   })
@@ -94,7 +108,7 @@ export function useSync({ user, available, onChanged }) {
     // See SYNC_DISABLED. Refused here rather than at the call sites, so there is
     // exactly one place that decides and nothing can route around it.
     if (SYNC_DISABLED) {
-      setState({ status: 'paused', pushed: 0, pulled: 0, adopted: 0, error: null, at: Date.now() })
+      setState({ status: 'paused', pushed: 0, pulled: 0, adopted: 0, conflicts: [], error: null, at: Date.now() })
       return
     }
     // The guard the effect cannot provide: it holds a fresh `user`, this holds
@@ -126,7 +140,7 @@ export function useSync({ user, available, onChanged }) {
       if (!alive.current) return
       setState({
         status: err instanceof SyncError && err.signedOut ? 'offline' : 'failed',
-        pushed: 0, pulled: 0, adopted: 0,
+        pushed: 0, pulled: 0, adopted: 0, conflicts: [],
         error: err.message,
         at: Date.now(),
       })
@@ -241,15 +255,46 @@ export function useSync({ user, available, onChanged }) {
      * nothing was lost. It is reported because the alternative — picking a
      * winner quietly — is the behaviour this whole module exists to stop.
      */
-    const clash = conflicts.length > 0
-      ? `${conflicts.length === 1 ? 'A campaign has' : `${conflicts.length} campaigns have`} been edited both here and on another device. Nothing was overwritten; open it on one device and save to settle it.`
-      : null
-    const trouble = pullFailure || failure || clash
+    /**
+     * The advice this used to give was impossible to follow.
+     *
+     * It said "open it on one device and save to settle it" — and saving cannot
+     * settle anything, because a conflict means the copy is already dirty and
+     * the base version already differs. Saving again changes neither, so the
+     * next reconcile reports the same conflict and every push is refused. The
+     * app was telling people to do the one thing that could not work, for ever.
+     *
+     * Now the two documents are carried out to a screen that can show them.
+     */
+    const clashes = []
+    for (const { id } of conflicts) {
+      const a = mine.find((c) => c.id === id) || null
+      const b = theirs.find((c) => c.id === id) || null
+
+      /**
+       * The one case the app is allowed to settle by itself.
+       *
+       * Both copies moved, and they moved to the same place — two devices that
+       * made the same edit, or a dirty flag set by a save that changed nothing.
+       * There is no choice to offer, so offering one would be diligence
+       * performed rather than exercised. Provably lossless: the documents are
+       * equal, so taking either loses none of the other.
+       */
+      if (a && b && sameInSubstance(a, b)) {
+        rememberVersion(id, b.version)
+        markDirty(id, false)
+        continue
+      }
+      clashes.push({ kind: 'campaign', id, mine: a, theirs: b })
+    }
+
+    const trouble = pullFailure || failure
     setState({
-      status: trouble ? 'failed' : 'synced',
+      status: trouble ? 'failed' : clashes.length > 0 ? 'conflicted' : 'synced',
       pushed,
       pulled,
       adopted: adopted.length,
+      conflicts: clashes,
       error: trouble,
       // Always stamped, success or failure. `settled` is derived from `at`, so
       // leaving it null on a bad reconcile is what hangs the shelf.
@@ -319,6 +364,48 @@ export function useSync({ user, available, onChanged }) {
       })
   }, [user, available, reconcile])
 
+  /**
+   * Settle one conflict the way the owner chose.
+   *
+   * The choice is always theirs — see `shape/compare.js` for why this is one
+   * person's decision about their own two devices and never a negotiation
+   * between players. Nothing here picks a winner; it carries out a pick.
+   *
+   * The loser is never destroyed: `both` keeps it on the shelf outright, and
+   * `download` hands over a file containing both sides before anything is
+   * chosen at all.
+   */
+  const resolve = useCallback((id, choice) => {
+    const clash = state.conflicts.find((c) => c.id === id)
+    if (!clash) return
+
+    const out = resolveConflict(clash, {
+      saveDoc: (_kind, doc, opts) => saveCampaign(doc, opts),
+      rememberVersion,
+      markDirty,
+    })
+
+    // `mine` means "I have seen theirs and I am replacing it", so the push is
+    // now legitimate rather than blind and goes through the ordinary gate.
+    if (out.resolved === 'mine') mirror(clash.mine)
+
+    setState((s) => ({
+      ...s,
+      conflicts: s.conflicts.filter((c) => c.id !== id),
+      status: s.conflicts.length <= 1 ? 'synced' : s.status,
+    }))
+    onChanged?.()
+    return out
+  }, [state.conflicts, onChanged, mirror])
+
+  /** Both sides, as a file, before choosing. The universal escape hatch (§8). */
+  const downloadConflict = useCallback((id) => {
+    const clash = state.conflicts.find((c) => c.id === id)
+    if (!clash) return
+    const name = clash.mine?.name || clash.mine?.leader?.name || clash.id
+    exportJSON(conflictExport(clash), `${String(name).toLowerCase().replace(/\s+/g, '-')}-conflict.json`)
+  }, [state.conflicts])
+
   const forget = useCallback((id) => {
     if (SYNC_DISABLED) return
     if (!user || !available) return
@@ -362,5 +449,5 @@ export function useSync({ user, available, onChanged }) {
    */
   const knowsShelf = settled && state.status !== 'failed'
 
-  return { ...state, settled, knowsShelf, reconcile, mirror, forget }
+  return { ...state, settled, knowsShelf, reconcile, mirror, forget, resolve, downloadConflict }
 }

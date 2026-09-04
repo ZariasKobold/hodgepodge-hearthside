@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import {
   createSeatedArsenal, saveSeated, readShelf, readSeated,
   isSoloTable, liftLocalShelfToV3, forgetSeated,
+  resolveConflict, forkDocument, conflictExport,
 } from './shelf.js'
 import {
   save, load, remove, campaignIds, arsenalIds, loadCampaign, loadArsenal,
@@ -224,5 +225,99 @@ describe('forgetSeated', () => {
 describe('readSeated', () => {
   it('returns nulls rather than throwing for an id that is gone', () => {
     expect(readSeated('ars_missing')).toEqual({ arsenal: null, campaign: null })
+  })
+})
+
+describe('settling a conflict', () => {
+  const mine = { id: 'ars_1', schemaVersion: 3, scrip: 1, updatedAt: 2000, models: [{ id: 'm1' }, { id: 'm2' }] }
+  const theirs = { id: 'ars_1', schemaVersion: 3, scrip: 6, updatedAt: 1000, version: 7, models: [{ id: 'm1' }] }
+
+  /** Records what the resolver asked storage and the version keys to do. */
+  function spy() {
+    const calls = { saved: [], versions: [], dirty: [] }
+    return {
+      calls,
+      deps: {
+        saveDoc: (kind, doc, opts) => { calls.saved.push({ kind, id: doc.id, opts }); return doc },
+        rememberVersion: (id, v) => calls.versions.push([id, v]),
+        markDirty: (id, d) => calls.dirty.push([id, d]),
+      },
+    }
+  }
+
+  it('take theirs: writes the server copy as the server, and stops being dirty', () => {
+    const { calls, deps } = spy()
+    const out = resolveConflict({ kind: 'arsenal', choice: 'theirs', mine, theirs }, deps)
+    expect(out.resolved).toBe('theirs')
+    expect(out.fork).toBeNull()
+    // keepTimestamp: this device did not author it, so it must not claim to have.
+    expect(calls.saved).toEqual([{ kind: 'arsenal', id: 'ars_1', opts: { keepTimestamp: true } }])
+    expect(calls.versions).toEqual([['ars_1', 7]])
+    expect(calls.dirty).toEqual([['ars_1', false]])
+  })
+
+  it('keep mine: records the version it is knowingly replacing, and stays dirty', () => {
+    // Not a bypass of the baseVersion gate — the gate asks "have you seen the
+    // copy you are replacing?", and a person was just shown it and chose.
+    const { calls, deps } = spy()
+    const out = resolveConflict({ kind: 'arsenal', choice: 'mine', mine, theirs }, deps)
+    expect(out.resolved).toBe('mine')
+    expect(calls.saved).toEqual([])            // local copy already is what it is
+    expect(calls.versions).toEqual([['ars_1', 7]])
+    expect(calls.dirty).toEqual([['ars_1', true]])
+  })
+
+  it('keep both: forks mine to a new id and lets theirs have the old one', () => {
+    const { calls, deps } = spy()
+    const out = resolveConflict({ kind: 'arsenal', choice: 'both', mine, theirs }, deps)
+    expect(out.resolved).toBe('both')
+    expect(out.fork.id).not.toBe('ars_1')
+    expect(out.fork.forkedFrom).toBe('ars_1')
+    // Fork written first, then the server's copy into the original id.
+    expect(calls.saved.map((s) => s.id)).toEqual([out.fork.id, 'ars_1'])
+    // Only the original id has version bookkeeping; the fork is unknown to the
+    // account and pushes later as an ordinary adoption.
+    expect(calls.versions).toEqual([['ars_1', 7]])
+  })
+
+  it('refuses to keep both campaigns, rather than half-linking one', () => {
+    const { deps } = spy()
+    expect(() =>
+      resolveConflict({ kind: 'campaign', choice: 'both', mine: { id: 'cmp_1' }, theirs: { id: 'cmp_1' } }, deps)
+    ).toThrow(/only available for leaders/)
+  })
+
+  it('refuses a choice it does not recognise', () => {
+    const { deps } = spy()
+    expect(() => resolveConflict({ kind: 'arsenal', choice: 'newest', mine, theirs }, deps))
+      .toThrow(/Unknown conflict resolution/)
+  })
+})
+
+describe('forkDocument', () => {
+  it('is verbatim — it is not duplicateArsenal', () => {
+    // duplicateArsenal drops history on purpose, for "same leader, new table".
+    // A conflict fork must keep everything: both sides are real histories.
+    const source = { id: 'ars_1', scrip: 9, leader: { name: 'Cletus', experience: { boxesChecked: 4 } }, injuries: [{ id: 'i1' }] }
+    const fork = forkDocument(source)
+    expect(fork.scrip).toBe(9)
+    expect(fork.leader.experience.boxesChecked).toBe(4)
+    expect(fork.injuries).toHaveLength(1)
+    expect(fork.id).not.toBe('ars_1')
+    expect(fork.forkedFrom).toBe('ars_1')
+  })
+  it('deep copies, so editing the fork cannot reach the original', () => {
+    const source = { id: 'ars_1', leader: { name: 'Cletus' } }
+    const fork = forkDocument(source)
+    fork.leader.name = 'Someone else'
+    expect(source.leader.name).toBe('Cletus')
+  })
+})
+
+describe('conflictExport', () => {
+  it('carries both sides, so the loser is recoverable whatever was chosen', () => {
+    const file = conflictExport({ kind: 'arsenal', mine: { id: 'a' }, theirs: { id: 'a' } })
+    expect(file.arsenals).toHaveLength(2)
+    expect(file.campaigns).toEqual([])
   })
 })
