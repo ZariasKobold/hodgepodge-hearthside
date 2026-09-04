@@ -266,7 +266,22 @@ current by the arsenal endpoint rather than the campaign one.
 
 ## The rollout, in the order that makes each step recoverable
 
-**A. Rehearse against a restore, touching nothing remote.** Load the backup into
+**A. Rehearse against a restore, touching nothing remote.** ✅ **Done, and it
+earned its keep on the first run.** `node scripts/migration-rehearsal.mjs
+backups/hodgepodge-2026-09-03.d1.sql` restores the real backup into a throwaway
+SQLite file, applies both migrations and asserts conservation, the new shape, and
+that the cascade is gone — with foreign keys *enforced*, because a check with
+them off proves nothing.
+
+It caught the draft of 0006 destroying **every model row in the database**:
+`arsenal_models: 23 → 0`. `arsenal_models.arsenal_id` cascades from
+`arsenals(id)`, so `DROP TABLE arsenals` took them all, and the
+`PRAGMA defer_foreign_keys` meant to prevent it does not — it defers constraint
+*checking*, and a cascade is an *action*. Every other assertion passed while that
+one line was wrong, which is exactly the shape of migration bug that reaches
+production. 0006 now stashes the child rows and puts them back explicitly.
+
+ Load the backup into
 a local D1, point a local build at it with `npx wrangler pages dev dist`, and run
 the whole reconcile — both migrations, both stores, two simulated devices. Every
 mistake found here costs nothing.
