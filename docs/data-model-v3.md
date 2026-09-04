@@ -185,9 +185,11 @@ Build it in this order, and do not skip step 1 or reorder 4 and 5.
    `refileForImport`. This is §6, and it is the reason the campaign arithmetic
    was debuggable when a scrip total was disputed.
 
-2. **`migrate` v2 → v3, locally, both directions in mind.** Each existing
-   campaign splits into one arsenal plus one campaign, with a participation
-   joining them. The arsenal keeps the *existing* `ars_…` id — it already has
+2. ~~**`migrate` v2 → v3, locally, both directions in mind.**~~ **Done and run
+   for real, 2026-09-03.** `migrate-check` passed against all six live campaigns
+   pulled from remote D1 — nothing lost, both ids preserved on every one. Each
+   existing campaign splits into one arsenal plus one campaign, with a
+   participation joining them. The arsenal keeps the *existing* `ars_…` id — it already has
    one, and reusing it means the D1 `arsenals` rows line up rather than
    orphaning.
 
