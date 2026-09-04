@@ -341,6 +341,63 @@ facts.
 
 ---
 
+## Gotchas, checked against a real D1 rather than reasoned about
+
+The rehearsal in step A runs on Node's SQLite, which is *not* D1. Everything
+below was re-checked by loading the backup into an actual local D1 through
+wrangler and running the migrations there.
+
+### Settled by testing
+
+- **D1 accepts every statement in 0006.** `CREATE TABLE … AS SELECT`,
+  `DROP TABLE`, `ALTER TABLE … RENAME TO` all run. 6 arsenals and 23 model rows
+  in, 6 and 23 out, stash table cleaned up.
+- **D1 enforces foreign keys.** The plan previously said not to assume either
+  way. Deleting a campaign on the migrated schema released its arsenal to
+  `campaign_id IS NULL` and left the row and all 23 models alive. So the new
+  `ON DELETE SET NULL` genuinely works — and the old `ON DELETE CASCADE` was a
+  genuinely live data-loss path, not a theoretical one.
+- **`d1 execute --file` is atomic.** A file whose last statement fails rolls the
+  whole thing back: a probe table created by statement one did not exist
+  afterwards. **A half-applied migration is therefore not possible**, which
+  removes the worst failure mode from 0006 entirely.
+- **0006 is idempotent if it completes.** Re-running it on an already-migrated
+  database succeeds and changes nothing, because every object it creates it also
+  drops or renames within the same run. It is *not* recoverable by re-running if
+  it dies partway — but per the previous point, it cannot.
+- **Account erasure still erases.** `deleteAccount`'s exact statements, in its
+  exact order, run against the migrated schema: the user's campaigns, arsenals
+  and user row all go to zero, other players' data untouched. Worth checking
+  because `SET NULL` could have left orphaned arsenals behind a deleted account,
+  and §12 promises the rows stop existing.
+- **The live write path is unaffected.** `putCampaign`'s arsenal INSERT names 14
+  columns; the rebuilt table has 17. The insert succeeds and the three new
+  columns take their defaults — `doc` NULL, `schema_version` 0, `version` 0 —
+  which is exactly the "no v3 client has written this row yet" signal the pull
+  path needs.
+- **Applying the migrations is invisible to the running app.** With
+  `SYNC_DISABLED` true nothing touches `/api/campaigns` at all, and the only
+  other reader — the shared arsenal page — selects columns that all still exist.
+
+### Live traps, not yet closed
+
+- **⚠ There is no `d1_migrations` table.** Every migration here has been applied
+  by hand with `d1 execute --file`, never through wrangler's migration system.
+  So `wrangler d1 migrations apply` would find 0001–0006 in `./migrations`,
+  believe none had run, and replay all six against a populated database.
+  **Always `d1 execute --file`, one file at a time.** This trap predates this
+  change and gets worse with every migration added.
+- **⚠ 0005 must run before 0006.** 0006 copies `doc`, `schema_version` and
+  `version`, which 0005 creates. Backwards it fails — harmlessly, given the
+  atomicity above, but it fails.
+- **`_cf_KV` is not in the backup.** Remote has twelve tables; the export has
+  eleven. That table is Cloudflare's own and is presumably recreated on demand,
+  but a bare-metal restore into an empty database has never been tried, so
+  whether it matters is **unknown rather than fine**. It has no bearing on
+  0005/0006, which do not touch it.
+
+---
+
 ## The safety rules, collected
 
 1. **The server never converts shapes.** Migration 0005 and 0006 do not touch
