@@ -326,16 +326,39 @@ export function useSync({ user, available, onChanged }) {
       }
     }
 
+    /**
+     * Arsenals last, because `arsenals.campaign_id` references `campaigns(id)`
+     * and D1 enforces foreign keys — an arsenal pushed before its table names a
+     * row the server does not have.
+     *
+     * This loop went missing once, and how is worth recording: an edit script
+     * used a string replace whose target did not match and said nothing. The
+     * end-to-end test still passed, because `mirrorArsenal` pushes on every
+     * save and the test *made* a save — so the only broken case was the one the
+     * test did not cover: an arsenal already dirty before the app opened.
+     * Adopting existing work is exactly that case, and it is the one the sync
+     * pause left everybody in.
+     */
+    for (const arsenal of PUSH_DISABLED ? [] : arsenalPlan.push) {
+      try {
+        const { saved } = await remoteArsenals.put(arsenal, { baseVersion: knownVersion(arsenal.id) })
+        saveArsenal(stampOwner(arsenal, user.id), { keepTimestamp: true })
+        rememberVersion(arsenal.id, saved?.version)
+        markDirty(arsenal.id, false)
+        pushed += 1
+      } catch (err) {
+        // Carry on rather than stop, so one unpushable leader cannot keep every
+        // other one behind it from reaching the account (audit v0.11.0, H1).
+        failure = failure || (err.stale
+          ? 'Another device saved this leader a moment ago. Nothing is lost; try again.'
+          : err.message)
+      }
+    }
+
     if (!alive.current) return
     /**
-     * A conflict is not an error, and it is not a success either.
-     *
-     * Both copies moved, so nothing was written in either direction and
-     * nothing was lost. It is reported because the alternative — picking a
-     * winner quietly — is the behaviour this whole module exists to stop.
-     */
-    /**
-     * The advice this used to give was impossible to follow.
+     * A conflict is neither an error nor a success, and the advice this used to
+     * give was impossible to follow.
      *
      * It said "open it on one device and save to settle it" — and saving cannot
      * settle anything, because a conflict means the copy is already dirty and

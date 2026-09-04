@@ -1,10 +1,10 @@
 # CLAUDE.md — Hodgepodge Hearthside project context
 
-<!-- HH v0.21.0 | Last updated: 2026-09-04 -->
+<!-- HH v0.21.1 | Last updated: 2026-09-04 -->
 
 ---
 
-## Current Version: 0.21.0
+## Current Version: 0.21.1
 
 ## Last Updated: 2026-09-04
 
@@ -108,7 +108,7 @@ Save to `docs/audits/audit-vX.Y.Z.md`.
 
 ## ⚠️ NEXT SESSION — pending
 
-### Where things stand — v0.21.0
+### Where things stand — v0.21.1
 
 Sessions 14–38 took this from a local-only leader builder to a synced,
 multi-leader campaign tracker that plays a whole campaign week, game and
@@ -197,6 +197,17 @@ Proven end to end against a local D1 restored from the real backup: an empty
 browser pulled and lifted, a week was played, the hire reached the server as a
 v3 arsenal document (version 1, `schemaVersion` 3), and a **second empty browser
 pulled it back** with the hire intact.
+
+**v0.21.1 — the loop that was missing.** `reconcile` had no arsenal *push* loop:
+an edit script's string replace had failed to match and said nothing. The
+end-to-end test passed anyway, because `mirrorArsenal` pushes on every save and
+the test made a save — so the only broken case was the one the test did not
+cover, **an arsenal already dirty before the app opened**. That is adoption, and
+it is the state the sync pause left every device in. Caught by looking at
+production and finding no arsenal documents there.
+
+Two lessons worth keeping: **assert that an edit matched**, and a green test
+suite says nothing about a path no test walks.
 
 ### ⚠ The audit is overdue, and here is when to run it
 

@@ -3991,3 +3991,46 @@ same machine.
 NEXT: **the audit.** It has been overdue since Session 39 and its trigger — the
 v3 cutover — fired six sessions ago. Then step G: watch a week, retire
 `planSync`'s `updatedAt` bridge, and take the kill switch out last.
+
+---
+
+### Session 48 — v0.21.1
+Date: 2026-09-04
+
+**fix: reconcile never pushed arsenals, only saves did**
+
+v0.21.0 shipped and the shelf said "Synced to your account". The live database
+disagreed: all six `arsenals` rows still had `doc IS NULL` and `version 0`.
+Nothing had been adopted.
+
+`reconcile` had no arsenal push loop. The edit that was supposed to add it used
+a string replace whose target did not match — and a Python `str.replace` that
+matches nothing changes nothing and reports nothing. `arsenalPlan.push` was
+referenced only by the `held` counter and the conflict scan, which is why
+nothing looked obviously absent.
+
+**The end-to-end test passed anyway, and that is the part worth keeping.**
+`mirrorArsenal` pushes on every local save, and the test *made* a save — hire a
+model, watch it appear on the server. So the covered path worked and the
+uncovered one did not exist: **an arsenal already dirty before the app opened**.
+That is precisely adoption, and it is the state the whole sync pause left every
+device in. A green suite says nothing about a path no test walks.
+
+Found by checking production rather than trusting the label — the shelf said
+synced, and `SELECT ... FROM arsenals` said otherwise.
+
+#### Verified against the case that was broken
+
+A local D1 restored from the real backup, seeded to look like the owner's phone:
+a lifted v3 arsenal sitting locally, **dirty**, with no document on the account,
+and no app edit made. On load, `reconcile` adopted it — server scrip 42,
+version 1, `schemaVersion` 3, local flag cleared to a base of 1, and the shelf
+reading "Synced to your account — 1 sent up."
+
+Also merged two doc comments that had stacked on the conflict block during an
+earlier edit.
+
+Files: `src/hooks/useSync.js`, `CLAUDE.md`, `package.json`
+RESOLVED: arsenals are adopted by a reconcile, not only pushed by a save.
+UNVERIFIED: still nothing against the live server; and step G's watch.
+NEXT: the audit.
