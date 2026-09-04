@@ -257,6 +257,25 @@ Two things from that work worth keeping:
   a field overwrites the value it just generated, and `saveCampaign` then
   no-ops on the missing id. Strip keys, do not blank them.
 
+### Migrations 0005 and 0006 are applied on remote — verified 2026-09-03
+
+Both run, both verified against the live database rather than assumed. Counts
+identical before and after, no orphans, no leftover tables, all six campaign
+documents byte-for-byte unchanged. **`arsenals.campaign_id` is now nullable and
+`ON DELETE SET NULL`**, proven on remote with a throwaway campaign whose arsenal
+survived its deletion.
+
+Two things learned doing it, both worth keeping:
+
+- **D1 enforces foreign keys.** So the old `ON DELETE CASCADE` really would have
+  deleted a player's leader with their campaign; it was not theoretical.
+- **`d1 execute --file` is atomic.** A file whose last statement fails rolls the
+  whole thing back, so a half-applied migration is not a state that can happen.
+
+**⚠ Never run `wrangler d1 migrations apply`.** There is no `d1_migrations`
+table — every migration here was applied with `d1 execute --file` — so wrangler
+believes none have run and would replay 0001–0006 against live data.
+
 ### Migration 0003 is applied on remote — verified 2026-09-01
 
 This section stood as ⚠ BLOCKING for several versions and was already false.

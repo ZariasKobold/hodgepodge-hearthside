@@ -4,8 +4,14 @@ Companion to `docs/data-model-v3.md`, which covers steps 1–3 (done). This cove
 what is left, and it is the dangerous half: steps 1–3 only ever wrote to the
 device in front of you, and these two write to a database five people share.
 
-Status: **not started, except its one prerequisite.** Written 2026-09-03 at
-v0.19.4; the conflict screen it calls for landed at v0.20.0.
+Status: **steps A–D done. E, F and G outstanding.** Written 2026-09-03 at
+v0.19.4; the conflict screen it calls for landed at v0.20.0, and migrations 0005
+and 0006 were applied to remote the same day.
+
+**The schema is now ready for arsenals to sync. The code is not** — `useSync`
+still only knows about campaigns, `putCampaign` still reaches for
+`campaign.arsenals[0]`, and there is no `arsenalStore.js`. `SYNC_DISABLED` stays
+true until step E.
 
 ---
 
@@ -292,10 +298,19 @@ mistake found here costs nothing.
 
 **B. Fresh backup of remote, verified by restoring it.** Sessions stripped.
 
-**C. Apply 0005.** Additive; verify the four columns exist.
+**C. Apply 0005.** ✅ **Done on remote, 2026-09-03.** Four columns verified
+present; counts unchanged.
 
-**D. Apply 0006.** With the four preconditions above. Verify counts and the
-cascade assertion.
+**D. Apply 0006.** ✅ **Done on remote, 2026-09-03.** Counts identical before and
+after (6 campaigns, 6 arsenals, 23 models, 5 users, 1 member, 16 sessions), no
+leftover `arsenals_new` or `arsenal_models_stash`, no orphaned models, every real
+arsenal still seated, and all six campaign documents byte-for-byte identical to
+the backup — same versions, same schema_version, same lengths.
+
+The cascade assertion was made **on the live database**, not inferred: a throwaway
+campaign and arsenal were created, the campaign deleted, and the arsenal survived
+with `campaign_id IS NULL`. Both probe rows were then removed and the final counts
+match the pre-state exactly.
 
 **E. Ship sync in read-only mode: pull and lift, never push.** This is the step
 that most reduces risk and it is the one most likely to be skipped. It restores
