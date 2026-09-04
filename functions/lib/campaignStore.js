@@ -94,7 +94,7 @@ export async function putCampaign(userId, campaign, env, { baseVersion = null } 
    * different. It costs one query.
    */
   const existing = await env.DB.prepare(
-    'SELECT owner_user_id, updated_at, version FROM campaigns WHERE id = ?'
+    'SELECT owner_user_id, updated_at, version, schema_version FROM campaigns WHERE id = ?'
   ).bind(campaign.id).first()
 
   if (existing && existing.owner_user_id !== userId) {
@@ -132,6 +132,18 @@ export async function putCampaign(userId, campaign, env, { baseVersion = null } 
    */
   if (existing) {
     /**
+     * Never let a write walk the shape backwards — the same guard
+     * `arsenalStore` applies, for the same reason. A tab left open from before
+     * the cutover holds an older document, and the version gate cannot catch
+     * it: a stale client that has pulled holds a perfectly valid base version.
+     */
+    const storedShape = Number.isInteger(existing.schema_version) ? existing.schema_version : 0
+    const incomingShape = Number.isInteger(campaign.schemaVersion) ? campaign.schemaVersion : 0
+    if (storedShape > 0 && incomingShape < storedShape) {
+      return { outdatedShape: true, storedSchemaVersion: storedShape }
+    }
+
+    /**
      * Exact equality against a server-assigned integer, not a comparison of
      * clocks (0004).
      *
@@ -166,6 +178,16 @@ export async function putCampaign(userId, campaign, env, { baseVersion = null } 
   // has no say in it, which is the entire point.
   const nextVersion = (Number.isInteger(existing?.version) ? existing.version : 0) + 1
   const doc = JSON.stringify(campaign)
+  /**
+   * v2 only. In v3 the arsenal is its own document and its own endpoint, and a
+   * campaign carries none — so this is `null` for anything the current client
+   * sends, and the projection below is simply skipped.
+   *
+   * Kept rather than deleted because the server still holds v2 rows: a client
+   * that has not yet been upgraded may still push one, and dropping this would
+   * silently stop maintaining the `arsenals` projection those rows depend on
+   * for the shared page. It retires when the last v2 document is gone.
+   */
   const arsenal = campaign.arsenals?.[0] || null
 
   const statements = [

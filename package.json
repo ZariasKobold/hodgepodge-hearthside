@@ -1,7 +1,7 @@
 {
   "name": "hodgepodge-hearthside",
   "private": true,
-  "version": "0.20.2",
+  "version": "0.21.0",
   "type": "module",
   "description": "Hodgepodge Hearthside — An Emissary's Campfire Wisecracks for Campaign Play, for Malifaux Fourth Edition",
   "scripts": {

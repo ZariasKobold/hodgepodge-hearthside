@@ -139,11 +139,12 @@ function SyncLine({ sync, count, offlineSession }) {
   if (sync.status === 'synced') {
     const bits = []
     if (sync.pulled > 0) bits.push(`${sync.pulled} pulled down`)
+    if (sync.pushed > 0) bits.push(`${sync.pushed} sent up`)
+    if (sync.adopted > 0) bits.push(`${sync.adopted} added to it`)
     return (
       <p className="note">
-        Read from your account{bits.length ? ` — ${bits.join(', ')}` : ''}.
-        Anything already on your account appears here; sending new work back up
-        is still switched off while the sync rebuild finishes.
+        Synced to your account{bits.length ? ` — ${bits.join(', ')}` : ''}. Your
+        leaders and their campaigns follow you to another device.
       </p>
     )
   }

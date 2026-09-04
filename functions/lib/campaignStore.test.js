@@ -89,7 +89,11 @@ describe('writing someone else’s campaign', () => {
     // Exactly one statement: the ownership check. Nothing was written, and
     // crucially nothing was deleted — this is the regression that mattered.
     expect(db.log).toHaveLength(1)
-    expect(db.log[0].sql).toContain('SELECT owner_user_id, updated_at, version FROM campaigns')
+    // Asserted by intent rather than by exact SQL: the gate is one SELECT that
+    // reads the owner. Pinning the column list made this fail the moment the
+    // gate learned to read `schema_version` too, which was a change to what it
+    // checks and not to whether it guards.
+    expect(db.log[0].sql).toMatch(/^SELECT .*owner_user_id.* FROM campaigns/)
     expect(db.log.some((e) => /DELETE/i.test(e.sql))).toBe(false)
   })
 

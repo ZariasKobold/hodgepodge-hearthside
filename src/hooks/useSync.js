@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { remote, planSync, stampOwner, SyncError } from '../lib/remote.js'
+import { remote, remoteArsenals, planSync, stampOwner, SyncError } from '../lib/remote.js'
 import {
   saveCampaign, loadCampaign, campaignIds, knownVersion, rememberVersion,
-  isDirty, markDirty, saveArsenal, loadArsenal,
+  isDirty, markDirty, saveArsenal, loadArsenal, arsenalIds, removeArsenal,
 } from '../lib/storage.js'
 import {
   belongsTo,
@@ -25,30 +25,34 @@ import { exportJSON } from '../lib/storage.js'
  * account has never seen is pushed up and associated with them.
  */
 /**
- * ⚠ PUSHES ARE OFF. PULLS ARE ON. Step E of `docs/sync-v3-plan.md`.
+ * The kill switch. **Off as of v0.21.0** — both kinds now sync.
  *
- * The local shelf is v3: a campaign is a table with `participants`, and the
- * leader, models, scrip and injuries live in a **separate arsenal document**.
- * The server still holds **v2** documents where all of that was nested inside
- * the campaign, `putCampaign` still reaches for `campaign.arsenals[0]`, and
- * there is no arsenal endpoint at all.
+ * It was true from the v3 cutover until step F, and the reason is worth keeping
+ * rather than deleting, because it is the shape of the next emergency: the
+ * server held **v2** documents where the arsenal was nested inside the campaign,
+ * while this client held v3 where it is a separate document. A push would have
+ * replaced a player's server copy with a campaign that had no arsenal in it, and
+ * their arsenal — by then the only copy — would never have been sent.
  *
- * So a push would replace a player's server copy with a campaign that has no
- * arsenal in it, and their arsenal — by then the only copy — would never be
- * sent. That is why this constant exists and why it stays true until step F
- * teaches the server both shapes.
+ * What made it safe to flip:
  *
- * **Pulling is a different question and is now allowed.** The server's v2
- * documents are perfectly readable: `migrateCampaign` lifts one into an arsenal
- * and a table, which is the same code that lifted this browser's own shelf and
- * has been run against all six live campaigns. Pulling restores the thing the
- * pause actually costs people — a second device seeing their leaders — while
- * making it structurally impossible to damage the account.
+ * - migrations 0005 and 0006, so an arsenal is a first-class row with its own
+ *   `doc`, `schema_version` and `version`, and survives its campaign;
+ * - `arsenalStore.js` and `/api/arsenals`, written to `campaignStore.js`'s
+ *   one-gate rule with their own attack tests;
+ * - `putCampaign` no longer assuming `campaign.arsenals[0]`, and the campaigns
+ *   route no longer *requiring* it — that check would have rejected every v3
+ *   campaign;
+ * - a shape gate on both stores, refusing any write that would walk a row's
+ *   `schema_version` backwards, which is the guard against a tab left open from
+ *   before the cutover;
+ * - `planSync` called once per kind rather than rewritten.
  *
- * A pull is still not automatically safe, and `planPull` in `shelf.js` is where
- * that is handled: it refuses to overwrite an arsenal this device has changed.
+ * Leave the constant here. Flipping it back is a one-line, one-deploy stop if
+ * anything about the two-kind sync turns out to be wrong on a real device, and
+ * that is worth more than the tidiness of removing it.
  */
-export const PUSH_DISABLED = true
+export const PUSH_DISABLED = false
 
 export function useSync({ user, available, onChanged }) {
   const [state, setState] = useState({
@@ -129,9 +133,18 @@ export function useSync({ user, available, onChanged }) {
       .filter(Boolean)
       .filter((c) => belongsTo(c, user?.id))
 
+    const myArsenals = arsenalIds()
+      .map((id) => loadArsenal(id))
+      .filter(Boolean)
+      .filter((a) => belongsTo(a, user?.id))
+
     let theirs
+    let theirArsenals
     try {
-      theirs = await remote.list()
+      // Both listings, or neither. A half-known picture is not something to
+      // reason about: planning arsenals against an empty list would read every
+      // local one as an adoption and push the lot.
+      ;[theirs, theirArsenals] = await Promise.all([remote.list(), remoteArsenals.list()])
     } catch (err) {
       if (!alive.current) return
       setState({
@@ -181,6 +194,20 @@ export function useSync({ user, available, onChanged }) {
      * push at all.
      */
     const { pull, push, adopted, conflicts } = planSync(mine, theirs, {
+      baseOf: knownVersion,
+      isDirty,
+    })
+
+    /**
+     * The same function, a second time, with different inputs.
+     *
+     * Step 5 of the plan is explicit that `planSync` must be **parameterised
+     * rather than rewritten**: it is pure, tested, and its four outcomes are
+     * correct for any versioned document, so teaching it to understand two
+     * kinds at once would be changing the one piece of code here that can lose
+     * twelve weeks in order to avoid calling it twice.
+     */
+    const arsenalPlan = planSync(myArsenals, theirArsenals, {
       baseOf: knownVersion,
       isDirty,
     })
@@ -243,6 +270,28 @@ export function useSync({ user, available, onChanged }) {
       }
     }
 
+    /**
+     * Arsenals second, and that ordering resolves an overlap rather than
+     * causing one.
+     *
+     * A **v2** campaign still carries its arsenal nested inside, so the pulls
+     * above lift one out. A **v3** campaign carries none, and the arsenal
+     * arrives here instead, as its own document. Doing this second means the
+     * authoritative v3 document wins wherever both exist — and once a row has
+     * been pushed as v3 the nested copy is gone from the server anyway, so the
+     * overlap is temporary by construction.
+     */
+    for (const incoming of arsenalPlan.pull) {
+      try {
+        saveArsenal(stampOwner(incoming, user.id), { keepTimestamp: true })
+        rememberVersion(incoming.id, incoming.version)
+        markDirty(incoming.id, false)
+        pulled += 1
+      } catch (err) {
+        pullFailure = pullFailure || err.message
+      }
+    }
+
     let pushed = 0
     let failure = null
     /**
@@ -250,7 +299,7 @@ export function useSync({ user, available, onChanged }) {
      * campaign without losing the arsenal, so the honest thing is to keep the
      * work here and say so, rather than send something that reads as saved.
      */
-    const held = PUSH_DISABLED ? push.length : 0
+    const held = PUSH_DISABLED ? push.length + arsenalPlan.push.length : 0
     for (const campaign of PUSH_DISABLED ? [] : push) {
       try {
         const { saved } = await remote.put(campaign, { baseVersion: knownVersion(campaign.id) })
@@ -318,6 +367,16 @@ export function useSync({ user, available, onChanged }) {
       clashes.push({ kind: 'campaign', id, mine: a, theirs: b })
     }
     clashes.push(...arsenalClashes)
+    for (const { id } of arsenalPlan.conflicts) {
+      const a = myArsenals.find((x) => x.id === id) || null
+      const b = theirArsenals.find((x) => x.id === id) || null
+      if (a && b && sameInSubstance(a, b)) {
+        rememberVersion(id, b.version)
+        markDirty(id, false)
+        continue
+      }
+      clashes.push({ kind: 'arsenal', id, mine: a, theirs: b })
+    }
 
     const trouble = pullFailure || failure
     setState({
@@ -440,6 +499,49 @@ export function useSync({ user, available, onChanged }) {
     exportJSON(conflictExport(clash), `${String(name).toLowerCase().replace(/\s+/g, '-')}-conflict.json`)
   }, [state.conflicts])
 
+  /**
+   * The same for an arsenal, and deliberately a near-copy of `mirror` rather
+   * than one function with a `kind` argument.
+   *
+   * The plan forbids copy-pasting the *decision* logic — `planSync`, the version
+   * facts — and this is not that. This is the transport, where the two differ
+   * in which endpoint they call and which storage function writes the answer,
+   * and a discriminator threaded through would make both harder to read for no
+   * shared logic worth sharing.
+   */
+  const mirrorArsenal = useCallback((arsenal) => {
+    if (PUSH_DISABLED) return
+    if (!user || !available || !arsenal?.id) return
+    remoteArsenals.put(arsenal, { baseVersion: knownVersion(arsenal.id) })
+      .then(({ saved }) => {
+        if (!alive.current) return
+        rememberVersion(arsenal.id, saved?.version)
+        markDirty(arsenal.id, false)
+        setState((s) => ({ ...s, status: 'synced', error: null, at: Date.now() }))
+      })
+      .catch((err) => {
+        if (!alive.current) return
+        // A conflict is not a failure and must not be retried — the local edit
+        // stays exactly where it is and a full reconcile decides what happens
+        // to it. Blindly retrying is what destroyed a leader portrait.
+        if (err.stale) {
+          setState((s) => ({ ...s, status: 'syncing', error: null }))
+          reconcile()
+          return
+        }
+        setState((s) => ({ ...s, status: 'failed', error: err.message }))
+      })
+  }, [user, available, reconcile])
+
+  const forgetArsenal = useCallback((id) => {
+    if (PUSH_DISABLED) return
+    if (!user || !available) return
+    remoteArsenals.remove(id).catch(() => {
+      // An arsenal discarded locally but still on the server comes back on the
+      // next reconcile. Survivable, and better than blocking the delete.
+    })
+  }, [user, available])
+
   const forget = useCallback((id) => {
     if (PUSH_DISABLED) return
     if (!user || !available) return
@@ -483,5 +585,9 @@ export function useSync({ user, available, onChanged }) {
    */
   const knowsShelf = settled && state.status !== 'failed'
 
-  return { ...state, settled, knowsShelf, reconcile, mirror, forget, resolve, downloadConflict }
+  return {
+    ...state, settled, knowsShelf, reconcile,
+    mirror, forget, mirrorArsenal, forgetArsenal,
+    resolve, downloadConflict,
+  }
 }

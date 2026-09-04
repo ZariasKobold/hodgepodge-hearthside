@@ -122,6 +122,21 @@ const LEGACY_SINGLE = 'campaign:current'
  * and into `doc` on the server, where it means nothing and would be wrong the
  * moment the file was imported somewhere else.
  */
+/*
+ * The prefix still says `campaign-` and now holds arsenals too.
+ *
+ * `docs/sync-v3-plan.md` suggested renaming these to `sync-version:<kind>:<id>`.
+ * Deliberately not done: document ids are globally unique and self-describing
+ * (`cmp_…`, `ars_…`), so `campaign-version:ars_x` is unambiguous — merely badly
+ * named. Renaming means migrating the two keys that exist to stop a copy being
+ * overwritten, on every device, and that is real risk bought for a tidier
+ * string.
+ *
+ * If they are ever renamed, it must be a read-through that adopts the old key
+ * once, the way `adoptLegacyCampaign` does — never a blind switch, which would
+ * make every device read as "never seen the server's copy" and refuse its own
+ * first push.
+ */
 const VERSION_PREFIX = 'campaign-version:'
 /**
  * Set when this device edits a campaign, cleared when the account has the

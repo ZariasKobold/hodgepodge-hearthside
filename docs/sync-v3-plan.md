@@ -4,14 +4,13 @@ Companion to `docs/data-model-v3.md`, which covers steps 1–3 (done). This cove
 what is left, and it is the dangerous half: steps 1–3 only ever wrote to the
 device in front of you, and these two write to a database five people share.
 
-Status: **steps A–E done. F and G outstanding.** Written 2026-09-03 at
+Status: **steps A–F done. G outstanding.** Written 2026-09-03 at
 v0.19.4; the conflict screen it calls for landed at v0.20.0, and migrations 0005
 and 0006 were applied to remote the same day.
 
-**Reading from the account works again as of v0.20.1.** What is left is writing:
-`putCampaign` still reaches for `campaign.arsenals[0]`, there is no
-`arsenalStore.js`, and `planSync` is still called once rather than once per kind.
-`PUSH_DISABLED` stays true until all three are done.
+**Both kinds sync as of v0.21.0.** `PUSH_DISABLED` is false. What is left is G:
+watch a week, then retire `planSync`'s `updatedAt` bridge and the kill switch —
+and the switch should be the last thing to go.
 
 ---
 
@@ -360,7 +359,17 @@ while making it structurally impossible to damage the server. Prove on the
 owner's own account, on two devices, that pulling a **v2** row produces a correct
 local v3 pair.
 
-**F. Enable pushes — and do not lean on the version gate to sequence it.**
+**F. Enable pushes.** ✅ **Done, v0.21.0.** `arsenalStore.js` and `/api/arsenals`
+beside the campaign pair; a shape gate on both stores; `putCampaign` and its
+route taught the v3 shape; `planSync` called once per kind; push and pull ordered
+campaigns-first because of the foreign key. Proven end to end against a restore
+of the real backup — pull, play a week, push, and a second empty browser pulls
+the hire back.
+
+One thing only real data could have shown: **a projection-only row is a first
+write, not a conflict.** See the note below.
+
+The original warning, kept because the reasoning still holds:
 
 An earlier draft claimed the `baseVersion` gate gave pull-before-push for free,
 because every row was at version 0 and no client had ever been handed a 0. Both

@@ -70,7 +70,9 @@ export default function App() {
     userId: auth.user?.id ?? null,
     userReady: !auth.loading,
     onSaved: (c) => syncRef.current.mirror(c),
+    onArsenalSaved: (a) => syncRef.current.mirrorArsenal?.(a),
     onRemoved: (id) => syncRef.current.forget(id),
+    onArsenalRemoved: (id) => syncRef.current.forgetArsenal?.(id),
   })
   const roster = useRoster()
 

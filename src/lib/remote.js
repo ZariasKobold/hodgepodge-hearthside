@@ -11,7 +11,8 @@
  * Imports nothing from React (§6).
  */
 
-const BASE = '/api/campaigns'
+const CAMPAIGNS = '/api/campaigns'
+const ARSENALS = '/api/arsenals'
 
 export class SyncError extends Error {
   constructor(message, { status, serverUpdatedAt } = {}) {
@@ -30,10 +31,10 @@ export class SyncError extends Error {
   }
 }
 
-async function call(path, { method = 'GET', body, signal } = {}) {
+async function call(base, path, { method = 'GET', body, signal } = {}) {
   let res
   try {
-    res = await fetch(BASE + path, {
+    res = await fetch(base + path, {
       method,
       credentials: 'include',
       headers: body ? { 'Content-Type': 'application/json' } : undefined,
@@ -76,8 +77,8 @@ export async function deleteAccount() {
 }
 
 export const remote = {
-  list: (opts) => call('', opts).then((j) => j.campaigns || []),
-  get: (id, opts) => call(`/${encodeURIComponent(id)}`, opts).then((j) => j.campaign),
+  list: (opts) => call(CAMPAIGNS, '', opts).then((j) => j.campaigns || []),
+  get: (id, opts) => call(CAMPAIGNS, `/${encodeURIComponent(id)}`, opts).then((j) => j.campaign),
   /**
    * `baseVersion` is the version the server last handed this device for this
    * campaign — passed in by the caller from its own store, never read off the
@@ -91,7 +92,7 @@ export const remote = {
    * copy", which the server treats as a conflict rather than as permission.
    */
   put: (campaign, { baseVersion = null, ...opts } = {}) =>
-    call(`/${encodeURIComponent(campaign.id)}`, {
+    call(CAMPAIGNS, `/${encodeURIComponent(campaign.id)}`, {
       ...opts,
       method: 'PUT',
       body: {
@@ -99,7 +100,45 @@ export const remote = {
         baseVersion: Number.isInteger(baseVersion) ? baseVersion : null,
       },
     }),
-  remove: (id, opts) => call(`/${encodeURIComponent(id)}`, { ...opts, method: 'DELETE' }),
+  remove: (id, opts) => call(CAMPAIGNS, `/${encodeURIComponent(id)}`, { ...opts, method: 'DELETE' }),
+}
+
+/**
+ * The same surface for the other kind of document.
+ *
+ * A second object rather than a `kind` argument threaded through every call,
+ * because the two endpoints are genuinely separate resources and a single
+ * function taking a discriminator would have to be read carefully at every call
+ * site to see which one it touches. `syncable` below is where the two are
+ * treated uniformly, and it is the only place that needs to be.
+ */
+export const remoteArsenals = {
+  list: (opts) => call(ARSENALS, '', opts).then((j) => j.arsenals || []),
+  get: (id, opts) => call(ARSENALS, `/${encodeURIComponent(id)}`, opts).then((j) => j.arsenal),
+  put: (arsenal, { baseVersion = null, ...opts } = {}) =>
+    call(ARSENALS, `/${encodeURIComponent(arsenal.id)}`, {
+      ...opts,
+      method: 'PUT',
+      body: {
+        arsenal,
+        baseVersion: Number.isInteger(baseVersion) ? baseVersion : null,
+      },
+    }),
+  remove: (id, opts) => call(ARSENALS, `/${encodeURIComponent(id)}`, { ...opts, method: 'DELETE' }),
+}
+
+/**
+ * The two kinds, addressed uniformly.
+ *
+ * `planSync` is pure, tested, and correct for **any** versioned document, so
+ * step 5 of the plan is explicit that it must be *parameterised rather than
+ * rewritten*: called once per kind with different inputs, not taught to
+ * understand two kinds at once. This table is what makes that possible without
+ * a discriminator inside the sync logic itself.
+ */
+export const syncable = {
+  campaign: remote,
+  arsenal: remoteArsenals,
 }
 
 /**

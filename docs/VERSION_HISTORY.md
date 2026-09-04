@@ -3892,3 +3892,102 @@ RESOLVED: membership invisible since v0.19.2.
 UNVERIFIED: that her *arsenal* appears — it cannot until `member_of` or
 `arsenal_id` is wired, which is step F.
 NEXT: step F.
+
+---
+
+### Session 47 — v0.21.0
+Date: 2026-09-04
+
+**feat: sync is back on, and it carries both kinds**
+
+Step F. `PUSH_DISABLED` is false, and work done on one device reaches the account
+and the next device again — the thing the whole v3 pause has been costing.
+
+#### What went in
+
+`functions/lib/arsenalStore.js` and `/api/arsenals`, written to
+`campaignStore.js`'s three rules rather than beside them: `userId` first,
+`requireSubject` throws on a missing one, and **one ownership gate before any
+write** — never a guard per statement, which is how the v0.7.0
+`arsenal_models` hole happened. 25 attack tests, including that a refused write
+runs exactly one statement and deletes nothing.
+
+Deliberately a near-mirror of the campaign pair, file for file. Two kinds sync
+now, and the way to get that wrong is to let the second drift from the first, so
+the two should stay boringly diffable.
+
+`planSync` was **parameterised, not rewritten** — called once per kind. It is
+pure, tested, and its four outcomes are correct for any versioned document;
+teaching the one function here that can lose twelve weeks to understand two kinds
+at once would have been the expensive way to avoid calling it twice.
+
+Ordering is load-bearing rather than tidy: campaigns are pushed and pulled before
+arsenals, because `arsenals.campaign_id` references `campaigns(id)` and D1
+enforces foreign keys — proven when 0006 was applied.
+
+#### Two v2 assumptions that would have rejected every v3 campaign
+
+`putCampaign` read the arsenal out of `campaign.arsenals[0]`, and the campaigns
+route *required* that array to be non-empty. Both were true of v2 and both would
+have refused every campaign this app now produces. The route's check is the
+sharper lesson: **a validity rule written against the shape of the day outlives
+the day**, and it had been sitting there since v0.7.0 looking like diligence.
+
+#### The shape gate
+
+Both stores now refuse a write whose `schemaVersion` is lower than the row's,
+with a 409. The version gate cannot catch this — a stale tab that has pulled
+holds a perfectly valid base version — and a 409 rather than a 400 because the
+client already knows to stop and reconcile on one, where a 400 reads as a bad
+request and invites the retry loop that must never happen.
+
+#### A projection-only row is a first write, not a conflict
+
+The bug of the session, and only real data could have surfaced it.
+
+A v2 campaign push wrote the `arsenals` **columns** for the shared page with no
+arsenal document to store, so every one of those rows carries `version 0` and
+`doc NULL`. `putArsenal` saw a row and demanded `baseVersion === 0`; but
+`listArsenals` skips `doc IS NULL` rows, so the client was never told version 0
+existed. It could not push without a version it could not be told.
+
+Neither half was wrong on its own — the listing is right to hide a row that is
+not a document, and the gate is right to demand a seen version. Together they
+deadlocked.
+
+A row with no `doc` has never been written by any client, so semantically this
+*is* a creation: nothing to conflict with, and nobody can have seen it. The
+ownership gate still applies, because the row has an owner and is not up for
+grabs.
+
+A fresh database has no such rows. This was found by restoring the backup and
+hiring a model, which is the argument for testing against real history rather
+than an empty schema.
+
+#### Verified
+
+Against a local D1 restored from the 2026-09-03 backup and migrated:
+
+- an empty browser pulled the account's campaign and lifted it;
+- a week was played through the UI — a hand-typed hire at the discounted price;
+- the arsenal reached the server as a **v3 document**, version 1,
+  `schemaVersion` 3, with the local copy going clean at base 1;
+- a **second empty browser** pulled it back with the hire intact — Bloodwretch,
+  6ss, week 1, 1 scrip paid.
+
+456 tests.
+
+Also corrected the shelf's status line, which still said work was not going up.
+
+Files: `functions/lib/arsenalStore.js` + test, `functions/api/arsenals/[[path]].js`,
+       `functions/lib/campaignStore.js` + test, `functions/api/campaigns/[[path]].js`,
+       `src/lib/remote.js`, `src/lib/storage.js`, `src/hooks/useSync.js`,
+       `src/hooks/useCampaign.js`, `src/App.jsx`,
+       `src/components/ArsenalLibrary.jsx`, `CLAUDE.md`, `docs/sync-v3-plan.md`
+RESOLVED: step F. The sync pause is over.
+UNVERIFIED: any of it against the **live** server, and a real week played by two
+people on two devices. Local D1 is the same engine and the same data, not the
+same machine.
+NEXT: **the audit.** It has been overdue since Session 39 and its trigger — the
+v3 cutover — fired six sessions ago. Then step G: watch a week, retire
+`planSync`'s `updatedAt` bridge, and take the kill switch out last.

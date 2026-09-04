@@ -69,9 +69,18 @@ export async function onRequest(context) {
       if (campaign.id !== id) {
         return json({ message: 'Campaign id does not match the URL.' }, 400)
       }
-      if (!Array.isArray(campaign.arsenals) || campaign.arsenals.length === 0) {
-        return json({ message: 'A campaign needs at least one arsenal.' }, 400)
-      }
+      /**
+       * There used to be a check here — *a campaign needs at least one
+       * arsenal* — and it had to go.
+       *
+       * It was true of v2, where the arsenal was nested inside the campaign. In
+       * v3 a campaign is the table and carries no arsenals at all, so the rule
+       * would have rejected **every** campaign this app now produces. A
+       * validity rule written against the shape of the day outlives the day.
+       *
+       * A campaign with no participants is a real state too: it is what
+       * `createSeatedArsenal` makes a moment before it seats anybody.
+       */
       const saved = await putCampaign(user.id, campaign, env, {
         // The version the client last saw from us, or null if it has never
         // seen one. Never a clock reading the client invented.
@@ -97,6 +106,14 @@ export async function onRequest(context) {
           serverVersion: saved.serverVersion,
           serverUpdatedAt: saved.serverUpdatedAt,
           message: 'This campaign has changed since you last saw it. Pull before pushing.',
+        }, 409)
+      }
+      if (saved?.outdatedShape) {
+        return json({
+          stale: true,
+          outdatedShape: true,
+          storedSchemaVersion: saved.storedSchemaVersion,
+          message: 'This browser is running an older version of the app. Reload before saving.',
         }, 409)
       }
       return json({ saved })

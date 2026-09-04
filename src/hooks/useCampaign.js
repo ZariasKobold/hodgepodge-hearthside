@@ -6,7 +6,7 @@ import {
 } from '../lib/storage.js'
 import {
   liftLocalShelfToV3, readShelf, readSeated, createSeatedArsenal, saveSeated,
-  forgetSeated, participationForArsenal,
+  forgetSeated, participationForArsenal, isSoloTable,
 } from '../lib/shelf.js'
 import {
   createModel, createEquipment, createInjury, createTotem,
@@ -39,11 +39,11 @@ import { readBundle, refileForImport } from '../lib/shape/migrate.js'
  * owed — is computed on read; a stored copy is a copy that goes stale.
  *
  * Local-first is not a stepping stone to remote, it is the fallback that has to
- * keep working. **Arsenals do not sync yet** — step 5 of the plan generalises
- * that machinery over a `kind` once, rather than copy-pasting the one piece of
- * code here that can lose somebody's twelve weeks.
+ * keep working. Both documents sync as of v0.21.0, each with its own endpoint
+ * and its own server-assigned version, planned by the same `planSync` called
+ * once per kind.
  */
-export function useCampaign({ userId = null, userReady = true, onSaved, onRemoved } = {}) {
+export function useCampaign({ userId = null, userReady = true, onSaved, onArsenalSaved, onRemoved, onArsenalRemoved } = {}) {
   const [entries, setEntries] = useState(() => {
     // One-time lifts, oldest first: the single-campaign key everything before
     // the shelf wrote to, then the v2 → v3 split. Both are safe to re-run.
@@ -136,8 +136,11 @@ export function useCampaign({ userId = null, userReady = true, onSaved, onRemove
     // object — re-stamping one that already carries an id would be one account
     // taking another's work rather than adopting loose work.
     const claimed = userId && !arsenal.ownerUserId ? { ...arsenal, ownerUserId: userId } : arsenal
-    saveArsenal(claimed)
-  }, [arsenal, userId])
+    const stamped = saveArsenal(claimed)
+    // The mirror upward is best-effort and never gates the local write, which
+    // has already happened synchronously and is what the app reads.
+    if (stamped) onArsenalSaved?.(stamped)
+  }, [arsenal, userId, onArsenalSaved])
 
   useEffect(() => {
     if (!campaign) return
@@ -198,8 +201,12 @@ export function useCampaign({ userId = null, userReady = true, onSaved, onRemove
   }, [userId])
 
   const discard = useCallback((id) => {
+    const { campaign: table } = readSeated(id)
     forgetSeated(id, { removeArsenal, removeCampaign, forgetVersion })
-    onRemoved?.(id)
+    onArsenalRemoved?.(id)
+    // The campaign only goes when nobody else was sitting at it — `forgetSeated`
+    // decides that, so ask it the same question rather than guessing here.
+    if (table && isSoloTable(table, id)) onRemoved?.(table.id)
     setEntries(readShelf())
     setOpenId((prev) => (prev === id ? null : prev))
     setSeated((prev) => (prev.arsenal?.id === id ? { arsenal: null, campaign: null } : prev))

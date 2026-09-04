@@ -1,12 +1,12 @@
 # CLAUDE.md — Hodgepodge Hearthside project context
 
-<!-- HH v0.20.2 | Last updated: 2026-09-03 -->
+<!-- HH v0.21.0 | Last updated: 2026-09-04 -->
 
 ---
 
-## Current Version: 0.20.2
+## Current Version: 0.21.0
 
-## Last Updated: 2026-09-03
+## Last Updated: 2026-09-04
 
 **Live at hodgepodgehearthside.com** (Cloudflare Pages, auto-deploys on push to
 `main`). Repo: `ZariasKobold/hodgepodge-hearthside`.
@@ -108,7 +108,7 @@ Save to `docs/audits/audit-vX.Y.Z.md`.
 
 ## ⚠️ NEXT SESSION — pending
 
-### Where things stand — v0.20.2
+### Where things stand — v0.21.0
 
 Sessions 14–38 took this from a local-only leader builder to a synced,
 multi-leader campaign tracker that plays a whole campaign week, game and
@@ -132,6 +132,7 @@ aftermath. Shipped and live:
 | **The build stamp** | v0.18.0. Version, commit and build date in the footer, baked in by `vite.config.js`. The commit is the half that matters — `CF_PAGES_COMMIT_SHA` cannot be forgotten the way a version bump can, and it answers "is what I pushed what is live?" from the page itself. |
 | **The v3 shape** | v0.19.2. Arsenals are top-level objects and campaigns are tables. **The app runs on this now** — `campaignShape.js` is deleted. The lift runs on load and was verified against all six live campaigns. ⚠ **Sync is off** while it beds in; see below. |
 | **The starting scrip** | v0.19.1. p. 15's grant is finally *paid* rather than only displayed. Reconciled from the week-0 models, so editing the starting arsenal adjusts the balance instead of paying twice; arsenals that predate the fix are **offered** the scrip they were never given. |
+| **Sync is back on** | v0.21.0. Both kinds. `arsenalStore.js` + `/api/arsenals` beside the campaign pair, a shape gate on both, and `planSync` called once per kind rather than rewritten. Round trip proven: pull → play a week → push → a second device sees the hire. |
 | **Membership is visible again** | v0.20.2. `openId` names the open *arsenal* since the v3 cutover, and `App` was still handing it to `useMembership` as a campaign id — so every membership lookup asked about an arsenal, found no campaign, and was refused. A host with an admitted member was told "This campaign is yours alone" for three versions. **A rename that changes what a variable means is not a rename.** |
 | **Pulling works again** | v0.20.1. A second device, or a cleared browser, gets the account's leaders back — the v2 document is pulled and lifted locally. Pushing stays off until step F. `planPull` refuses to overwrite an arsenal this device has changed, and raises a conflict instead. |
 | **Conflicts have a screen** | v0.20.0. Two copies side by side in the player's own terms — scrip, models, injuries, and what each side has the other lacks — with keep mine / take theirs / **keep both**. Never a modal: the conflicted state is safe, so it waits on the shelf. Identical copies settle themselves. Unexercised against a real conflict until sync returns. |
@@ -139,7 +140,7 @@ aftermath. Shipped and live:
 | **The service worker** | v0.19.3. It cached Pages' SPA fallback under asset URLs, so a browser that loaded mid-deploy got a **permanent white screen** no reload could clear. Live since v0.14.0, observed in production on 2026-09-03. Two guards now — never write HTML under a non-navigation request, never serve it either — plus a cache-version bump that purges anyone already poisoned. |
 | **Membership** | v0.17.0. Owner-issued single-use invites, two gates (redeem → pending → host admits), per-campaign nicknames, opt-in Discord identity, and a read-only shared arsenal page. Writes were **not** widened — see below. |
 
-431 tests.
+456 tests.
 
 ### The book is on disk, and must not be committed
 
@@ -155,39 +156,47 @@ Wyrd's product — the fastest available way to lose the fan-site permission thi
 whole project depends on (§8). The session rules' `git add .` would have swept
 it in.
 
-### ⚠ PUSHES ARE OFF. PULLS ARE ON. (`PUSH_DISABLED`, `src/hooks/useSync.js`)
+### Sync is back on, both kinds — v0.21.0
 
-Step E of `docs/sync-v3-plan.md`, shipped v0.20.1. Reading from the account works
-again; sending back up does not, and must not until step F.
+Step F of `docs/sync-v3-plan.md`. `PUSH_DISABLED` is **false**; arsenals and
+campaigns each have their own endpoint, their own server-assigned version, and
+are planned by the same `planSync` called once per kind.
 
-**Why pushing stays off.** The server holds **v2** documents, `putCampaign` still
-reaches for `campaign.arsenals[0]`, and there is no arsenal endpoint. A push
-would replace a player's server copy with a campaign that has no arsenal in it,
-while their arsenal — by then the only copy — was never sent.
+**Keep the constant.** Flipping it back is a one-line, one-deploy stop if the
+two-kind sync turns out to be wrong on a real device, and that is worth more
+than the tidiness of deleting it.
 
-**Why pulling is safe.** The server's v2 documents are perfectly readable:
-`migrateCampaign` lifts one into an arsenal and a table, which is the same code
-that lifted this browser's shelf and has been run against all six live campaigns.
+What went in, and the rules that must not be undone:
 
-**But a pull is not automatically safe, and `planPull` is why.** Lifting a pulled
-document writes an `arsenal:<id>`, and that is where a week of play lives —
-while `planSync` decided to pull by looking at the *campaign's* dirty flag,
-having never heard of the arsenal. Left alone it would overwrite an unsent week
-with an older server copy. `planPull` compares each arsenal by content and
-refuses:
+- **`functions/lib/arsenalStore.js`** + `/api/arsenals`, written to
+  `campaignStore.js`'s three rules — `userId` first, `requireSubject` throws,
+  and **one ownership gate before any write**. 25 attack tests.
+- **A shape gate on both stores.** Any write whose `schemaVersion` is lower than
+  the row's is refused with a 409. The version gate cannot catch this: a stale
+  tab that has pulled holds a perfectly valid base version.
+- **`putCampaign` no longer assumes `campaign.arsenals[0]`**, and the campaigns
+  route no longer *requires* it — that check would have rejected every v3
+  campaign. A validity rule written against the shape of the day outlives the day.
+- **Ordering is load-bearing**: push campaigns before arsenals and pull them
+  first too, because `arsenals.campaign_id` references `campaigns(id)` and D1
+  enforces foreign keys.
+- **`planSync` was parameterised, not rewritten.** It is called once per kind.
+  Teaching the one function that can lose twelve weeks to understand two kinds
+  would have been the expensive way to avoid calling it twice.
 
-- no local copy, or identical, or **known** clean → write it;
-- differs and the local copy is dirty **or unknown** → conflict, and **nothing
-  from that document is written, not even the campaign**.
+**A projection-only row is a first write, not a conflict.** A v2 campaign push
+wrote the `arsenals` columns with no document, so those rows carry `version 0`
+and `doc NULL`. Treating them as existing documents deadlocked the first push:
+the gate wanted `baseVersion === 0` while `listArsenals` hides `doc IS NULL`
+rows, so the client could not push without a version it could not be told.
+Neither half was wrong alone. Only a database with real v2 history has such
+rows — a fresh one never would, which is why this was found by restoring the
+backup rather than by testing an empty schema.
 
-The "or unknown" is load-bearing. `isDirty` returns null for an arsenal nobody
-has flagged, and until v0.20.1 nothing flagged one — `saveArsenal` now does.
-
-**Proven end to end** against a local D1 restored from the real backup, with a
-forged session: an empty browser pulled the owner's campaign and lifted it
-(5 models, 25ss, 3 scrip); then a week was played on that device, the base put
-behind the server, and the reconcile **left the week alone and raised a
-conflict** instead.
+Proven end to end against a local D1 restored from the real backup: an empty
+browser pulled and lifted, a week was played, the hire reached the server as a
+v3 arsenal document (version 1, `schemaVersion` 3), and a **second empty browser
+pulled it back** with the hire intact.
 
 ### ⚠ The audit is overdue, and here is when to run it
 
@@ -1136,7 +1145,7 @@ every session. `docs/VERSION_HISTORY.md` holds how it got this way.
 npm install
 cp .env.example .env
 npm run dev      # Vite only — NO Functions, NO database. useAuth degrades to signed out.
-npm run test     # 431 tests; `functions/` is in the run too, for the authz tests
+npm run test     # 456 tests; `functions/` is in the run too, for the authz tests
 npm run build    # production bundle — the dev proxy does NOT exist here
 npm run seed     # optional local register file; ask BiggerHat's maintainer first
 
