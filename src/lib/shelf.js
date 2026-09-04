@@ -279,3 +279,72 @@ export function conflictExport({ kind, mine, theirs }) {
     [key]: [mine, theirs].filter(Boolean),
   }
 }
+
+/* ── pulling from the account ───────────────────────────────────── */
+
+/**
+ * Sync bookkeeping must not ride into a document.
+ *
+ * A pulled campaign arrives as the stored `doc` **plus** `id`, `updatedAt` and
+ * `version`, because `fromRow` bolts those on. `version` is per-device sync
+ * bookkeeping and `storage.js` is emphatic that it lives in its own key and
+ * never on the doc — on the doc it would be wiped by the next keystroke, and it
+ * would ride into the JSON export where it is meaningless.
+ */
+export function stripSyncFields(doc) {
+  if (!doc) return doc
+  const { version: _serverBookkeeping, corrupt: _flag, ...rest } = doc
+  return rest
+}
+
+/**
+ * What a pulled campaign would do to this browser, decided before anything is
+ * written.
+ *
+ * A pull is not a safe operation just because the bytes came from the server.
+ * The document being pulled is a **v2** campaign with the arsenal nested inside,
+ * so lifting it writes an `arsenal:<id>` — and that is where a week of play
+ * lives. `planSync` decides pull-versus-push from the *campaign's* dirty flag
+ * and has never heard of the arsenal, so left to itself it would happily
+ * overwrite an unsent week with an older server copy.
+ *
+ * So the arsenals are checked one at a time, by content, and the rules are
+ * deliberately conservative:
+ *
+ * - **no local copy** → write it; there is nothing to lose.
+ * - **identical in substance** → write it; it is a no-op that also clears the
+ *   dirty flag.
+ * - **differs, and we positively know the local copy is clean** → write it;
+ *   this is an ordinary pull and the server is ahead.
+ * - **differs, and the local copy is dirty *or we do not know*** → conflict.
+ *   Nothing is written.
+ *
+ * That last clause matters more than it looks. `isDirty` returns `null` for an
+ * arsenal nobody has ever flagged, and until v0.20.1 *nothing* flagged one — so
+ * every arsenal edited between the v3 cutover and now reads as unknown. Treating
+ * unknown as clean would throw away exactly the work this whole step exists to
+ * protect.
+ *
+ * **If any arsenal conflicts, the campaign is not written either.** The two came
+ * out of one document and are one decision; taking half of it would leave a
+ * table whose players disagree with it.
+ */
+export function planPull(remoteDoc, { loadArsenal, isDirty, sameInSubstance }) {
+  const lifted = migrateCampaign(stripSyncFields(remoteDoc))
+  if (!lifted) return { campaign: null, arsenals: [], conflicts: [] }
+
+  const arsenals = []
+  const conflicts = []
+
+  for (const incoming of lifted.arsenals) {
+    const local = loadArsenal(incoming.id)
+    if (!local || sameInSubstance(local, incoming) || isDirty(incoming.id) === false) {
+      arsenals.push(incoming)
+      continue
+    }
+    conflicts.push({ kind: 'arsenal', id: incoming.id, mine: local, theirs: incoming })
+  }
+
+  if (conflicts.length > 0) return { campaign: null, arsenals: [], conflicts }
+  return { campaign: lifted.campaign, arsenals, conflicts }
+}

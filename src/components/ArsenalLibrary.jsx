@@ -117,14 +117,33 @@ function SyncLine({ sync, count, offlineSession }) {
     )
   }
 
+  /**
+   * Pulling works, pushing does not, and saying "synced" would be a lie in the
+   * direction that costs people work. §12's rule is that this line tells the
+   * truth about where the data is.
+   */
+  if (sync.status === 'synced' && sync.held > 0) {
+    return (
+      <p className="note note--warn">
+        <strong>Your account&rsquo;s copies are here, but new work is not going
+        back up yet.</strong>{' '}
+        {sync.held === 1 ? 'One leader has' : `${sync.held} leaders have`} changes
+        saved in this browser only, while the last of the sync rebuild lands.
+        Nothing is lost and nothing on your account has been overwritten — but
+        until it finishes, this browser is the only copy of those changes. Export
+        the JSON if that makes you uneasy.
+      </p>
+    )
+  }
+
   if (sync.status === 'synced') {
     const bits = []
-    if (sync.adopted > 0) bits.push(`${sync.adopted} added to your account`)
-    if (sync.pulled > 0) bits.push(`${sync.pulled} pulled from it`)
+    if (sync.pulled > 0) bits.push(`${sync.pulled} pulled down`)
     return (
       <p className="note">
-        Synced to your account{bits.length ? ` — ${bits.join(', ')}` : ''}. These
-        follow you to another device.
+        Read from your account{bits.length ? ` — ${bits.join(', ')}` : ''}.
+        Anything already on your account appears here; sending new work back up
+        is still switched off while the sync rebuild finishes.
       </p>
     )
   }

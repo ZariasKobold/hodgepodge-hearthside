@@ -349,3 +349,17 @@ describe('a whole round trip', () => {
     expect(c.participants[0].arsenalId).toBe(a.id)
   })
 })
+
+describe('a lifted arsenal knows when it was last touched', () => {
+  it('inherits the campaign clock, because a v2 arsenal had none of its own', () => {
+    // Without this the conflict screen reads "no save time recorded" on both
+    // sides — the one fact that orients somebody choosing between two copies.
+    const { arsenals } = splitLegacyCampaign(v2Campaign({ updatedAt: 987654321 }))
+    expect(arsenals[0].updatedAt).toBe(987654321)
+  })
+  it('keeps its own if it has one', () => {
+    const doc = v2Campaign({ updatedAt: 111 })
+    doc.arsenals[0].updatedAt = 222
+    expect(splitLegacyCampaign(doc).arsenals[0].updatedAt).toBe(222)
+  })
+})

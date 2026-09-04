@@ -263,17 +263,26 @@ export function loadArsenal(id) {
 /**
  * Writes the arsenal and makes sure its id is on the shelf.
  *
- * Mirrors `saveCampaign`, including `keepTimestamp` — but deliberately does
- * **not** mark anything dirty. Arsenals do not sync yet: step 5 of the v3 plan
- * generalises the sync machinery over a `kind` exactly once, and the plan is
- * emphatic that copy-pasting it for a second object type is the worst available
- * outcome, because two divergent copies of the code that can lose twelve weeks
- * is worse than one. Until then an arsenal is local, and the shelf says so.
+ * Mirrors `saveCampaign`, including `keepTimestamp` **and the dirty flag**.
+ *
+ * It deliberately did not mark dirty until v0.20.1, on the reasoning that
+ * arsenals did not sync so the flag had nothing to protect. That became wrong
+ * the moment a *pull* could write one. Playing a week changes the arsenal and
+ * not the campaign, so a device with a week of unsent play had a clean campaign
+ * and a changed arsenal — and `planSync`, which reads the campaign's flag,
+ * would have said "clean, the server is ahead, pull", and the lift would have
+ * overwritten the week.
+ *
+ * `planSync` was not wrong. It was never told the arsenal existed. The flag is
+ * what tells it.
  */
 export function saveArsenal(arsenal, { keepTimestamp = false } = {}) {
   if (!arsenal?.id) return null
   const stamped = keepTimestamp ? arsenal : { ...arsenal, updatedAt: Date.now() }
   save(arsenalKey(stamped.id), stamped)
+  // As with campaigns: `keepTimestamp` is how a *pull* writes, and a pull is
+  // the account handing us its own copy — the opposite of an unsent edit.
+  if (!keepTimestamp) markDirty(stamped.id, true)
   const ids = arsenalIds()
   if (!ids.includes(stamped.id)) save(ARSENAL_INDEX_KEY, [...ids, stamped.id])
   return stamped

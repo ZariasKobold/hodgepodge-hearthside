@@ -4,14 +4,14 @@ Companion to `docs/data-model-v3.md`, which covers steps 1–3 (done). This cove
 what is left, and it is the dangerous half: steps 1–3 only ever wrote to the
 device in front of you, and these two write to a database five people share.
 
-Status: **steps A–D done. E, F and G outstanding.** Written 2026-09-03 at
+Status: **steps A–E done. F and G outstanding.** Written 2026-09-03 at
 v0.19.4; the conflict screen it calls for landed at v0.20.0, and migrations 0005
 and 0006 were applied to remote the same day.
 
-**The schema is now ready for arsenals to sync. The code is not** — `useSync`
-still only knows about campaigns, `putCampaign` still reaches for
-`campaign.arsenals[0]`, and there is no `arsenalStore.js`. `SYNC_DISABLED` stays
-true until step E.
+**Reading from the account works again as of v0.20.1.** What is left is writing:
+`putCampaign` still reaches for `campaign.arsenals[0]`, there is no
+`arsenalStore.js`, and `planSync` is still called once rather than once per kind.
+`PUSH_DISABLED` stays true until all three are done.
 
 ---
 
@@ -339,7 +339,21 @@ Two changes close it, and neither is optional:
   this whole plan is written to avoid, and it does not become acceptable just
   because the write arrived from the server.
 
-**E. Ship sync in read-only mode: pull and lift, never push.** This is the step
+**E. Ship sync in read-only mode: pull and lift, never push.** ✅ **Done,
+v0.20.1.** `SYNC_DISABLED` became `PUSH_DISABLED`; `reconcile` runs and pulls,
+`mirror` and `forget` stay refused, and the push half of the reconcile is held
+with the count surfaced on the shelf. `planPull` is the guard described above,
+and `saveArsenal` now marks dirty.
+
+Proven end to end against a local D1 restored from the real backup, with a forged
+session: an empty browser pulled the owner's campaign and lifted it — 5 models,
+25ss, 3 scrip — with the arsenal and campaign written as separate documents and
+no `version` leaking onto either. Then a week was played on that device, the base
+put behind the server, and the reconcile **left the week alone and raised a
+conflict**, showing "this device: Nekima (week 3), 6 models, 38ss / your account:
+5 models, 25ss".
+
+This is the step
 that most reduces risk and it is the one most likely to be skipped. It restores
 cross-device visibility — which is what the sync pause currently costs everyone —
 while making it structurally impossible to damage the server. Prove on the

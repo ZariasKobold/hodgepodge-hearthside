@@ -91,10 +91,13 @@ export function repairModel(model) {
  * Idempotent: a v3 arsenal passed in comes back with its models repaired and
  * nothing else touched.
  */
-export function migrateArsenal(arsenal, { ownerUserId = null, campaignId = null } = {}) {
+export function migrateArsenal(arsenal, { ownerUserId = null, campaignId = null, updatedAt = null } = {}) {
   if (!arsenal) return null
   const lifted = createArsenal({
     ...arsenal,
+    // Its own if it has one, the campaign's if not, and absent only when
+    // neither knows — see `splitLegacyCampaign`.
+    ...(arsenal.updatedAt ?? updatedAt ? { updatedAt: arsenal.updatedAt ?? updatedAt } : {}),
     schemaVersion: ARSENAL_SCHEMA_VERSION,
     // `??` not `||`: an arsenal already carrying an owner keeps it, and one
     // carrying null adopts the campaign's. An empty string is not an owner.
@@ -161,7 +164,21 @@ export function splitLegacyCampaign(doc) {
   const localId = doc.localArsenalId || nested[0]?.id || null
 
   const arsenals = nested.map((a) =>
-    migrateArsenal(a, { ownerUserId: owner, campaignId: doc.id })
+    migrateArsenal(a, {
+      ownerUserId: owner,
+      campaignId: doc.id,
+      /**
+       * A v2 nested arsenal has no `updatedAt` of its own — it was part of the
+       * campaign, so the campaign's was the only clock. Inheriting it is the
+       * honest answer to "when was this last touched?": the arsenal is exactly
+       * as recent as the document it came out of.
+       *
+       * Without this the conflict screen shows "no save time recorded" on both
+       * sides, which removes the single most orienting fact from the one screen
+       * where somebody is choosing between two copies of their campaign.
+       */
+      updatedAt: doc.updatedAt,
+    })
   )
 
   const participants = arsenals.map((a) =>

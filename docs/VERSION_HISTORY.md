@@ -3733,3 +3733,94 @@ never have worked.
 UNVERIFIED: everything about it under a real conflict.
 NEXT: unchanged — play a week on v3, then migrations 0005/0006 and the
 generalised sync, then the audit.
+
+---
+
+### Session 45 — v0.20.1
+Date: 2026-09-03
+
+**feat: pulling works again — step E, and the guard that makes it safe**
+
+Migrations 0005 and 0006 went in earlier the same day (see below). This is the
+client half: `SYNC_DISABLED` becomes `PUSH_DISABLED`, `reconcile` runs and pulls,
+and `mirror`/`forget`/the push loop stay refused.
+
+A second device, or a cleared browser, gets the account's leaders back. New work
+still does not go up — that is step F — and the shelf says so in those words
+rather than claiming to be synced.
+
+#### The bug this step would have shipped
+
+Pull-only sounds safe and is not, and the reasoning is worth keeping because it
+is the fourth time this project has met the same shape.
+
+The server holds **v2** documents, so pulling one means *lifting* it, and lifting
+writes an `arsenal:<id>`. That is where a week of play lives. But `planSync`
+decides pull-versus-push from the **campaign's** dirty flag, and a device that
+played a week has a *clean campaign and a changed arsenal* — because
+`saveArsenal` deliberately did not mark anything dirty, on the reasoning that
+arsenals did not sync so the flag had nothing to protect.
+
+So: clean campaign, server ahead → pull → lift → **the week is gone.**
+
+`planSync` was not wrong. It was never told the arsenal existed. Same shape as
+v0.18.4, and as the `baseVersion` overclaim corrected earlier today: **a guard
+phrased about one document and enforced against another will pass every time.**
+
+#### `planPull`, and the clause that matters
+
+`saveArsenal` now marks dirty, and `planPull` decides per arsenal, by content:
+
+- no local copy, or identical in substance, or **known** clean → write it;
+- differs and the local copy is dirty **or unknown** → conflict.
+
+And if any arsenal in a document conflicts, **nothing from that document is
+written, not even the campaign** — the two came out of one document and are one
+decision; taking half would leave a table whose players disagree with it.
+
+The "or unknown" is the load-bearing half. `isDirty` returns `null` for anything
+nobody has flagged, and until this session *nothing* flagged an arsenal — so
+every arsenal edited between the v3 cutover and now reads as unknown. Treating
+unknown as clean would have thrown away precisely the work this step exists to
+protect.
+
+No version is recorded against a pulled arsenal, because there is nothing to
+record: every `arsenals.doc` on the server is still NULL. Step F gives them their
+own.
+
+#### Proven end to end, not asserted
+
+Against a local D1 restored from the real backup and migrated, with a forged
+session for the owner:
+
+- An **empty browser** signed in and pulled: "1 pulled down", *Cletus and Duke
+  Carcinus*, Neverborn · Schemer, 5 models, 25ss, 3 scrip. Storage held an
+  arsenal and a campaign as separate documents, both at schemaVersion 3, the
+  campaign with a participation and no `arsenals` array, and **no `version` on
+  either doc** — `stripSyncFields` doing its job, since version on a doc would be
+  wiped by the next keystroke and would ride into the JSON export meaning nothing.
+- Then a week was played on that device and the base put behind the server. The
+  reconcile **left the week alone** — 6 models, 0 scrip, Nekima still there — and
+  raised a conflict showing *this device: Nekima (week 3), 6 models, 38ss* against
+  *your account: 5 models, 25ss*.
+
+#### One thing the real data exposed
+
+Both sides of that conflict first read **"no save time recorded"**. A v2 nested
+arsenal has no `updatedAt` of its own — it was part of the campaign, so the
+campaign's was the only clock. A lifted arsenal now inherits it, which is the
+honest answer to "when was this last touched?" and restores the single most
+orienting fact on the one screen where somebody is choosing between two copies of
+their campaign.
+
+431 tests.
+
+Files: `src/lib/storage.js`, `src/lib/shelf.js` (+`planPull`, `stripSyncFields`)
+       + tests, `src/lib/shape/migrate.js` + tests, `src/hooks/useSync.js`,
+       `src/components/ArsenalLibrary.jsx`, `CLAUDE.md`, `docs/sync-v3-plan.md`
+RESOLVED: step E; the pull-clobbers-a-week hazard, before it could ship.
+UNVERIFIED: any of this against the *live* server — proven against a local D1
+restored from the real backup, which is the same data and the same engine, but
+not the same machine.
+NEXT: step F — `arsenalStore.js`, the arsenal routes, `putCampaign` taught the v3
+shape, and `planSync` called once per kind. Then the audit.

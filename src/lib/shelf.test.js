@@ -2,8 +2,11 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import {
   createSeatedArsenal, saveSeated, readShelf, readSeated,
   isSoloTable, liftLocalShelfToV3, forgetSeated,
-  resolveConflict, forkDocument, conflictExport,
+  resolveConflict, forkDocument, conflictExport, planPull, stripSyncFields,
 } from './shelf.js'
+import { migrateCampaign } from './shape/migrate.js'
+import { sameInSubstance } from './shape/compare.js'
+import { createModel } from './shape/arsenal.js'
 import {
   save, load, remove, campaignIds, arsenalIds, loadCampaign, loadArsenal,
   saveCampaign, removeCampaign, removeArsenal, forgetVersion, v3LiftedAt,
@@ -319,5 +322,79 @@ describe('conflictExport', () => {
     const file = conflictExport({ kind: 'arsenal', mine: { id: 'a' }, theirs: { id: 'a' } })
     expect(file.arsenals).toHaveLength(2)
     expect(file.campaigns).toEqual([])
+  })
+})
+
+describe('planPull — the guard between a pull and a week of play', () => {
+  const remote = () => ({ ...v2Doc(), version: 4, updatedAt: 5000 })
+
+  /** The local arsenal exactly as the lift would have produced it. */
+  const lifted = () => migrateCampaign(v2Doc()).arsenals[0]
+
+  const deps = (localArsenal, dirty) => ({
+    loadArsenal: () => localArsenal,
+    isDirty: () => dirty,
+    sameInSubstance,
+  })
+
+  it('writes freely when this browser has never seen the arsenal', () => {
+    const plan = planPull(remote(), deps(null, null))
+    expect(plan.conflicts).toEqual([])
+    expect(plan.campaign.id).toBe('cmp_real')
+    expect(plan.arsenals.map((a) => a.id)).toEqual(['ars_real'])
+  })
+
+  it('writes when the two say the same thing, whatever the flag claims', () => {
+    const plan = planPull(remote(), deps(lifted(), true))
+    expect(plan.conflicts).toEqual([])
+    expect(plan.arsenals).toHaveLength(1)
+  })
+
+  it('writes when it differs but the local copy is known clean', () => {
+    const stale = { ...lifted(), scrip: 999 }
+    const plan = planPull(remote(), deps(stale, false))
+    expect(plan.conflicts).toEqual([])
+    expect(plan.arsenals[0].scrip).toBe(7)      // the server's copy wins
+  })
+
+  it('REFUSES when it differs and this device has unsent changes', () => {
+    // The week played on a phone. Losing this is the whole reason planPull
+    // exists.
+    const played = { ...lifted(), scrip: 0, models: [...lifted().models, createModel({ id: 'm9', name: 'Nekima', cost: 13, addedWeek: 3 })] }
+    const plan = planPull(remote(), deps(played, true))
+    expect(plan.conflicts).toHaveLength(1)
+    expect(plan.conflicts[0]).toMatchObject({ kind: 'arsenal', id: 'ars_real' })
+    expect(plan.conflicts[0].mine.models).toHaveLength(3)
+    expect(plan.conflicts[0].theirs.models).toHaveLength(2)
+  })
+
+  it('REFUSES when it differs and nobody knows whether the copy is clean', () => {
+    // `isDirty` is null for any arsenal flagged by nothing — which, before
+    // v0.20.1, was every arsenal. Treating unknown as clean would throw away
+    // exactly the work this step exists to protect.
+    const played = { ...lifted(), scrip: 0 }
+    const plan = planPull(remote(), deps(played, null))
+    expect(plan.conflicts).toHaveLength(1)
+  })
+
+  it('writes NOTHING when any arsenal conflicts, not even the campaign', () => {
+    // The campaign and its arsenals came out of one document and are one
+    // decision; taking half would leave a table whose players disagree with it.
+    const played = { ...lifted(), scrip: 0 }
+    const plan = planPull(remote(), deps(played, true))
+    expect(plan.campaign).toBeNull()
+    expect(plan.arsenals).toEqual([])
+  })
+
+  it('keeps the server version off the document', () => {
+    // `version` is per-device sync bookkeeping. On the doc it would be wiped by
+    // the next keystroke and would ride into the JSON export meaning nothing.
+    const plan = planPull(remote(), deps(null, null))
+    expect(plan.campaign.version).toBeUndefined()
+    expect(plan.arsenals[0].version).toBeUndefined()
+  })
+
+  it('survives being handed nothing', () => {
+    expect(planPull(null, deps(null, null))).toEqual({ campaign: null, arsenals: [], conflicts: [] })
   })
 })
