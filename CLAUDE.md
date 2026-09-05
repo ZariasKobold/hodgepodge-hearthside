@@ -4,7 +4,7 @@
 
 ---
 
-## Current Version: 0.22.4
+## Current Version: 0.22.5
 
 ## Last Updated: 2026-09-05
 
@@ -140,7 +140,7 @@ aftermath. Shipped and live:
 | **The service worker** | v0.19.3. It cached Pages' SPA fallback under asset URLs, so a browser that loaded mid-deploy got a **permanent white screen** no reload could clear. Live since v0.14.0, observed in production on 2026-09-03. Two guards now — never write HTML under a non-navigation request, never serve it either — plus a cache-version bump that purges anyone already poisoned. |
 | **Membership** | v0.17.0. Owner-issued single-use invites, two gates (redeem → pending → host admits), per-campaign nicknames, opt-in Discord identity, and a read-only shared arsenal page. Writes were **not** widened — see below. |
 
-554 tests.
+557 tests.
 
 ### The book is on disk, and must not be committed
 
@@ -378,6 +378,35 @@ Rules in it that should not be undone:
 The record and the PNG also grew a **Gained by advancement** section. Tier-2
 actions and abilities had nowhere to appear on either before, so a leader who
 had earned an action showed a card that was missing it.
+
+### A repair screen you can only visit once is a trap — v0.22.5
+
+Straight after v0.22.4, from the arsenal sheet: *"it still says the skill was
+increased to 5, it should have been 6."*
+
+The panel listed **unplaced** advancements. Giving one an action took it off
+that list — while its *row* was still the wrong one of three, because the
+correction dropdown had not existed yet when it was placed. So the Skl stayed
+at 5, the sheet went on saying so, and there was no way back in. **The same dead
+end the panel was built to remove, one step further along.**
+
+`advancementsToRepair` now offers an advancement whose target is missing **or**
+whose row was guessed, where guessed means `rowIsGuessed`: a repeated name
+(only "Skill Boost" is) on a record with no `id`. Everything taken since
+v0.22.2 was chosen by index off the offer, so its row is what the player picked
+and it never appears.
+
+Two rules that hold it together:
+
+- **Confirming mints the id, and that is what settles it.** The id's meaning
+  here is not "new" but "a person has said this row is right" — which is also
+  what `undoAdvancement` wants instead of a name.
+- **A pairing the app can prove illegal cannot be settled.** Saving is blocked
+  while the chosen action is `eligible === false`, because saving mints the id
+  and takes the row off the list for good. An *unknown* still saves; only a
+  proven no blocks. Without this, pressing Save on the untouched screen would
+  have locked in the wrong row permanently — the same trap again, one step
+  further along again.
 
 ### The repair had to be repaired — v0.22.4
 
@@ -1386,7 +1415,7 @@ every session. `docs/VERSION_HISTORY.md` holds how it got this way.
 npm install
 cp .env.example .env
 npm run dev      # Vite only — NO Functions, NO database. useAuth degrades to signed out.
-npm run test     # 554 tests; `functions/` is in the run too, for the authz tests
+npm run test     # 557 tests; `functions/` is in the run too, for the authz tests
 npm run build    # production bundle — the dev proxy does NOT exist here
 npm run seed     # optional local register file; ask BiggerHat's maintainer first
 

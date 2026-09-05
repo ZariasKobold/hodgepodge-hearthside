@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   needsTarget, targetsFor, advancementsOn, advancedAction, rowFor,
-  gainedActions, gainedActionKey, unplacedAdvancements, ambiguousRows, rowsNamed,
+  gainedActions, gainedActionKey, advancementsToRepair, rowIsGuessed, ambiguousRows, rowsNamed,
 } from './advancement.js'
 import { findTable } from '../data/advancements.js'
 
@@ -285,15 +285,17 @@ describe('the action as the advancements leave it', () => {
   })
 })
 
-describe('advancements that were never told which action', () => {
+describe('advancements the repair panel has to offer', () => {
   const legacy = (over = {}) => ({
-    id: 'old_1', tableId: 'attack', tableName: 'Attack Modification',
-    name: 'Skill Boost', tableValue: 10, page: 40, ...over,
+    tableId: 'attack', tableName: 'Attack Modification',
+    name: 'Draw Out Secrets', tableValue: 9, page: 39, ...over,
   })
+  const boost = (over = {}) => legacy({ name: 'Skill Boost', tableValue: 7, page: 39, ...over })
+  const placed = { key: 'k', name: 'Blowdart', slot: 'attack' }
 
-  it('finds the tier-1 ones with no target', () => {
-    const l = leader({ advancements: [legacy(), legacy({ id: 'old_2', name: 'Draw Out Secrets', tableValue: 9 })] })
-    expect(unplacedAdvancements(l).map((a) => a.id)).toEqual(['old_1', 'old_2'])
+  it('offers the tier-1 ones with no target', () => {
+    const l = leader({ advancements: [legacy(), boost()] })
+    expect(advancementsToRepair(l).map((a) => a.name)).toEqual(['Draw Out Secrets', 'Skill Boost'])
   })
 
   it('leaves alone anything that never had a target to give', () => {
@@ -305,28 +307,45 @@ describe('advancements that were never told which action', () => {
         { id: 'd', tableId: 'crew-card', name: "Grave's Pull" },
       ],
     })
-    expect(unplacedAdvancements(l)).toEqual([])
+    expect(advancementsToRepair(l)).toEqual([])
   })
 
-  it('counts a target already given as placed', () => {
-    const l = leader({
-      advancements: [legacy({ appliesTo: { key: 'k', name: 'Blowdart', slot: 'attack' } })],
-    })
-    expect(unplacedAdvancements(l)).toEqual([])
+  it('drops an unambiguous one once it has been given a target', () => {
+    expect(advancementsToRepair(leader({ advancements: [legacy({ appliesTo: placed })] }))).toEqual([])
   })
 
-  /* A written-in name is an answer, not a gap — it names an action this app
-     cannot list, which is exactly what the field is for. */
+  /* A hand-written name is an answer, not a gap. */
   it('counts a hand-written target as placed', () => {
-    const l = leader({
-      advancements: [legacy({ appliesTo: { key: null, name: 'Whatever It Was', slot: 'attack', written: true } })],
-    })
-    expect(unplacedAdvancements(l)).toEqual([])
+    const written = { key: null, name: 'Whatever It Was', slot: 'attack', written: true }
+    expect(advancementsToRepair(leader({ advancements: [legacy({ appliesTo: written })] }))).toEqual([])
+  })
+
+  /**
+   * THE SECOND DEAD END. Placing a Skill Boost took it off the list while its
+   * *row* was still the wrong one of three, so the sheet went on reading Skl 5
+   * with no way back in. Reported from the arsenal sheet after the first pass.
+   */
+  it('keeps offering a placed Skill Boost, because its row was a guess', () => {
+    const l = leader({ advancements: [boost({ appliesTo: placed })] })
+    expect(advancementsToRepair(l)).toHaveLength(1)
+  })
+
+  /* Confirming mints an id, and that is what settles it. */
+  it('stops offering it once a person has confirmed the row', () => {
+    const l = leader({ advancements: [boost({ id: 'adv_x', appliesTo: placed })] })
+    expect(advancementsToRepair(l)).toEqual([])
+  })
+
+  it('knows which rows were guessed and which were chosen', () => {
+    expect(rowIsGuessed(boost())).toBe(true)
+    expect(rowIsGuessed(boost({ id: 'adv_x' }))).toBe(false)
+    expect(rowIsGuessed(legacy())).toBe(false)
+    expect(rowIsGuessed(null)).toBe(false)
   })
 
   it('is safe on a leader with nothing at all', () => {
-    expect(unplacedAdvancements(null)).toEqual([])
-    expect(unplacedAdvancements({})).toEqual([])
+    expect(advancementsToRepair(null)).toEqual([])
+    expect(advancementsToRepair({})).toEqual([])
   })
 })
 
@@ -369,7 +388,7 @@ describe('advancements as they were actually recorded before v0.22.2', () => {
   })
 
   it('finds both, though neither carries an id', () => {
-    const out = unplacedAdvancements(legacy())
+    const out = advancementsToRepair(legacy())
     expect(out).toHaveLength(2)
     expect(out.every((a) => a.id === undefined)).toBe(true)
   })
@@ -378,7 +397,7 @@ describe('advancements as they were actually recorded before v0.22.2', () => {
      and it is what the repair addresses them by. */
   it('gives each a distinct index in the holder’s own list', () => {
     const l = legacy()
-    const at = unplacedAdvancements(l).map((a) => l.advancements.indexOf(a))
+    const at = advancementsToRepair(l).map((a) => l.advancements.indexOf(a))
     expect(at).toEqual([0, 1])
   })
 

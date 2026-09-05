@@ -1,7 +1,8 @@
 import { Label, Field, Button, Input, Select } from './ui.jsx'
 import {
-  unplacedAdvancements, targetsFor, rowFor, ambiguousRows,
+  advancementsToRepair, targetsFor, rowFor, ambiguousRows, rowIsGuessed,
 } from '../lib/advancement.js'
+import { uid } from '../lib/shape/arsenal.js'
 import { findTable } from '../data/advancements.js'
 import { sourceSlug, findEntry } from '../lib/rules.js'
 
@@ -60,13 +61,14 @@ export default function UnplacedAdvancements({
   return (
     <section className="repair noprint">
       <Label>
-        {rows.length} advancement{rows.length === 1 ? '' : 's'} not on an action yet
+        {rows.length} advancement{rows.length === 1 ? '' : 's'} to check
       </Label>
       <p className="gap-note">
-        <strong>These were earned before the app asked which action they modify.</strong>{' '}
-        A tier-1 advancement only applies to the one action you chose at the
-        table (p.31), and that answer was never recorded — so the card cannot
-        show it. Name the action and it will appear where it belongs.
+        <strong>These were recorded before the app kept the whole answer.</strong>{' '}
+        A tier-1 advancement applies to the one action you chose at the table
+        (p.31) and nothing older than v0.22.2 recorded which — and where the
+        book prints a name more than once, the row itself was a guess. Settle
+        them here and the card will show what your leader actually has.
       </p>
 
       {rows.map(({ adv, to, holder, at }) => {
@@ -91,10 +93,18 @@ export default function UnplacedAdvancements({
         const entry = choices.length > 1 ? choices[rowIndex] : recorded
 
         const targets = targetsFor(holder, table, entry, actionFor)
-        const value = draft[id] || ''
-        const chosen = targets.find((t) => t.key === value) || null
         const written = targets.length === 0
-        const name = written ? value.trim() : chosen?.name
+
+        // Whatever is already on the advancement is the starting answer, so a
+        // row that came back only to have its row corrected does not make the
+        // player name the action a second time.
+        const recordedTarget = written
+          ? adv.appliesTo?.name || ''
+          : targets.some((t) => t.key === adv.appliesTo?.key) ? adv.appliesTo.key : ''
+        const value = draft[id] ?? recordedTarget
+        const chosen = targets.find((t) => t.key === value) || null
+        const name = written ? String(value).trim() : chosen?.name
+        const placed = Boolean(adv.appliesTo?.name)
 
         return (
           <Field key={id}>
@@ -120,6 +130,7 @@ export default function UnplacedAdvancements({
                   “{adv.name}” is printed {choices.length} times on that table
                   and older records did not keep which one you took — so this is
                   the app’s guess, not yours. Correct it if it is wrong.
+                  {placed && ' It is what the card is showing right now.'}
                 </p>
               </>
             )}
@@ -143,6 +154,14 @@ export default function UnplacedAdvancements({
               </Select>
             )}
 
+            {chosen?.eligible === false && (
+              <p className="note note--warn">
+                <strong>That pairing is not legal.</strong> {chosen.name} is{' '}
+                {chosen.why.replace(/^Skl /, 'Skl ')} — so this is not the row
+                you took. Pick the one that is, or a different action.
+              </p>
+            )}
+
             {chosen?.eligible === null && (
               <p className="note">
                 The app cannot check this one — {chosen.why}. It is recorded
@@ -161,6 +180,13 @@ export default function UnplacedAdvancements({
               onClick={() => {
                 if (!name) return
                 onPlace(at, {
+                  /**
+                   * An id, which is what takes this off the repair list — see
+                   * `rowIsGuessed`. It means "a person has confirmed this row",
+                   * and it also gives `undoAdvancement` something better than a
+                   * name to match on.
+                   */
+                  id: adv.id || uid('adv'),
                   appliesTo: written
                     ? { key: null, name, slot: table.targetSlot, written: true }
                     : { key: chosen.key, name: chosen.name, slot: chosen.slot, gained: chosen.gained },
@@ -173,9 +199,14 @@ export default function UnplacedAdvancements({
                     : {}),
                 }, { to })
               }}
-              disabled={!name}
+              /* An illegal pairing cannot be settled. Saving mints an id,
+                 which takes the row off this list for good — so letting it
+                 through would lock in something the book forbids and the app
+                 can prove wrong. An *unknown* still saves; only a proven no
+                 blocks. */
+              disabled={!name || chosen?.eligible === false}
             >
-              Put it on {name || 'an action'}
+              {placed ? 'Save' : 'Put it on'} {name || 'an action'}
             </Button>
           </Field>
         )
@@ -190,7 +221,7 @@ export default function UnplacedAdvancements({
  */
 function rowsFor(holder, to) {
   if (!holder) return []
-  return unplacedAdvancements(holder).map((adv) => ({
+  return advancementsToRepair(holder).map((adv) => ({
     adv,
     to,
     holder,

@@ -204,17 +204,7 @@ function verdict(entry, state, target) {
   return { eligible: true, why: '' }
 }
 
-/**
- * Advancements that modify an action but were never told which one.
- *
- * Everything recorded before v0.22.2, when the app stopped throwing the target
- * away. They are not broken — the table, the row and the page are all there —
- * they are simply unattached, so the card cannot show them. The arsenal view
- * offers a picker for exactly this list; see `UnplacedAdvancements.jsx`.
- *
- * A target written in by hand counts as placed. It names an action this app
- * cannot list, which is an answer, not a gap.
- */
+/** Every row on this advancement's table that carries its name. */
 export function rowsNamed(adv) {
   const table = findTable(adv?.tableId)
   if (!table) return []
@@ -238,10 +228,39 @@ export function ambiguousRows(adv) {
   return named.length > 1 ? named : []
 }
 
-export function unplacedAdvancements(holder) {
+/**
+ * An advancement whose recorded row is a guess the app made, not an answer.
+ *
+ * Two conditions, and both are needed. The name has to be one printed more than
+ * once — only "Skill Boost" is — and the record has to predate v0.22.2, which
+ * is exactly what a missing `id` means: `uid('adv')` arrived in the same change
+ * that fixed the name-keyed select. An advancement taken since then was chosen
+ * by index off the offer, so its row is what the player picked.
+ *
+ * Confirming one mints it an id, which is what takes it off this list. That is
+ * the honest meaning of the id here — not "new", but "a person has said this
+ * row is right".
+ */
+export function rowIsGuessed(adv) {
+  return !adv?.id && ambiguousRows(adv).length > 1
+}
+
+/**
+ * Everything the repair panel has to offer, placed or not.
+ *
+ * Widened after a player corrected a Skill Boost's action on the first pass and
+ * then found the sheet still reading Skl 5. Placing it took it off the list
+ * while its *row* was still the wrong one of three, and there was no way back
+ * in — which is the same dead end this panel was built to remove, one step
+ * further along. **A repair screen that can only be visited once is a trap.**
+ *
+ * A target written in by hand counts as placed: it names an action this app
+ * cannot list, which is an answer, not a gap.
+ */
+export function advancementsToRepair(holder) {
   return (holder?.advancements || []).filter((a) => {
-    const table = findTable(a.tableId)
-    return needsTarget(table) && !a.appliesTo?.name
+    if (!needsTarget(findTable(a.tableId))) return false
+    return !a.appliesTo?.name || rowIsGuessed(a)
   })
 }
 

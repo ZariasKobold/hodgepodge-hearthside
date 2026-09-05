@@ -4491,3 +4491,58 @@ recorded as the wrong row can now be corrected rather than blocking the repair.
 UNVERIFIED: still DOM-read rather than seen — the pane's screenshot capture goes
 black past the first viewport on this page. The totem branch remains untried.
 NEXT: the aftermath hand (item 0b, second bullet). Then M3, then L2.
+
+---
+
+### Session 46 — v0.22.5
+Date: 2026-09-05
+
+**fix: a Skill Boost placed with the guessed row could never be corrected**
+
+Reported from the arsenal sheet, minutes after v0.22.4: "it still says the skill
+was increased to 5, it should have been 6."
+
+The panel listed advancements with **no target**. Placing one removed it from
+that list — but the owner had placed the Skill Boost during the first pass, on
+v0.22.3, before the row-correction dropdown existed. So it left the list still
+carrying the wrong one of three rows (Skl 4→5 instead of 5→6), the card and the
+sheet went on printing Skl 5, and there was no route back in.
+
+**The same dead end the panel was built to remove, one step further along.** A
+repair screen that can only be visited once is a trap: it takes the thing off
+the list on the strength of a partial answer.
+
+`advancementsToRepair` replaces `unplacedAdvancements`. It offers an advancement
+whose target is missing **or** whose row was a guess, and `rowIsGuessed` is the
+second half: a name printed more than once on its table (only "Skill Boost" is,
+three times on attack and twice on tactical) on a record with no `id`. Anything
+taken since v0.22.2 was chosen by index off the offer, so its row is what the
+player picked and it never appears here.
+
+Two rules hold it together, and the second was added because writing the first
+created the trap a third time:
+
+- **Confirming mints the id, and that is what settles it.** The id means "a
+  person has said this row is right", not "new" — and it gives `undoAdvancement`
+  something better than a name to match on, which was its own latent collision.
+- **A pairing the app can prove illegal cannot be settled.** Save is blocked
+  while the chosen action is `eligible === false`. Otherwise pressing Save on
+  the untouched screen — Blowdart at Skl 5 against a row needing Skl 4 — would
+  mint the id and lock the wrong row in permanently. An *unknown* still saves;
+  only a proven no blocks, so a register outage never stops a repair.
+
+Verified against the reported state exactly: both advancements placed on
+Blowdart, no ids, Skill Boost recorded as flip 7. The panel came back with only
+the Skill Boost, Blowdart pre-selected and greyed as "Skl 5, needs 4", Save
+disabled and saying why. Changing the row to flip 10 enabled it; saving wrote
+`row 10, p.40` with a fresh id, set the dirty flag, cleared the panel, and both
+the record and the arsenal sheet moved to Skl 6. Draw Out Secrets — placed but
+printed only once — correctly never reappeared.
+
+Files: `src/lib/advancement.js`, `src/lib/advancement.test.js`,
+`src/components/UnplacedAdvancements.jsx`, `CLAUDE.md`, `package.json`,
+`docs/VERSION_HISTORY.md`
+RESOLVED: the reported Skl 5; and a guessed row can be corrected after placing.
+UNVERIFIED: still DOM-read, not seen — the pane's screenshot capture goes black
+past the first viewport on this page. The totem branch remains untried.
+NEXT: the aftermath hand (item 0b, second bullet). Then M3, then L2.
