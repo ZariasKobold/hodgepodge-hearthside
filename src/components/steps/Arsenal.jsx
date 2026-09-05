@@ -10,6 +10,7 @@ import { buildSheet, sheetToPNG, printSheet } from '../../lib/recordImage.js'
 import { Label, Button } from '../ui.jsx'
 import LeaderRecord from '../LeaderRecord.jsx'
 import CrewCards from '../CrewCards.jsx'
+import UnplacedAdvancements from '../UnplacedAdvancements.jsx'
 
 /**
  * Everything this leader has, in one place.
@@ -23,8 +24,13 @@ import CrewCards from '../CrewCards.jsx'
  * arsenal (creation) or the weekly hire (campaign), and leave by annihilation.
  * A delete button here would imply a fourth route that the rules do not have.
  */
-export default function Arsenal({ campaign, arsenal, leader, archetype, week, rules, fileNumber, onEditLeader, onHire, onSheet }) {
+export default function Arsenal({
+  campaign, arsenal, leader, archetype, week, rules, fileNumber,
+  onEditLeader, onHire, onSheet, onPlaceAdvancement,
+}) {
   const [imaging, setImaging] = useState(null)
+  /** Which action each unplaced advancement is about to be given. */
+  const [placing, setPlacing] = useState({})
 
   const models = liveModels(arsenal)
   const lost = arsenal.models.filter((m) => m.annihilated)
@@ -64,6 +70,23 @@ export default function Arsenal({ campaign, arsenal, leader, archetype, week, ru
       </div>
 
       <LeaderRecord leader={leader} archetype={archetype} fileNumber={fileNumber} rules={rules} />
+
+      {/* Sits under the record rather than above it, because the record is what
+          the repair is *for*: you name the action, and the line moves out of
+          the catch-all list and up onto the card a few inches above. */}
+      {onPlaceAdvancement && (
+        <UnplacedAdvancements
+          arsenal={arsenal}
+          leader={leader}
+          rules={rules}
+          draft={placing}
+          onDraft={(id, value) => setPlacing((d) => ({ ...d, [id]: value }))}
+          onPlace={(id, appliesTo, opts) => {
+            onPlaceAdvancement(id, appliesTo, opts)
+            setPlacing((d) => { const next = { ...d }; delete next[id]; return next })
+          }}
+        />
+      )}
 
       <div className="export noprint">
         <Button onClick={onEditLeader}>Edit this leader</Button>

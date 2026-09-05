@@ -4,7 +4,7 @@
 
 ---
 
-## Current Version: 0.22.2
+## Current Version: 0.22.3
 
 ## Last Updated: 2026-09-05
 
@@ -140,7 +140,7 @@ aftermath. Shipped and live:
 | **The service worker** | v0.19.3. It cached Pages' SPA fallback under asset URLs, so a browser that loaded mid-deploy got a **permanent white screen** no reload could clear. Live since v0.14.0, observed in production on 2026-09-03. Two guards now — never write HTML under a non-navigation request, never serve it either — plus a cache-version bump that purges anyone already poisoned. |
 | **Membership** | v0.17.0. Owner-issued single-use invites, two gates (redeem → pending → host admits), per-campaign nicknames, opt-in Discord identity, and a read-only shared arsenal page. Writes were **not** widened — see below. |
 
-538 tests.
+546 tests.
 
 ### The book is on disk, and must not be committed
 
@@ -378,6 +378,39 @@ Rules in it that should not be undone:
 The record and the PNG also grew a **Gained by advancement** section. Tier-2
 actions and abilities had nowhere to appear on either before, so a leader who
 had earned an action showed a card that was missing it.
+
+### Old advancements can be given their action — v0.22.3
+
+v0.22.2 started asking which action a tier-1 advancement modifies. It did
+nothing for the ones already recorded, and **there was no way in**: a finished
+aftermath is closed for good (`Aftermath.jsx` takes the open game with
+`!done`), an export re-imports as a *new* arsenal, and a hand-edit to
+localStorage skips `saveArsenal` so the dirty flag is never set and the fix
+never reaches D1. Every advancement anyone had earned before that day was
+stranded.
+
+`UnplacedAdvancements.jsx` on the arsenal view is the repair. Three rules:
+
+- **It fixes the arsenal, never the aftermath record.** That record is the
+  provenance `lib/rewind.js` reads, and it is a true account of what the app
+  knew that evening. Rewriting it to look as though the question had always
+  been asked would make it a worse witness. `placeAdvancement` touches
+  `appliesTo` and nothing else.
+- **It vanishes when it is done and never returns.** A permanent fixture would
+  read as a feature; this is a one-time cost of a change that should have asked
+  from the start. `unplacedAdvancements` is the whole condition.
+- **A written-in target counts as placed.** It names an action this app cannot
+  list — a totem's, or a hand-entered pick — which is an answer, not a gap.
+
+**And a real bug in v0.22.2, found building it.** `targetsFor` judged a Skl row
+against the **register's** copy of the action, so a leader who had already taken
+the Skl 4→5 boost was refused the 5→6 boost: the register still says 4. It now
+judges against the action as that leader's earlier advancements left it. Two
+boosts in one evening is uncommon; two across twelve weeks is the ordinary case,
+and the repair path walks straight into it. A related nicety falls out — a
+gained action that has been boosted has a Skl the app knows even with no card
+behind it, because `statTo` is absolute. The **resist** condition still cannot
+be cleared without a card, so that stays an unknown rather than becoming a yes.
 
 ### `reconcile` is testable, and testing it found a live bug — v0.22.0
 
@@ -1322,7 +1355,7 @@ every session. `docs/VERSION_HISTORY.md` holds how it got this way.
 npm install
 cp .env.example .env
 npm run dev      # Vite only — NO Functions, NO database. useAuth degrades to signed out.
-npm run test     # 503 tests; `functions/` is in the run too, for the authz tests
+npm run test     # 546 tests; `functions/` is in the run too, for the authz tests
 npm run build    # production bundle — the dev proxy does NOT exist here
 npm run seed     # optional local register file; ask BiggerHat's maintainer first
 

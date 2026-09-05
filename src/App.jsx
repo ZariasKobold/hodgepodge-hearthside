@@ -57,7 +57,7 @@ export default function App() {
     setWeek, stepWeek, setWeekMode, resetWeek, setStartedAt, setWeeksTotal,
     setHouseRules,
     logGame, updateGame, buyEquipment, addInjury, healInjury, dropInjury, annihilateModel,
-    advanceLeader, advanceTotem, setTotem, addCrewCardAdvancement,
+    advanceLeader, advanceTotem, setTotem, addCrewCardAdvancement, placeAdvancement,
     useMiraculousRecovery, rewindPhases,
   } = useCampaign({
     // The shelf is scoped to the account, not the browser. Without this a
@@ -249,7 +249,7 @@ export default function App() {
     earnScrip, spendScrip,
     buyEquipment,
     addInjury, healInjury, dropInjury, annihilateModel,
-    advanceLeader, advanceTotem, setTotem, addCrewCardAdvancement,
+    advanceLeader, advanceTotem, setTotem, addCrewCardAdvancement, placeAdvancement,
     useMiraculousRecovery, rewindPhases,
     onHire: (model, cost) => {
       addModel(model, { scripPaid: cost })
@@ -306,6 +306,7 @@ export default function App() {
             onEditLeader={() => { setStep(0); setView('create') }}
             onHire={() => setView('campaign')}
             onSheet={() => setView('sheet')}
+            onPlaceAdvancement={placeAdvancement}
           />
         )}
 

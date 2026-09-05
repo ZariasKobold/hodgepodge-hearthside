@@ -482,6 +482,28 @@ export function useCampaign({ userId = null, userReady = true, onSaved, onArsena
     setArsenal((a) => ({ totem: a.totem ? { ...a.totem, ...patch } : createTotem(patch) }))
   }, [setArsenal])
 
+  /**
+   * Tell an advancement which action it went on.
+   *
+   * A repair, not a new advancement: everything recorded before v0.22.2 has no
+   * `appliesTo`, because the app never asked. Nothing else on the entry moves —
+   * the row, the flip and the page are what actually happened and this only
+   * fills the blank beside them.
+   *
+   * The aftermath record is deliberately **not** patched to match. That record
+   * is the provenance of an evening (`lib/rewind.js`) and it is a true account
+   * of what the app knew at the time; rewriting history to look like the app
+   * had always asked would make the record a worse witness, not a better one.
+   * A finished aftermath can never be unwound anyway, and an open one still
+   * has its own picker.
+   */
+  const placeAdvancement = useCallback((advId, appliesTo, { to = 'leader' } = {}) => {
+    const place = (list) => (list || []).map((a) => (a.id === advId ? { ...a, appliesTo } : a))
+    setArsenal((a) => (to === 'totem'
+      ? (a.totem ? { totem: { ...a.totem, advancements: place(a.totem.advancements) } } : {})
+      : { leader: { ...a.leader, advancements: place(a.leader.advancements) } }))
+  }, [setArsenal])
+
   const addCrewCardAdvancement = useCallback((entry) => {
     setArsenal((a) => ({ crewCardAdvancements: [...(a.crewCardAdvancements || []), entry] }))
   }, [setArsenal])
@@ -525,7 +547,7 @@ export function useCampaign({ userId = null, userReady = true, onSaved, onArsena
     logGame, updateGame, removeGame,
     buyEquipment, removeEquipment,
     addInjury, healInjury, dropInjury, annihilateModel,
-    advanceLeader, advanceTotem, setTotem, addCrewCardAdvancement,
+    advanceLeader, advanceTotem, setTotem, addCrewCardAdvancement, placeAdvancement,
     rewindPhases,
     useMiraculousRecovery,
     // the participation, for anything that needs the seat rather than the player

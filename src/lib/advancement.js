@@ -141,12 +141,33 @@ export function targetsFor(holder, table, entry, actionFor = () => null) {
   }))
 
   return [...picks, ...gainedActions(holder)].map((target) => {
-    const action = target.gained ? null : actionFor(target)
-    return { ...target, ...verdict(entry, action, target) }
+    /**
+     * The action **as this leader's earlier advancements left it**, not as the
+     * register prints it.
+     *
+     * A leader who takes the Skl 4→5 boost and then the 5→6 boost has an
+     * action the register still calls Skl 4, and judging the second against
+     * that would refuse a perfectly legal advancement. Two boosts in one
+     * evening is uncommon; two across a twelve-week campaign is the ordinary
+     * case, which is exactly what the repair path on the arsenal view walks
+     * through.
+     */
+    const base = target.gained ? null : actionFor(target)
+    const { action, stat, statChanged } = advancedAction(base, advancementsOn(holder, target.key))
+    return {
+      ...target,
+      ...verdict(entry, {
+        // A boost's `statTo` is absolute, so a gained action with one on it has
+        // a Skl the app knows even with no card behind it.
+        stat: action ? Number(action.stat) : statChanged ? stat : null,
+        resistedBy: action?.resistedBy ?? null,
+        hasCard: Boolean(action),
+      }, target),
+    }
   })
 }
 
-function verdict(entry, action, target) {
+function verdict(entry, state, target) {
   if (!entry) return { eligible: null, why: '' }
 
   // A trigger or a signature modifier goes on any action of the right kind, so
@@ -157,7 +178,7 @@ function verdict(entry, action, target) {
       : { eligible: true, why: '' }
   }
 
-  if (!action) {
+  if (state.stat == null || Number.isNaN(state.stat)) {
     return {
       eligible: null,
       why: target.gained
@@ -166,14 +187,39 @@ function verdict(entry, action, target) {
     }
   }
 
-  const stat = Number(action.stat)
-  if (!entry.statFrom.includes(stat)) {
-    return { eligible: false, why: `Skl ${Number.isNaN(stat) ? '—' : stat}, needs ${entry.statFrom.join(' or ')}` }
+  if (!entry.statFrom.includes(state.stat)) {
+    return { eligible: false, why: `Skl ${state.stat}, needs ${entry.statFrom.join(' or ')}` }
   }
-  if (entry.needsResist && !RESISTS.includes(action.resistedBy)) {
-    return { eligible: false, why: `resists ${action.resistedBy || 'nothing'}, needs Df or Wp` }
+
+  // The resist is only ever on the card. A known Skl is not enough to clear a
+  // row that names one, so this stays an unknown rather than becoming a yes.
+  if (entry.needsResist) {
+    if (!state.hasCard) {
+      return { eligible: null, why: 'the app cannot read what this action resists' }
+    }
+    if (!RESISTS.includes(state.resistedBy)) {
+      return { eligible: false, why: `resists ${state.resistedBy || 'nothing'}, needs Df or Wp` }
+    }
   }
   return { eligible: true, why: '' }
+}
+
+/**
+ * Advancements that modify an action but were never told which one.
+ *
+ * Everything recorded before v0.22.2, when the app stopped throwing the target
+ * away. They are not broken — the table, the row and the page are all there —
+ * they are simply unattached, so the card cannot show them. The arsenal view
+ * offers a picker for exactly this list; see `UnplacedAdvancements.jsx`.
+ *
+ * A target written in by hand counts as placed. It names an action this app
+ * cannot list, which is an answer, not a gap.
+ */
+export function unplacedAdvancements(holder) {
+  return (holder?.advancements || []).filter((a) => {
+    const table = findTable(a.tableId)
+    return needsTarget(table) && !a.appliesTo?.name
+  })
 }
 
 /** The advancements this holder has attached to one action. */

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   needsTarget, targetsFor, advancementsOn, advancedAction, rowFor,
-  gainedActions, gainedActionKey,
+  gainedActions, gainedActionKey, unplacedAdvancements,
 } from './advancement.js'
 import { findTable } from '../data/advancements.js'
 
@@ -131,6 +131,54 @@ describe('offering the actions an advancement may go on', () => {
     expect(out[0].eligible).toBe(true)
   })
 
+  /**
+   * THE ORDERING CASE. A leader who took the Skl 4→5 boost holds an action the
+   * register still calls Skl 4, so judging the 5→6 boost against the register's
+   * copy would refuse an advancement the leader is entitled to. Over twelve
+   * weeks this is the ordinary case, not the exotic one.
+   */
+  it('judges a Skl row against the action as earlier advancements left it', () => {
+    const four = { ...blowdart, stat: 4 }
+    const l = leader({
+      advancements: [took({
+        id: 'adv_0', name: 'Skill Boost', tableValue: 7,
+        appliesTo: { key: 'skulker-skin::attack::Blowdart', name: 'Blowdart', slot: 'attack' },
+      })],
+    })
+    // Raw, the register says Skl 4 — so the 4→5 row would look legal again.
+    expect(targetsFor(l, attack, row(attack, 'Skill Boost', 7), () => four)[0].eligible).toBe(false)
+    // Advanced, it is Skl 5, which is what the next boost up needs.
+    expect(targetsFor(l, attack, row(attack, 'Skill Boost', 10), () => four)[0].eligible).toBe(true)
+  })
+
+  it('knows the Skl of a gained action that has already been boosted', () => {
+    const l = leader({
+      advancements: [
+        { id: 'adv_9', tableId: 'action', name: 'Hand Cannon', page: 44 },
+        took({
+          id: 'adv_a', name: 'Skill Boost', tableValue: 7,
+          appliesTo: { key: 'adv::adv_9', name: 'Hand Cannon', slot: 'attack', gained: true },
+        }),
+      ],
+    })
+    const gained = targetsFor(l, attack, row(attack, 'Skill Boost', 10), () => null)[1]
+    // Skl 5 now, which the 5→6 row wants — but the resist is only on the card,
+    // so this stays an unknown rather than becoming a yes.
+    expect(gained.eligible).toBeNull()
+    expect(gained.why).toContain('resists')
+  })
+
+  it('will not clear a resist condition it cannot read, even knowing the Skl', () => {
+    const l = leader({
+      advancements: [took({
+        id: 'adv_0', name: 'Skill Boost', tableValue: 7,
+        appliesTo: { key: 'skulker-skin::attack::Blowdart', name: 'Blowdart', slot: 'attack' },
+      })],
+    })
+    const out = targetsFor(l, attack, row(attack, 'Skill Boost', 10), () => null)[0]
+    expect(out.eligible).toBeNull()
+  })
+
   it('has no verdict before a row is chosen', () => {
     const out = targetsFor(leader(), attack, null, actionFor)
     expect(out[0].eligible).toBeNull()
@@ -234,5 +282,50 @@ describe('the action as the advancements leave it', () => {
     const out = advancedAction(blowdart, [took({ name: 'Something Errataed', tableValue: 99 })])
     expect(out.triggers).toEqual([{ name: 'Something Errataed', suit: null, page: 39 }])
     expect(out.action.stat).toBe(5)
+  })
+})
+
+describe('advancements that were never told which action', () => {
+  const legacy = (over = {}) => ({
+    id: 'old_1', tableId: 'attack', tableName: 'Attack Modification',
+    name: 'Skill Boost', tableValue: 10, page: 40, ...over,
+  })
+
+  it('finds the tier-1 ones with no target', () => {
+    const l = leader({ advancements: [legacy(), legacy({ id: 'old_2', name: 'Draw Out Secrets', tableValue: 9 })] })
+    expect(unplacedAdvancements(l).map((a) => a.id)).toEqual(['old_1', 'old_2'])
+  })
+
+  it('leaves alone anything that never had a target to give', () => {
+    const l = leader({
+      advancements: [
+        { id: 'a', tableId: 'action', name: 'Hand Cannon' },
+        { id: 'b', tableId: 'ability', name: 'Stealth' },
+        { id: 'c', tableId: 'summoning', name: 'Rally Point' },
+        { id: 'd', tableId: 'crew-card', name: "Grave's Pull" },
+      ],
+    })
+    expect(unplacedAdvancements(l)).toEqual([])
+  })
+
+  it('counts a target already given as placed', () => {
+    const l = leader({
+      advancements: [legacy({ appliesTo: { key: 'k', name: 'Blowdart', slot: 'attack' } })],
+    })
+    expect(unplacedAdvancements(l)).toEqual([])
+  })
+
+  /* A written-in name is an answer, not a gap — it names an action this app
+     cannot list, which is exactly what the field is for. */
+  it('counts a hand-written target as placed', () => {
+    const l = leader({
+      advancements: [legacy({ appliesTo: { key: null, name: 'Whatever It Was', slot: 'attack', written: true } })],
+    })
+    expect(unplacedAdvancements(l)).toEqual([])
+  })
+
+  it('is safe on a leader with nothing at all', () => {
+    expect(unplacedAdvancements(null)).toEqual([])
+    expect(unplacedAdvancements({})).toEqual([])
   })
 })

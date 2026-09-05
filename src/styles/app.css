@@ -825,6 +825,17 @@ body::after {
   margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line);
 }
 
+/* one-time repair of advancements recorded before they carried a target ----
+   Deliberately quiet. It is a chore the app created and it vanishes the moment
+   it is done, so it must not read like a feature or like an alarm. */
+.repair {
+  margin-top: 22px; padding: 18px;
+  border: 1px solid var(--line); border-radius: var(--r);
+  background: var(--panel);
+}
+.repair .gap-note { margin-top: 10px; }
+.repair .field { margin-top: 18px; }
+
 /* Wyrd's disclaimer follows anything that leaves the screen (§8) -------- */
 .legal-print { display: none; }
 

@@ -4361,3 +4361,71 @@ from this environment — the owner's next export is the proof, as it has been
 since v0.6.0. A totem's advancement target is written in by hand and no totem
 exists to try it against.
 NEXT: the aftermath hand (item 0b, second bullet). Then M3, then L2.
+
+---
+
+### Session 44 — v0.22.3
+Date: 2026-09-05
+
+**feat: an advancement earned before v0.22.2 can be given its action**
+
+Asked immediately after the last commit, and it is the obvious hole in it:
+"week one is already committed for my aftermath — how would I apply the
+advancements to the right skill?"
+
+**There was no way in.** A finished aftermath is closed for good — `Aftermath`
+takes the open game with `!g.aftermath?.done`, so the rail disappears and
+`History` renders the game as read-only text. The two workarounds are both
+worse than the problem. An export re-imports as a **new** arsenal (import files
+one, nothing is overwritten), so the identity and the sync link are lost. And a
+console edit to localStorage skips `saveArsenal`, so `markDirty` is never
+called, the edit never pushes to D1, and the next pull can quietly clobber it.
+So every tier-1 advancement anyone had earned before yesterday was stranded —
+recorded, visible in the record's catch-all list, and unable to reach the card.
+
+`src/components/UnplacedAdvancements.jsx` sits under the record on the arsenal
+view. Three rules in it:
+
+- **It repairs the arsenal, not the aftermath record.** That record is what
+  `lib/rewind.js` reads as provenance, and it is a true account of what the app
+  knew that evening; rewriting it to look as though the question had always been
+  asked would make it a worse witness, not a better one. `placeAdvancement`
+  writes `appliesTo` and touches nothing else — the row, the flip and the page
+  were already right.
+- **It disappears when it is finished and never comes back.** `unplacedAdvancements`
+  is the entire condition. A permanent fixture would read as a feature, and this
+  is the one-time cost of a change that should have asked from the start.
+- **It cannot call an answer invalid merely because it cannot read the card.**
+  `targetsFor` marks an unreadable action unknown rather than illegal, and a
+  leader whose actions this app cannot list at all gets a written-in field.
+  Someone repairing months-old data must not be blocked by a register outage.
+
+**A real v0.22.2 bug surfaced building it.** `targetsFor` judged a Skl row
+against the **register's** copy of the action. A leader who had already taken
+the Skl 4→5 boost would therefore be refused the 5→6 boost, because the register
+still prints Skl 4. It now judges against the action as that leader's earlier
+advancements left it — `advancedAction(base, advancementsOn(holder, key))`. Two
+boosts in one evening is uncommon; two across a twelve-week campaign is the
+ordinary case, and the repair path walks straight into it, assigning them one at
+a time. Two things fall out: a gained action that has been boosted has a Skl the
+app knows with no card behind it (`statTo` is absolute), and the **resist**
+condition still cannot be cleared without a card, so that stays an unknown
+rather than quietly becoming a yes.
+
+Verified in the browser against the owner's actual situation — a done aftermath
+and three targetless advancements, two attack and one tactical. Each offered
+only its own slot's actions; placing them wrote `appliesTo` to storage, set
+`campaign-dirty:<arsenalId>` so reconcile will push it (the thing a hand-edit
+would have missed), moved both lines onto Blowdart and Life Raft on the record —
+Blowdart back to `Stat 6` — and removed the section.
+
+Files: `src/components/UnplacedAdvancements.jsx` (new), `src/lib/advancement.js`,
+`src/lib/advancement.test.js`, `src/components/steps/Arsenal.jsx`,
+`src/hooks/useCampaign.js`, `src/App.jsx`, `src/styles/app.css`, `CLAUDE.md`,
+`package.json`, `docs/VERSION_HISTORY.md`
+RESOLVED: advancements recorded before v0.22.2 are reachable; the Skl ordering
+bug shipped yesterday.
+UNVERIFIED: the pane's screenshot capture went black past the first viewport on
+this page throughout, so every check here is DOM-read rather than seen. The
+totem branch is still untried — no totem exists to try it against.
+NEXT: the aftermath hand (item 0b, second bullet). Then M3, then L2.
