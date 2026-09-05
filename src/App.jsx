@@ -345,6 +345,7 @@ export default function App() {
             houseRules={campaign.houseRules}
             mustHire={mustHire}
             actions={campaignActions}
+            rules={rules}
             membership={membership}
             shelf={shelf}
             signedIn={Boolean(auth.user)}

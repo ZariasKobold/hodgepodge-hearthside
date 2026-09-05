@@ -4,7 +4,7 @@
 
 ---
 
-## Current Version: 0.22.1
+## Current Version: 0.22.2
 
 ## Last Updated: 2026-09-05
 
@@ -108,7 +108,7 @@ Save to `docs/audits/audit-vX.Y.Z.md`.
 
 ## ⚠️ NEXT SESSION — pending
 
-### Where things stand — v0.21.1
+### Where things stand — v0.22.2
 
 Sessions 14–38 took this from a local-only leader builder to a synced,
 multi-leader campaign tracker that plays a whole campaign week, game and
@@ -140,7 +140,7 @@ aftermath. Shipped and live:
 | **The service worker** | v0.19.3. It cached Pages' SPA fallback under asset URLs, so a browser that loaded mid-deploy got a **permanent white screen** no reload could clear. Live since v0.14.0, observed in production on 2026-09-03. Two guards now — never write HTML under a non-navigation request, never serve it either — plus a cache-version bump that purges anyone already poisoned. |
 | **Membership** | v0.17.0. Owner-issued single-use invites, two gates (redeem → pending → host admits), per-campaign nicknames, opt-in Discord identity, and a read-only shared arsenal page. Writes were **not** widened — see below. |
 
-503 tests.
+538 tests.
 
 ### The book is on disk, and must not be committed
 
@@ -323,6 +323,61 @@ Purchases and injury flips now record the **row id** they created, so an undo
 removes the row it made rather than one that merely looks like it; and the
 advance phase records `boxesApplied`, because once the boxes are checked
 `boxesCrossed` reads a different track and would name a different set.
+Advancements got their own ids in v0.22.2 for the same reason, and the same
+mistake was waiting in `undoAdvancement`.
+
+### An advancement knows its action now — v0.22.2
+
+Two things the owner found finishing a real match's aftermath, and the second is
+the larger one.
+
+**The cheated checkbox did nothing.** `PhaseAdvance` never passed `cheated` down
+to `FlipInput`, so the box rendered from the prop's default of `false` on every
+paint — clicking it set the draft and the box came straight back unticked. The
+same `onChange` also cleared the chosen row, so ticking it on a second
+advancement silently discarded the choice underneath. **A controlled input whose
+value is never passed back down is not a controlled input**, and the bug is
+invisible in a build and in a test suite; only a finger on it finds it.
+
+**A tier-1 advancement had nowhere to say what it modified.** p. 31, for both
+tier-1 tables: *"choose one attack action on your leader on which to apply this
+modifier. This modifier only applies to the selected action."* The app recorded
+the modifier and threw the target away. The target is `appliesTo` now and
+`src/lib/advancement.js` puts it back on the card — the record, the arsenal
+sheet and the PNG all read through `advancedAction`, so a boosted Blowdart
+prints Stat 6 with its earned trigger under it in all three.
+
+Rules in it that should not be undone:
+
+- **A name is not a row.** "Skill Boost" is printed three times on the attack
+  table — Skl 4→5, 5→6 and 6→7 — and the option select was keyed by name, so a
+  leader who earned the 6 was recorded as having earned the 5. The select
+  carries an **index** now, the entry records `tableValue`, and `rowFor` needs
+  both halves. An old record with only an ambiguous name resolves to **nothing**
+  rather than to a guess: printing a Skl the leader does not have is worse than
+  printing none.
+- **The Skl numbers are book data, not rules text.** `statFrom`/`statTo` sit in
+  `data/advancements.js` beside the totem stat lines, for the reason that
+  section already gives (§4): a Skl is a fact of the same kind as a Df.
+  `statTo` is **absolute**, so the final number is known from the advancement
+  alone and the sheet fills that column with the register unreachable.
+- **`eligible` is three-valued and an unknown is never hidden.** An illegal
+  target is disabled with its reason printed; a target the app cannot judge — a
+  hand-entered pick, an action gained by advancement, the register down — is
+  offered with a note. Refusing an advancement because a donation-funded API is
+  down would be the app losing it for the player (§6).
+- **The trigger-crowding note counts now.** It used to say the app cannot see
+  the leader's card. It can see the half that matters: a leader taking an ally's
+  action does not take its triggers (§4), so an advancement trigger is the only
+  kind the action can have. The 2 scrip is still not deducted — that is a rules
+  change, and this was a recording change.
+- **`undoAdvancement` tries an id match alone before falling back to a name.**
+  It used to fall *through* from a failed id match, so a leader holding two
+  Skill Boosts had the wrong one removed.
+
+The record and the PNG also grew a **Gained by advancement** section. Tier-2
+actions and abilities had nowhere to appear on either before, so a leader who
+had earned an action showed a card that was missing it.
 
 ### `reconcile` is testable, and testing it found a live bug — v0.22.0
 
@@ -958,6 +1013,7 @@ hodgepodge-hearthside/
 │   │   ├── remote.js       the D1 client + planSync, the merge that can lose data
 │   │   ├── reconcile.js    runReconcile — the sync loops, injectable and tested
 │   │   ├── rewind.js       going back through an aftermath, and what it costs
+│   │   ├── advancement.js  which action an advancement went on, and what it did
 │   │   └── recordImage.js  canvas PNG + the LEGAL constant
 │   ├── hooks/              useCampaign, useRoster, useRules, useAuth, useHank, useSync
 │   ├── components/         wizard steps and shared UI

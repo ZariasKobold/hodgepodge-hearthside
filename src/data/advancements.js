@@ -88,7 +88,7 @@ const ATTACK = [
   { value: 7, type: T, suit: 'mask', name: 'Four-Leafed Clover', page: 39 },
   { value: 7, type: T, suit: 'ram', name: 'Finisher', page: 39 },
   { value: 7, type: T, suit: 'tome', name: 'Field Kit', page: 39 },
-  { value: 7, type: SKL, suit: null, name: 'Skill Boost', page: 39 },
+  { value: 7, type: SKL, suit: null, name: 'Skill Boost', page: 39, statFrom: [4], statTo: 5, needsResist: true },
 
   { value: 8, type: T, suit: 'crow', name: 'Blank Stare', page: 39 },
   { value: 8, type: T, suit: 'mask', name: 'Aggressive Interrogation', page: 39 },
@@ -104,7 +104,7 @@ const ATTACK = [
   { value: 10, type: T, suit: 'mask', name: 'Precise Strike', page: 39 },
   { value: 10, type: T, suit: 'ram', name: 'Heave', page: 39 },
   { value: 10, type: T, suit: 'tome', name: 'Wildly Flailing', page: 40 },
-  { value: 10, type: SKL, suit: null, name: 'Skill Boost', page: 40 },
+  { value: 10, type: SKL, suit: null, name: 'Skill Boost', page: 40, statFrom: [5], statTo: 6, needsResist: true },
 
   { value: 11, type: T, suit: 'crow', name: 'Loss for Words', page: 40 },
   { value: 11, type: T, suit: 'mask', name: 'On Your Heels', page: 40 },
@@ -115,14 +115,14 @@ const ATTACK = [
   { value: 12, type: T, suit: 'mask', name: 'Accidental Roll Over', page: 40 },
   { value: 12, type: T, suit: 'ram', name: 'Pull and Drag', page: 40 },
   { value: 12, type: T, suit: 'tome', name: 'Sweeping Strike', page: 40 },
-  { value: 12, type: SKL, suit: null, name: 'Skill Boost', page: 40 },
+  { value: 12, type: SKL, suit: null, name: 'Skill Boost', page: 40, statFrom: [6], statTo: 7, needsResist: true },
 
   { value: 13, type: T, suit: 'crow', name: 'Tactical Advantage', page: 40 },
   { value: 13, type: T, suit: 'mask', name: 'Cruelty', page: 40 },
   { value: 13, type: T, suit: 'ram', name: 'Pump Action', page: 40 },
   { value: 13, type: T, suit: 'tome', name: 'Arc', page: 40 },
   { value: 13, type: T, suit: 'soulstone', name: 'Wild Toss', page: 40 },
-  { value: 13, type: SIG, suit: null, name: 'Attack Signature', page: 40 },
+  { value: 13, type: SIG, suit: null, name: 'Attack Signature', page: 40, signature: true },
 
   { value: ANY_JOKER, type: T, suit: 'soulstone', name: 'Cruel Lessons', page: 40 },
   { value: ANY_JOKER, type: T, suit: 'soulstone', name: 'Consult the Bones', page: 40 },
@@ -168,7 +168,7 @@ const TACTICAL = [
   { value: 7, type: T, suit: 'mask', name: 'Keep Your Distance', page: 42 },
   { value: 7, type: T, suit: 'ram', name: 'Shrug Off', page: 42 },
   { value: 7, type: T, suit: 'tome', name: 'Survival Skills', page: 42 },
-  { value: 7, type: SKL, suit: null, name: 'Skill Boost', page: 42 },
+  { value: 7, type: SKL, suit: null, name: 'Skill Boost', page: 42, statFrom: [0, 1], statTo: 2 },
 
   { value: 8, type: T, suit: 'crow', name: 'Wolf Down', page: 42 },
   { value: 8, type: T, suit: 'mask', name: 'Pulled Here and There', page: 42 },
@@ -194,14 +194,14 @@ const TACTICAL = [
   { value: 12, type: T, suit: 'mask', name: 'Vanish', page: 43 },
   { value: 12, type: T, suit: 'ram', name: 'Retrace Steps', page: 43 },
   { value: 12, type: T, suit: 'tome', name: 'Pass Through', page: 43 },
-  { value: 12, type: SKL, suit: null, name: 'Skill Boost', page: 43 },
+  { value: 12, type: SKL, suit: null, name: 'Skill Boost', page: 43, statFrom: [2, 3], statTo: 4 },
 
   { value: 13, type: T, suit: 'crow', name: '“Looks Edible?”', page: 43 },
   { value: 13, type: T, suit: 'mask', name: 'Coordinated Attack', page: 43 },
   { value: 13, type: T, suit: 'ram', name: 'Overwhelming Aggression', page: 43 },
   { value: 13, type: T, suit: 'tome', name: 'Swap Stories', page: 43 },
   { value: 13, type: T, suit: 'soulstone', name: 'Blood for Power', page: 43 },
-  { value: 13, type: SIG, suit: null, name: 'Tactical Signature', page: 43 },
+  { value: 13, type: SIG, suit: null, name: 'Tactical Signature', page: 43, signature: true },
 
   { value: RED_JOKER, type: T, suit: 'soulstone', name: 'Illumination of Illios', page: 43 },
   { value: BLACK_JOKER, type: T, suit: 'soulstone', name: 'Darkness of Delios', page: 43 },
@@ -384,14 +384,32 @@ export const ADVANCEMENT_TABLES = [
     /** Adding a trigger to an action that already has two costs 2 scrip. */
     triggerCrowdingFee: 2,
     applies: 'one attack action',
+    /**
+     * "Once you have chosen an option, choose one attack action on your leader
+     * on which to apply this modifier. This modifier only applies to the
+     * selected action." (p. 31.) So the advancement is meaningless without a
+     * target, and the flow must ask for one — see `lib/advancement.js`.
+     */
+    targetSlot: 'attack',
   },
   {
     id: 'tactical', tier: 1, name: 'Tactical Modification', page: 41,
     flip: 'orLower', entries: TACTICAL,
     triggerCrowdingFee: 2,
     applies: 'one tactical action',
+    targetSlot: 'tactical',
   },
-  { id: 'action', tier: 2, name: 'Action', page: 44, flip: 'orLower', entries: ACTION },
+  {
+    id: 'action', tier: 2, name: 'Action', page: 44, flip: 'orLower', entries: ACTION,
+    /**
+     * A gained action is a new line on the leader's card, so it becomes a
+     * target for a later tier-1 modification. The book's table does not say
+     * which of these are attack actions and which are tactical, so this app
+     * does not guess — `lib/advancement.js` offers them in their own group and
+     * says so.
+     */
+    grantsAction: true,
+  },
   { id: 'ability', tier: 2, name: 'Ability', page: 50, flip: 'orLower', entries: ABILITY },
   {
     id: 'totem', tier: 3, name: 'Totem', page: 52,

@@ -4272,3 +4272,92 @@ RESOLVED: the rewind is usable; damaged records self-heal.
 UNVERIFIED: still not exercised at a real table.
 NEXT: the aftermath hand (item 0b, second bullet) is still unbuilt — phase 1
 stores a count and nothing else. Then M3, then L2.
+
+---
+
+### Session 43 — v0.22.2
+Date: 2026-09-05
+
+**feat: an advancement knows which action it went on, and the card says so**
+
+The owner finished the aftermath for a real match on the new shape and came
+back with two things. Both were real.
+
+**The cheated checkbox on the advancement flip did nothing.** `PhaseAdvance`
+never passed `cheated` down to `FlipInput`, so the box was rendered from the
+prop's default of `false` on every paint: clicking it set `draft.cheated`, React
+re-rendered, and the box came back unticked. Worse, the same `onChange` cleared
+`draft.choice`, so ticking the box on a second advancement silently threw away
+the row already chosen. Both halves are fixed — the value is passed, and the
+choice is cleared only when the *card* actually changes — and `cheated` is now
+recorded on the entry, which it never was. It changes no advancement result
+(p. 31 only says the flip "may be cheated ... as normal"), but the card came out
+of the hand every later phase draws on, and item 0b's aftermath hand will want
+to know.
+
+**A tier-1 advancement had nowhere to say what it modified.** p. 31, for both
+tier-1 tables: *"Once you have chosen an option, choose one attack action on
+your leader on which to apply this modifier. This modifier only applies to the
+selected action."* The app recorded the modifier and threw the target away — so
+the record showed Blowdart at its printed Stat 5 with "Skill Boost" and "Draw
+Out Secrets" filed off to one side, belonging to nothing. **A trigger nobody can
+say which action it fires on is not a trigger.**
+
+The target is now asked for and recorded as `appliesTo`, and `src/lib/advancement.js`
+is what puts it back on the card. Four things in it worth not undoing:
+
+- **A name is not a row.** "Skill Boost" is printed three times on the attack
+  table — Skl 4→5, 5→6 and 6→7 — and the option select was keyed by name, so a
+  leader who earned the 6 was recorded as having earned the 5. The select now
+  carries an **index** into the offer, the entry records the row's own flip
+  value as `tableValue`, and `rowFor` needs both halves. Where an old record has
+  only the name, an ambiguous one resolves to **nothing** rather than to a
+  guess: printing a Skl the leader does not have is worse than printing none.
+- **The Skl numbers are kept, and that is not rules text.** `statFrom`/`statTo`
+  live in `data/advancements.js` beside the totem stat lines and for the same
+  reason (§4): a Skl is a fact of the same kind as a Df. `statTo` is absolute —
+  "change its Skl to 6" — so the final number is known from the advancement
+  alone, which is why the sheet fills that column with the register unreachable.
+- **`eligible` is three-valued.** The Skl rows carry their conditions (4/5/6, and
+  a resist of Df or Wp on the attack table) so an illegal target is disabled with
+  its reason printed. But `null` — "the app cannot tell" — is never hidden. A
+  hand-entered pick, an action gained by advancement, or the register being down
+  must not cost the player an advancement they won at a table (§6).
+- **The trigger-crowding note can count now.** It used to say the app cannot see
+  the leader's action card. It can see the half that matters: a leader taking an
+  ally's action does not take its triggers (§4), so an advancement trigger is the
+  only kind the action can have, and they are countable exactly. The 2 scrip is
+  still not deducted — that is the player's to pay.
+
+Rendering follows the data. `LeaderRecord`, `ArsenalSheet` and the PNG export
+all read through `advancedAction`, so Blowdart prints **Stat 6** with Draw Out
+Secrets under it in all three. The record and the PNG also grew a section for
+tier-2 actions and abilities, which had nowhere to appear at all before — a
+leader who had earned an action showed a card that was missing it.
+
+**A rewind bug found on the way.** `undoAdvancement` matched by name and fell
+through to it from a failed id match, so a leader holding two Skill Boosts had
+the wrong one removed. An id match is now tried alone first.
+
+Verified in the browser against the reported case, end to end: the box ticks and
+stays ticked; both Skill Boosts are distinguishable in the offer; Skill Boost
+(10) and Draw Out Secrets both land on Blowdart; the record reads
+`Missile 10" · Stat 6 · vs Df · Dmg 2`; the sheet's Skl column reads 6 with
+`Tome Draw Out Secrets (p.39)` beneath it; the flip-7 boost is offered against
+Blowdart **disabled**, reading "Skl 5, needs 4"; and unlocking the phase takes
+both advancements and both boxes back off.
+
+Files: `src/lib/advancement.js` (new), `src/lib/advancement.test.js` (new),
+`src/data/advancements.js`, `src/components/aftermath/PhaseAdvance.jsx`,
+`src/components/RulesText.jsx`, `src/components/LeaderRecord.jsx`,
+`src/components/ArsenalSheet.jsx`, `src/components/Aftermath.jsx`,
+`src/components/steps/Campaign.jsx`, `src/App.jsx`, `src/lib/recordImage.js`,
+`src/lib/rewind.js`, `src/lib/rewind.test.js`, `src/styles/app.css`,
+`CLAUDE.md`, `package.json`, `docs/VERSION_HISTORY.md`
+RESOLVED: the cheated checkbox; advancements with no target; the same-name
+option and undo collisions; tier-2 gains invisible on the record.
+UNVERIFIED: the PNG and PDF exports were changed and neither has been opened
+from this environment — the owner's next export is the proof, as it has been
+since v0.6.0. A totem's advancement target is written in by hand and no totem
+exists to try it against.
+NEXT: the aftermath hand (item 0b, second bullet). Then M3, then L2.

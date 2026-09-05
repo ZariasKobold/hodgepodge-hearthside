@@ -12,6 +12,9 @@
  * Imports nothing from React (§6).
  */
 import { plainText, statLine, findEntry, findTrigger } from './rules.js'
+import {
+  advancementsOn, advancedAction, gainedActionKey, SUIT_LABEL,
+} from './advancement.js'
 import { downloadBlob } from './storage.js'
 
 export const LEGAL =
@@ -27,6 +30,27 @@ export const LEGAL =
  * @param cardFor  slug -> live card, or null. Absent text simply prints the
  *                 names, which is what the record did before any of this.
  */
+/**
+ * What advancement added to an action, as lines under it.
+ *
+ * A Skl change is spelled out as well as folded into the stat line above,
+ * because the exported PNG is the copy somebody prints and argues over at a
+ * table: a number with no provenance invites the argument this is meant to
+ * settle.
+ */
+function earnedLines({ statChanged, stat, madeSignature, triggers }) {
+  const out = []
+  if (statChanged) out.push({ title: `Skl ${stat} — raised by advancement`, body: '' })
+  if (madeSignature) out.push({ title: 'Signature — by advancement', body: '' })
+  for (const t of triggers) {
+    out.push({
+      title: `${t.suit ? `${SUIT_LABEL[t.suit] || t.suit} — ` : ''}${t.name} — earned${t.page ? `, p.${t.page}` : ''}`,
+      body: '',
+    })
+  }
+  return out
+}
+
 export function buildSheet({ leader, archetype, factionLabel, fileNumber, slots, slotLabel, effect, cardFor }) {
   // The picture goes on the PNG too — it was on the shelf card and nowhere
   // that leaves the app (audit L12). Null when there isn't one, and every
@@ -46,15 +70,45 @@ export function buildSheet({ leader, archetype, factionLabel, fileNumber, slots,
         const card = slug ? cardFor(slug) : null
         const entry = card ? findEntry(card, slot, pick.name) : null
 
+        // Advancements attach to one action (p. 31), so the exported record
+        // carries them on the action rather than in a list of their own.
+        const earned = advancementsOn(leader, pick.key)
+        const advanced = advancedAction(entry, earned)
+
         return {
           title: pick.name,
           meta: `— from ${pick.model}, ${pick.cost}ss`,
-          stat: entry && slot !== 'ability' ? statLine(entry).join(' · ') : '',
+          stat: advanced.action && slot !== 'ability'
+            ? statLine(advanced.action).join(' · ')
+            : advanced.statChanged ? `Stat ${advanced.stat}` : '',
           body: entry ? plainText(entry.description) : '',
-          // Empty on purpose. The source model's triggers do not come with the
-          // action; a leader holds only the trigger it was granted or earned,
-          // and that one is written into its own section below.
-          triggers: [],
+          // The source model's triggers do not come with the action; a leader
+          // holds only the ones it was granted or earned. The granted one is
+          // its own section below; the earned ones are these.
+          triggers: earnedLines(advanced),
+        }
+      }),
+    })
+  }
+
+  /**
+   * Actions and abilities a tier-2 advancement granted, which have no register
+   * record to read and are lines on the leader's card all the same.
+   */
+  const gained = (leader.advancements || []).filter(
+    (a) => a.tableId === 'action' || a.tableId === 'ability'
+  )
+  if (gained.length > 0) {
+    sections.push({
+      heading: 'Gained by advancement',
+      entries: gained.map((a) => {
+        const advanced = advancedAction(null, advancementsOn(leader, gainedActionKey(a)))
+        return {
+          title: a.name,
+          meta: `— ${a.tableName}${a.page ? `, p.${a.page}` : ''}`,
+          stat: advanced.statChanged ? `Stat ${advanced.stat}` : '',
+          body: '',
+          triggers: earnedLines(advanced),
         }
       }),
     })

@@ -29,7 +29,7 @@ const TABS = [
 
 export default function Campaign({
   campaign, arsenal, leader, week, roster, actions, houseRules, mustHire,
-  membership, shelf, signedIn,
+  membership, shelf, signedIn, rules,
 }) {
   const [tab, setTab] = useState('hire')
 
@@ -112,6 +112,7 @@ export default function Campaign({
           leader={leader}
           week={week}
           actions={actions}
+          rules={rules}
         />
       )}
     </>

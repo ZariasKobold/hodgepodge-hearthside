@@ -274,6 +274,34 @@ describe('unwinding the arsenal', () => {
     expect(out.leader.experience.boxesChecked).toBe(1)
   })
 
+  /**
+   * "Skill Boost" is printed three times on the attack table, so a leader can
+   * hold two rows with the same name on two different actions. Matching by name
+   * took the wrong one — and the wrong one is the one that stays, with a Skl
+   * boost the leader no longer has, on an action they never boosted.
+   */
+  it('takes back the advancement it made, not one that shares its name', () => {
+    const a = arsenal({
+      leader: {
+        name: 'Vex',
+        advancements: [
+          { id: 'adv_1', name: 'Skill Boost', tableId: 'attack', appliesTo: { key: 'k1', name: 'Blowdart' } },
+          { id: 'adv_2', name: 'Skill Boost', tableId: 'attack', appliesTo: { key: 'k2', name: 'Ol’ Thunder' } },
+        ],
+        experience: { boxesChecked: 4 },
+      },
+    })
+    const rec = createAftermath({
+      advance: {
+        taken: [{ id: 'adv_2', name: 'Skill Boost', tableId: 'attack' }],
+        applied: true,
+        boxesApplied: 1,
+      },
+    })
+    const out = unwindArsenal(a, rec, ['advance_leader'], { order: ORDER })
+    expect(out.leader.advancements.map((x) => x.id)).toEqual(['adv_1'])
+  })
+
   it('removes a totem that came off the tier-3 table', () => {
     const a = arsenal({ totem: { name: 'Wisp', advancements: [] } })
     const rec = createAftermath({

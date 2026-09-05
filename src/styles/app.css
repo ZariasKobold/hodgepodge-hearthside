@@ -769,6 +769,13 @@ body::after {
   font-family: var(--data); font-size: 11px; text-transform: uppercase;
   letter-spacing: 1px; color: var(--rules-ink);
 }
+/* What advancement added to an action, as against what the source model's
+   card says. Kept visually apart from `.rules__triggers`, which lists the
+   source model's triggers — the leader has those advancement lines and does
+   not have the source model's (§4). */
+.rules__triggers--earned { border-left-color: var(--rules-warn); }
+.rules__triggers--earned .rules__trigger-k { color: var(--rules-warn); }
+
 .rules--absent { font-family: var(--data); font-size: 11px; color: var(--faint); }
 .rules--warn { color: var(--rules-warn); }
 
@@ -1099,6 +1106,18 @@ body::after {
   border-bottom: 1px solid var(--card-line); padding: 4px; min-height: 20px;
 }
 .sheet__actions td.sheet__actions-name { font-family: var(--body); font-size: 14px; }
+
+/* A Skl the leader advanced up to. Marked rather than left to look like a
+   transcription error, because a player checking the sheet against the
+   register's copy of the action will otherwise find two different numbers. */
+.sheet__cell--advanced { color: var(--coal); font-weight: 600; }
+/* Triggers earned on the action above. Their own row so the columns stay a
+   table: a trigger has no Rg, no Rst and no Dmg to put in one. */
+.sheet__actions-sub td {
+  text-align: left; font-family: var(--data); font-size: 10px;
+  letter-spacing: .4px; color: var(--card-mute);
+  padding: 0 4px 5px 12px; border-bottom: 1px solid var(--card-line);
+}
 
 .sheet__foot {
   border-top: 1px solid var(--card-line); margin-top: 18px; padding-top: 10px;

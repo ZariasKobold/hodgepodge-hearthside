@@ -42,7 +42,7 @@ import { uid } from '../lib/shape/arsenal.js'
  * — reopening a finished phase must not pay twice.
  */
 export default function Aftermath({
-  campaign, arsenal, leader, week, actions,
+  campaign, arsenal, leader, week, actions, rules,
 }) {
   /** Set while a revision is being confirmed. Never a modal — see below. */
   const [revising, setRevising] = useState(null)
@@ -312,6 +312,7 @@ export default function Aftermath({
           arsenal={arsenal}
           earned={earned}
           record={a.advance}
+          rules={rules}
           onTake={(entry) => {
             // A totem taken from the tier-3 table is not an advancement on the
             // leader — it is the crew gaining a totem, and it does not count

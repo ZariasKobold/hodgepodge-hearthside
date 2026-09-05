@@ -1,5 +1,6 @@
 import { useState, useId } from 'react'
 import { iconSegments, statLine, findEntry } from '../lib/rules.js'
+import { advancedAction, SUIT_LABEL } from '../lib/advancement.js'
 
 /**
  * Rendering for text this app displays but never stores.
@@ -33,9 +34,12 @@ export function IconText({ text }) {
  * leader's record would be inventing rules the leader does not have. Crew
  * cards, which describe the actual hired model, pass it on.
  */
-export function EntryBody({ entry, slot, showTriggers = true }) {
+export function EntryBody({ entry, slot, showTriggers = true, advancements = [] }) {
   if (!entry) return null
-  const stats = slot === 'ability' ? [] : statLine(entry)
+  // The action as the leader's advancements leave it, so the stat line reads
+  // Stat 6 rather than reading Stat 5 beside a note saying it is really 6.
+  const { action } = advancedAction(entry, advancements)
+  const stats = slot === 'ability' ? [] : statLine(action)
   const extras = []
   if (slot === 'ability') {
     if (entry.suits) extras.push(entry.suits)
@@ -70,7 +74,7 @@ export function EntryBody({ entry, slot, showTriggers = true }) {
  * the record, the hover tip and the crew cards all need the same four answers
  * and it would be easy for them to drift into three different vocabularies.
  */
-export function RulesState({ rules, slug, slot, name, quiet, showTriggers = true }) {
+export function RulesState({ rules, slug, slot, name, quiet, showTriggers = true, advancements = [] }) {
   if (!slug) {
     return quiet ? null : <div className="rules rules--absent">Entered by hand — no register record to read.</div>
   }
@@ -87,7 +91,50 @@ export function RulesState({ rules, slug, slot, name, quiet, showTriggers = true
   if (!entry) {
     return <div className="rules rules--absent">Not on {card.name}'s record — the register may have renamed it.</div>
   }
-  return <EntryBody entry={entry} slot={slot} showTriggers={showTriggers} />
+  return <EntryBody entry={entry} slot={slot} showTriggers={showTriggers} advancements={advancements} />
+}
+
+/**
+ * What advancement has done to one action, in the player's own terms.
+ *
+ * Rendered beside `RulesState` rather than inside it, and that placement is the
+ * point: `RulesState` has four ways of having no card to show — pending, an
+ * error, a slug it cannot resolve, a name the register has renamed — and an
+ * advancement the leader genuinely earned must survive all four. The register
+ * is a donation-funded community project (§6); a trigger the player won at a
+ * table is not allowed to disappear because it is down.
+ *
+ * A Skl modifier's `statTo` is absolute — "change its Skl to 6" — so the final
+ * number is known here even with no card to read it off.
+ */
+export function ActionAdvancements({ advancements = [] }) {
+  if (advancements.length === 0) return null
+  const { stat, statChanged, madeSignature, triggers } = advancedAction(null, advancements)
+
+  return (
+    <ul className="rules__triggers rules__triggers--earned">
+      {statChanged && (
+        <li>
+          <span className="rules__trigger-k">Skl {stat}</span>{' '}
+          raised by advancement.
+        </li>
+      )}
+      {madeSignature && (
+        <li>
+          <span className="rules__trigger-k">Signature</span>{' '}
+          this action is now a signature action.
+        </li>
+      )}
+      {triggers.map((t, i) => (
+        <li key={`${t.name}-${i}`}>
+          <span className="rules__trigger-k">
+            {t.suit ? `${SUIT_LABEL[t.suit] || t.suit} — ` : ''}{t.name}
+          </span>{' '}
+          earned{t.page ? ` · p.${t.page} of the book` : ''}.
+        </li>
+      ))}
+    </ul>
+  )
 }
 
 /**

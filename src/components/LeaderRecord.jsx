@@ -3,7 +3,8 @@ import { SLOTS, slotLabel } from '../data/archetypes.js'
 import { getEffect } from '../data/crewCards.js'
 import { factionLabel } from '../data/factions.js'
 import { sourceSlug, findEntry, findTrigger } from '../lib/rules.js'
-import { RulesState, TriggerBody } from './RulesText.jsx'
+import { RulesState, TriggerBody, ActionAdvancements } from './RulesText.jsx'
+import { advancementsOn, gainedActionKey } from '../lib/advancement.js'
 import { PrintLegal } from './ui.jsx'
 
 /**
@@ -55,6 +56,42 @@ export default function LeaderRecord({ leader, archetype, fileNumber, rules }) {
 
   const anyText = pickSlugs.some((slug) => rules.card(slug))
 
+  /**
+   * Actions and abilities the leader was given by a tier-2 advancement.
+   *
+   * They had nowhere on this record until v0.22.2 — the record listed the
+   * creation picks and stopped — so a leader who had earned an action showed a
+   * card that was missing it. Anything a tier-1 modifier is later hung on lives
+   * here too, which is why the keys go through `gainedActionKey`.
+   */
+  const gained = (leader.advancements || [])
+    .filter((a) => a.tableId === 'action' || a.tableId === 'ability')
+    .map((a) => ({
+      key: a.id || `${a.tableId}::${a.name}`,
+      name: a.name,
+      tableName: a.tableName,
+      page: a.page,
+      source: a,
+    }))
+
+  /**
+   * Everything else that was earned, so nothing an advancement bought is
+   * invisible on the document a player carries to a table.
+   *
+   * An advancement is shown under its action when the app can name that action,
+   * and here otherwise — a summoning effect, which attaches to nothing, and a
+   * modifier whose target was written in by hand because there was no list to
+   * pick from. The target still prints; it is just not a link to anything.
+   */
+  const placed = new Set(
+    [...SLOTS.flatMap((slot) => leader.picks[slot] || []).map((p) => p.key),
+      ...gained.map((g) => gainedActionKey(g.source))]
+  )
+  const loose = (leader.advancements || []).filter(
+    (a) => a.tableId !== 'action' && a.tableId !== 'ability'
+      && !(a.appliesTo?.key && placed.has(a.appliesTo.key))
+  )
+
   return (
     <article className="record">
       <div className="record__head">
@@ -95,25 +132,65 @@ export default function LeaderRecord({ leader, archetype, fileNumber, rules }) {
         leader.picks[slot].length > 0 ? (
           <section className="record__section" key={slot}>
             <div className="record__section-k">{slotLabel(slot)}</div>
-            {leader.picks[slot].map((p) => (
-              <div className="record__written" key={p.key}>
-                <div className="record__entry">
-                  {p.name} <span>— from {p.model}, {p.cost}ss</span>
+            {leader.picks[slot].map((p) => {
+              // Advancements attach to one action (p. 31), so they belong under
+              // it rather than in a list somewhere else on the page.
+              const earned = advancementsOn(leader, p.key)
+              return (
+                <div className="record__written" key={p.key}>
+                  <div className="record__entry">
+                    {p.name} <span>— from {p.model}, {p.cost}ss</span>
+                  </div>
+                  {/* showTriggers off: the leader took the action, not the source
+                      model's triggers. Those are earned or granted. */}
+                  <RulesState
+                    rules={rules}
+                    slug={sourceSlug(p)}
+                    slot={slot}
+                    name={p.name}
+                    quiet
+                    showTriggers={false}
+                    advancements={earned}
+                  />
+                  <ActionAdvancements advancements={earned} />
                 </div>
-                {/* showTriggers off: the leader took the action, not the source
-                    model's triggers. Those are earned or granted. */}
-                <RulesState
-                  rules={rules}
-                  slug={sourceSlug(p)}
-                  slot={slot}
-                  name={p.name}
-                  quiet
-                  showTriggers={false}
-                />
-              </div>
-            ))}
+              )
+            })}
           </section>
         ) : null
+      )}
+
+      {gained.length > 0 && (
+        <section className="record__section">
+          <div className="record__section-k">Gained by advancement</div>
+          {gained.map((g) => {
+            const earned = advancementsOn(leader, gainedActionKey(g.source))
+            return (
+              <div className="record__written" key={g.key}>
+                <div className="record__entry">
+                  {g.name} <span>— {g.tableName}{g.page ? `, p.${g.page}` : ''}</span>
+                </div>
+                <ActionAdvancements advancements={earned} />
+              </div>
+            )
+          })}
+        </section>
+      )}
+
+      {loose.length > 0 && (
+        <section className="record__section">
+          <div className="record__section-k">Advancements</div>
+          {loose.map((a, i) => (
+            <div className="record__entry" key={a.id || `${a.name}-${i}`}>
+              {a.name}
+              <span>
+                {' — '}{a.tableName}
+                {a.appliesTo ? `, on ${a.appliesTo.name}` : ''}
+                {a.page ? `, p.${a.page}` : ''}
+              </span>
+            </div>
+          ))}
+        </section>
       )}
 
       {leader.trigger && (

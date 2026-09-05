@@ -247,9 +247,23 @@ function removePurchase(equipment, bought) {
 /** Everything an advancement entry touched, put back. */
 function undoAdvancement(arsenal, entry) {
   const nameOf = (x) => x?.name ?? x
+  /**
+   * The row this entry made, removed.
+   *
+   * An id match is tried on its own first and only then the name. Falling
+   * through from a failed id match to a name match is what made this wrong:
+   * "Skill Boost" appears three times on the attack table, so a leader with two
+   * of them had two rows with the same name and different ids, and undoing the
+   * second took the first — leaving the wrong Skl on the wrong action. The name
+   * pass survives only for advancements recorded before they carried ids.
+   */
   const without = (list) => {
-    const i = (list || []).findIndex((x) => (entry.id && x.id === entry.id) || nameOf(x) === nameOf(entry))
-    return i < 0 ? list || [] : [...list.slice(0, i), ...list.slice(i + 1)]
+    const rows = list || []
+    let i = entry.id ? rows.findIndex((x) => x?.id === entry.id) : -1
+    if (i < 0 && !(entry.id && rows.some((x) => x?.id))) {
+      i = rows.findIndex((x) => nameOf(x) === nameOf(entry))
+    }
+    return i < 0 ? rows : [...rows.slice(0, i), ...rows.slice(i + 1)]
   }
 
   if (entry.tableId === 'totem') {

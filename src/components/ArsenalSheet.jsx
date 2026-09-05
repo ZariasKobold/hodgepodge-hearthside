@@ -1,3 +1,4 @@
+import { Fragment } from 'react'
 import { SLOTS } from '../data/archetypes.js'
 import { getEffect } from '../data/crewCards.js'
 import { factionLabel } from '../data/factions.js'
@@ -9,6 +10,9 @@ import {
 } from '../lib/shape/campaign.js'
 import { EXPERIENCE_TRACK } from '../data/advancements.js'
 import { sourceSlug, findEntry, actionColumns } from '../lib/rules.js'
+import {
+  advancementsOn, advancedAction, gainedActionKey, SUIT_LABEL,
+} from '../lib/advancement.js'
 import { PrintLegal } from './ui.jsx'
 
 /**
@@ -107,10 +111,30 @@ function ActionsTable({ rows }) {
       </thead>
       <tbody>
         {rows.map((r, i) => (
-          <tr key={r.key || i}>
-            <td className="sheet__actions-name">{r.name || ' '}</td>
-            <td>{r.rg}</td><td>{r.skl}</td><td>{r.rst}</td><td>{r.tn}</td><td>{r.dmg}</td>
-          </tr>
+          <Fragment key={r.key || i}>
+            <tr>
+              <td className="sheet__actions-name">{r.name || ' '}</td>
+              <td>{r.rg}</td>
+              <td className={r.advanced ? 'sheet__cell--advanced' : undefined}>{r.skl}</td>
+              <td>{r.rst}</td><td>{r.tn}</td><td>{r.dmg}</td>
+            </tr>
+            {/* Triggers earned by advancement, under the action they fire on.
+                They are the only triggers a leader has — taking an ally's
+                action does not bring the ally's triggers along (§4). */}
+            {(r.earned || []).length > 0 && (
+              <tr className="sheet__actions-sub">
+                <td colSpan={6}>
+                  {r.earned.map((a, n) => (
+                    <span key={`${a.name}-${n}`}>
+                      {n > 0 ? ' · ' : ''}
+                      {a.suit ? `${SUIT_LABEL[a.suit] || a.suit} ` : ''}
+                      {a.name}{a.page ? ` (p.${a.page})` : ''}
+                    </span>
+                  ))}
+                </td>
+              </tr>
+            )}
+          </Fragment>
         ))}
         {/* Ruled remainder, so there is room to write in what is earned later. */}
         {Array.from({ length: Math.max(0, 10 - rows.length) }, (_, i) => (
@@ -137,8 +161,39 @@ export default function ArsenalSheet({ arsenal, leader, archetype, campaign, rul
       const slug = sourceSlug(pick)
       const card = slug ? rules.card(slug) : null
       const entry = card ? findEntry(card, slot, pick.name) : null
-      actionRows.push({ key: pick.key, name: pick.name, ...actionColumns(entry) })
+      // Advancements go on before the columns are read off, so the Skl column
+      // prints the number the leader actually rolls (p. 31).
+      const { action, stat, statChanged, triggers } = advancedAction(
+        entry, advancementsOn(leader, pick.key)
+      )
+      actionRows.push({
+        key: pick.key,
+        name: pick.name,
+        ...actionColumns(action),
+        // `statTo` is absolute, so a boosted Skl is known even with the
+        // register unreachable and every other column blank.
+        ...(statChanged && !action ? { skl: String(stat) } : {}),
+        advanced: statChanged,
+        earned: triggers,
+      })
     }
+  }
+
+  /* Actions gained from the tier-2 table have no register record to read, and
+     they are lines on the leader's card all the same — a tier-1 modifier may
+     since have been hung on one. */
+  for (const adv of leader.advancements || []) {
+    if (adv.tableId !== 'action') continue
+    const { stat, statChanged, triggers } = advancedAction(
+      null, advancementsOn(leader, gainedActionKey(adv))
+    )
+    actionRows.push({
+      key: gainedActionKey(adv),
+      name: adv.name,
+      rg: '', skl: statChanged ? String(stat) : '', rst: '', tn: '', dmg: '',
+      advanced: statChanged,
+      earned: triggers,
+    })
   }
 
   const abilityNames = (leader.picks.ability || []).map((p) => p.name)
@@ -256,7 +311,9 @@ export default function ArsenalSheet({ arsenal, leader, archetype, campaign, rul
               <Ruled
                 n={Math.max(6, leaderAdvancements.length)}
                 values={leaderAdvancements.map(
-                  (adv) => `${adv.name} — ${adv.tableName}${adv.page ? `, p.${adv.page}` : ''}`
+                  (adv) => `${adv.name} — ${adv.tableName}`
+                    + `${adv.appliesTo ? `, on ${adv.appliesTo.name}` : ''}`
+                    + `${adv.page ? `, p.${adv.page}` : ''}`
                 )}
               />
             </>
@@ -370,7 +427,9 @@ export default function ArsenalSheet({ arsenal, leader, archetype, campaign, rul
             <h3 className="sheet__h3">Abilities</h3>
             <Ruled
               n={Math.max(6, totemAdvancements.length)}
-              values={totemAdvancements.map((a) => `${a.name} — ${a.tableName}`)}
+              values={totemAdvancements.map(
+                (a) => `${a.name} — ${a.tableName}${a.appliesTo ? `, on ${a.appliesTo.name}` : ''}`
+              )}
               numbered={false}
             />
             {totem && (
