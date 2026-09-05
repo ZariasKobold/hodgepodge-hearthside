@@ -4,7 +4,7 @@
 
 ---
 
-## Current Version: 0.22.3
+## Current Version: 0.22.4
 
 ## Last Updated: 2026-09-05
 
@@ -140,7 +140,7 @@ aftermath. Shipped and live:
 | **The service worker** | v0.19.3. It cached Pages' SPA fallback under asset URLs, so a browser that loaded mid-deploy got a **permanent white screen** no reload could clear. Live since v0.14.0, observed in production on 2026-09-03. Two guards now — never write HTML under a non-navigation request, never serve it either — plus a cache-version bump that purges anyone already poisoned. |
 | **Membership** | v0.17.0. Owner-issued single-use invites, two gates (redeem → pending → host admits), per-campaign nicknames, opt-in Discord identity, and a read-only shared arsenal page. Writes were **not** widened — see below. |
 
-546 tests.
+554 tests.
 
 ### The book is on disk, and must not be committed
 
@@ -378,6 +378,37 @@ Rules in it that should not be undone:
 The record and the PNG also grew a **Gained by advancement** section. Tier-2
 actions and abilities had nowhere to appear on either before, so a leader who
 had earned an action showed a card that was missing it.
+
+### The repair had to be repaired — v0.22.4
+
+Reported within the hour: the two dropdowns moved together and one button
+placed both advancements.
+
+**Nothing recorded before v0.22.2 has an `id`.** `uid('adv')` arrived in the
+same change that started asking for a target, so on every legacy row `adv.id`
+is `undefined` — the draft state keyed on it collapsed into one shared slot,
+and `placeAdvancement`'s `a.id === advId` matched `undefined` against
+`undefined` and wrote every id-less advancement at once. It is
+`placeAdvancementAt(index, …)` now: **the index into the holder's own
+`advancements` array is the only identity a legacy row is guaranteed to have.**
+
+The reason no test caught it is the part worth keeping. The fixture gave its
+legacy advancements ids like `old_1`, because that is what a *current* record
+looks like. **A fixture that is easier than production is not a fixture** — if
+you are writing one to stand for old data, write down what the old data actually
+lacked. `advancement.test.js` now has a block that constructs them exactly as
+v0.22.1 wrote them, id-less and all.
+
+**And the same report exposed a second casualty of the name-keying bug.** Until
+v0.22.2 the option select was keyed by name, and "Skill Boost" is printed three
+times on the attack table (Skl 4→5, 5→6, 6→7) and twice on the tactical one —
+so it recorded whichever came first whatever was flipped. A leader who took the
+5→6 boost has it stored as the 4→5, and with the action at Skl 5 the repair
+would then grey out the only target it had, reading "needs 4", with nowhere to
+go. So where a name is printed more than once (`ambiguousRows`) the repair
+offers the alternatives and writes the corrected `tableValue` and `page` back.
+It offers them **only** there: a repair must not rewrite a fact nobody was asked
+about.
 
 ### Old advancements can be given their action — v0.22.3
 
@@ -1355,7 +1386,7 @@ every session. `docs/VERSION_HISTORY.md` holds how it got this way.
 npm install
 cp .env.example .env
 npm run dev      # Vite only — NO Functions, NO database. useAuth degrades to signed out.
-npm run test     # 546 tests; `functions/` is in the run too, for the authz tests
+npm run test     # 554 tests; `functions/` is in the run too, for the authz tests
 npm run build    # production bundle — the dev proxy does NOT exist here
 npm run seed     # optional local register file; ask BiggerHat's maintainer first
 

@@ -215,6 +215,29 @@ function verdict(entry, state, target) {
  * A target written in by hand counts as placed. It names an action this app
  * cannot list, which is an answer, not a gap.
  */
+export function rowsNamed(adv) {
+  const table = findTable(adv?.tableId)
+  if (!table) return []
+  return table.entries.filter((e) => e.name === adv.name)
+}
+
+/**
+ * A row this advancement might be, where the recorded one cannot be trusted.
+ *
+ * "Skill Boost" is printed three times on the attack table and twice on the
+ * tactical one, and until v0.22.2 the option select was keyed by **name** — so
+ * it handed back whichever came first, and a leader who flipped a 10 and took
+ * the Skl 5→6 boost was recorded as having taken the 4→5. The recorded row is
+ * therefore a guess for any repeated name, and the repair has to offer the
+ * alternatives rather than hold the player to the wrong one.
+ *
+ * Empty for every name printed once, which is all of them but that one.
+ */
+export function ambiguousRows(adv) {
+  const named = rowsNamed(adv)
+  return named.length > 1 ? named : []
+}
+
 export function unplacedAdvancements(holder) {
   return (holder?.advancements || []).filter((a) => {
     const table = findTable(a.tableId)
@@ -289,9 +312,7 @@ export function advancedAction(action, advancements = []) {
  * leader does not have.
  */
 export function rowFor(adv) {
-  const table = findTable(adv?.tableId)
-  if (!table) return null
-  const named = table.entries.filter((e) => e.name === adv.name)
+  const named = rowsNamed(adv)
   if (named.length === 0) return null
   if (adv.tableValue != null) {
     return named.find((e) => e.value === adv.tableValue) || null

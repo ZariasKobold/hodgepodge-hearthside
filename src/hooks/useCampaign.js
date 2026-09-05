@@ -486,9 +486,15 @@ export function useCampaign({ userId = null, userReady = true, onSaved, onArsena
    * Tell an advancement which action it went on.
    *
    * A repair, not a new advancement: everything recorded before v0.22.2 has no
-   * `appliesTo`, because the app never asked. Nothing else on the entry moves —
-   * the row, the flip and the page are what actually happened and this only
-   * fills the blank beside them.
+   * `appliesTo`, because the app never asked.
+   *
+   * **Addressed by index, not by id, and that is the whole point.** Nothing
+   * recorded before v0.22.2 has an `id` either — `uid('adv')` arrived in the
+   * same change. Matching on `a.id === advId` therefore matched `undefined`
+   * against `undefined` and wrote *every* old advancement at once, which is
+   * exactly what a player reported: two dropdowns moving together and one
+   * button placing both. An index is the one identity a legacy row is
+   * guaranteed to have.
    *
    * The aftermath record is deliberately **not** patched to match. That record
    * is the provenance of an evening (`lib/rewind.js`) and it is a true account
@@ -497,8 +503,8 @@ export function useCampaign({ userId = null, userReady = true, onSaved, onArsena
    * A finished aftermath can never be unwound anyway, and an open one still
    * has its own picker.
    */
-  const placeAdvancement = useCallback((advId, appliesTo, { to = 'leader' } = {}) => {
-    const place = (list) => (list || []).map((a) => (a.id === advId ? { ...a, appliesTo } : a))
+  const placeAdvancementAt = useCallback((index, patch, { to = 'leader' } = {}) => {
+    const place = (list) => (list || []).map((a, i) => (i === index ? { ...a, ...patch } : a))
     setArsenal((a) => (to === 'totem'
       ? (a.totem ? { totem: { ...a.totem, advancements: place(a.totem.advancements) } } : {})
       : { leader: { ...a.leader, advancements: place(a.leader.advancements) } }))
@@ -547,7 +553,7 @@ export function useCampaign({ userId = null, userReady = true, onSaved, onArsena
     logGame, updateGame, removeGame,
     buyEquipment, removeEquipment,
     addInjury, healInjury, dropInjury, annihilateModel,
-    advanceLeader, advanceTotem, setTotem, addCrewCardAdvancement, placeAdvancement,
+    advanceLeader, advanceTotem, setTotem, addCrewCardAdvancement, placeAdvancementAt,
     rewindPhases,
     useMiraculousRecovery,
     // the participation, for anything that needs the seat rather than the player

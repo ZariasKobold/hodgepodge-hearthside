@@ -4429,3 +4429,65 @@ UNVERIFIED: the pane's screenshot capture went black past the first viewport on
 this page throughout, so every check here is DOM-read rather than seen. The
 totem branch is still untried — no totem exists to try it against.
 NEXT: the aftermath hand (item 0b, second bullet). Then M3, then L2.
+
+---
+
+### Session 45 — v0.22.4
+Date: 2026-09-05
+
+**fix: the repair panel wrote every old advancement at once**
+
+Reported with a screenshot inside the hour: picking an action in one dropdown
+filled both, and pressing one button applied it to both.
+
+**Nothing recorded before v0.22.2 has an `id`.** `uid('adv')` arrived in the
+very change that started asking which action an advancement modifies — so on
+every row the repair panel exists to fix, `adv.id` is `undefined`. The draft
+state was keyed `draft[adv.id]`, which made one shared slot for every row, and
+`placeAdvancement` matched `a.id === advId`, which compared `undefined` to
+`undefined` and hit them all. Both symptoms, one cause.
+
+It is `placeAdvancementAt(index, patch, { to })` now. The index into the
+holder's own `advancements` array is the only identity a legacy row is
+guaranteed to have, and the array is never reordered — `placeAdvancementAt`
+maps in place, preserving order and length.
+
+**Why no test caught it is the more useful half.** The fixture gave its
+"legacy" advancements ids like `old_1`, because that is what a record looks like
+*today*. It tested the shape I had just written, not the shape on the owner's
+phone. **A fixture that is easier than production is not a fixture** — when one
+stands in for old data, the thing to write down is what the old data actually
+lacked. There is now a block in `advancement.test.js` that constructs them
+exactly as v0.22.1 wrote them: no `id`, no `appliesTo`, and the Skill Boost
+carrying whichever row came first.
+
+**That last detail is the second bug, and the report surfaced it.** Until
+v0.22.2 the option select was keyed by name. "Skill Boost" is printed three
+times on the attack table — Skl 4→5 at flip 7, 5→6 at 10, 6→7 at 12 — and twice
+on the tactical one, so the app recorded the *first* regardless of what was
+taken. A leader who flipped a 10 and took the 5→6 boost has it stored as the
+4→5. The repair would then evaluate that row against an action at Skl 5, grey
+out the only target on offer as "Skl 5, needs 4", and leave them stuck: a repair
+panel that cannot be used to repair.
+
+So where a name is printed more than once, `ambiguousRows` gives the
+alternatives and the panel offers them, defaulting to what was recorded and
+saying plainly that it is the app's guess. Confirming or correcting writes
+`tableValue` and `page` back with the target. It appears **only** for a repeated
+name — a repair must not rewrite a fact nobody was asked about.
+
+Verified in the browser against a fixture matching the real thing, id-less:
+setting the first action left the second untouched and its button disabled;
+placing the first left the second `UNPLACED` and still on screen; correcting the
+Skill Boost row from flip 7 to flip 10 turned Blowdart from disabled to
+selectable; placing it stored `row 10, p.40`, set the dirty flag, brought the
+record to `Stat 6`, and removed the panel.
+
+Files: `src/components/UnplacedAdvancements.jsx`, `src/lib/advancement.js`,
+`src/lib/advancement.test.js`, `src/hooks/useCampaign.js`, `src/App.jsx`,
+`CLAUDE.md`, `package.json`, `docs/VERSION_HISTORY.md`
+RESOLVED: the shared-state bug reported against v0.22.3; and a Skill Boost
+recorded as the wrong row can now be corrected rather than blocking the repair.
+UNVERIFIED: still DOM-read rather than seen — the pane's screenshot capture goes
+black past the first viewport on this page. The totem branch remains untried.
+NEXT: the aftermath hand (item 0b, second bullet). Then M3, then L2.

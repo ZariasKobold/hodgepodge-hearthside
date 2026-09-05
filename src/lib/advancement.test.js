@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   needsTarget, targetsFor, advancementsOn, advancedAction, rowFor,
-  gainedActions, gainedActionKey, unplacedAdvancements,
+  gainedActions, gainedActionKey, unplacedAdvancements, ambiguousRows, rowsNamed,
 } from './advancement.js'
 import { findTable } from '../data/advancements.js'
 
@@ -327,5 +327,80 @@ describe('advancements that were never told which action', () => {
   it('is safe on a leader with nothing at all', () => {
     expect(unplacedAdvancements(null)).toEqual([])
     expect(unplacedAdvancements({})).toEqual([])
+  })
+})
+
+describe('rows a name might mean', () => {
+  it('names the three Skill Boosts on the attack table', () => {
+    const out = ambiguousRows({ tableId: 'attack', name: 'Skill Boost' })
+    expect(out.map((r) => r.statTo)).toEqual([5, 6, 7])
+  })
+
+  it('names the two on the tactical table', () => {
+    expect(ambiguousRows({ tableId: 'tactical', name: 'Skill Boost' })).toHaveLength(2)
+  })
+
+  /* Every other name is printed once, so there is nothing to ask about. */
+  it('is empty for a name printed once', () => {
+    expect(ambiguousRows({ tableId: 'attack', name: 'Draw Out Secrets' })).toEqual([])
+    expect(ambiguousRows({ tableId: 'attack', name: 'Attack Signature' })).toEqual([])
+  })
+
+  it('is empty for a table or a name it does not know', () => {
+    expect(ambiguousRows({ tableId: 'nope', name: 'Skill Boost' })).toEqual([])
+    expect(ambiguousRows(null)).toEqual([])
+    expect(rowsNamed(null)).toEqual([])
+  })
+})
+
+/**
+ * The shape a real pre-v0.22.2 record has, which is **not** the shape the first
+ * fixture for this invented. No `id` and no `appliesTo`: `uid('adv')` arrived in
+ * the same change that started asking for a target. Keying anything on `id`
+ * therefore compares undefined to undefined and hits every row at once, which
+ * is exactly what a player reported.
+ */
+describe('advancements as they were actually recorded before v0.22.2', () => {
+  const legacy = () => leader({
+    advancements: [
+      { tableId: 'attack', tableName: 'Attack Modification', name: 'Draw Out Secrets', tableValue: 9, page: 39, tier: 1, boxIndex: 0, to: 'leader' },
+      { tableId: 'attack', tableName: 'Attack Modification', name: 'Skill Boost', tableValue: 7, page: 39, tier: 1, boxIndex: 1, to: 'leader' },
+    ],
+  })
+
+  it('finds both, though neither carries an id', () => {
+    const out = unplacedAdvancements(legacy())
+    expect(out).toHaveLength(2)
+    expect(out.every((a) => a.id === undefined)).toBe(true)
+  })
+
+  /* The index into the holder's own array is the only identity these have,
+     and it is what the repair addresses them by. */
+  it('gives each a distinct index in the holder’s own list', () => {
+    const l = legacy()
+    const at = unplacedAdvancements(l).map((a) => l.advancements.indexOf(a))
+    expect(at).toEqual([0, 1])
+  })
+
+  it('placing one by index leaves the other alone', () => {
+    const l = legacy()
+    const place = (list, index, patch) => list.map((a, i) => (i === index ? { ...a, ...patch } : a))
+    const after = place(l.advancements, 1, { appliesTo: { key: 'k', name: 'Blowdart', slot: 'attack' } })
+    expect(after[0].appliesTo).toBeUndefined()
+    expect(after[1].appliesTo.name).toBe('Blowdart')
+  })
+
+  /* The Skill Boost's recorded row is whatever came first alphabetically in the
+     offer, not what was taken — so the repair must be able to correct it. */
+  it('lets the recorded Skill Boost row be swapped for the one really taken', () => {
+    const l = legacy()
+    const wrong = rowFor(l.advancements[1])
+    expect(wrong.statTo).toBe(5)
+    const choices = ambiguousRows(l.advancements[1])
+    const right = choices[1]
+    expect(right.statTo).toBe(6)
+    // Blowdart is Skl 5: illegal for the recorded row, legal for the real one.
+    expect(targetsFor(l, attack, wrong, () => blowdart)[0].eligible).toBe(false)
+    expect(targetsFor(l, attack, right, () => blowdart)[0].eligible).toBe(true)
   })
 })
