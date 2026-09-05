@@ -4216,3 +4216,59 @@ UNVERIFIED: the rewind has not been exercised at a real table, and the doctor's
 `addsInjury` outcomes are still not applied to the arsenal at all (noticed while
 building this; recorded under Known issues).
 NEXT: M3 (surface the corrupt count), then L2 (commit the dialogue checker).
+
+---
+
+### Session 42 — v0.22.1
+Date: 2026-09-05
+
+**fix: going back through an aftermath was a one-way trip**
+
+Reported from production within the hour of v0.22.0 going live, with a
+screenshot: back on Payday, "Already collected" greyed out, no forward button,
+nothing able to move. Two bugs, one report.
+
+**`furthest` was destroyed by going backwards.** It read
+`a.furthest ... : a.phase` and `goTo` wrote only `phase`, so stepping back
+re-derived "how far have I come" from where the player was *now standing*. The
+forward button then vanished and could not come back. Any aftermath already in
+flight when v0.22.0 deployed had no stamp at all, so it broke on the first move
+— which is precisely the case that got hit.
+
+It is now `furthestReached`, and derived rather than merely stored: the maximum
+of the stamp, the current phase, and **the furthest phase with anything recorded
+in it**. That third source is what matters. A barter flip that exists is proof
+the barter phase was reached, whatever the bookkeeping claims, so a record the
+bug already damaged repairs itself on load with no migration. Work alone
+under-reports — the doctor and the injuries can both be walked through
+legitimately empty — hence the maximum of all three rather than the derivation
+on its own. `goTo` also stamps `furthest` on every move now, so the fallback
+cannot eat it again.
+
+**A walked-past phase was a dead end.** Every phase's action button is also what
+advances the walk, so landing on one whose action is already spent leaves no way
+onward from inside it. A phase behind the furthest point now reads as settled
+whether or not it is in `locked` — it shows its record and lets the rail carry
+you on. `unlock` releases `furthest` too on the no-impact path, or a phase
+settled purely by position would stay settled and the button would appear to do
+nothing.
+
+Verified by seeding the exact reported state — phase payday, `furthest` payday,
+a barter flip sitting in the record — and watching the rail recover Barter,
+both nav directions return, and Payday render its ledger instead of the dead
+button. Then walked forward to the end and back to phase one twice; `furthest`
+held at advance_leader throughout.
+
+Also from the same report, and a fair criticism of v0.22.0 as shipped: walked
+rail phases were bare buttons with no border and only a hover colour, visually
+identical to the inert spans beside them. "I see the rail but no way to click on
+it." They now carry a border and a dotted underline. **Being clickable and
+looking clickable are two separate features and only the first one had a test.**
+
+Files: `src/lib/rewind.js`, `src/lib/rewind.test.js`,
+`src/components/Aftermath.jsx`, `src/styles/app.css`, `CLAUDE.md`,
+`package.json`, `docs/VERSION_HISTORY.md`
+RESOLVED: the rewind is usable; damaged records self-heal.
+UNVERIFIED: still not exercised at a real table.
+NEXT: the aftermath hand (item 0b, second bullet) is still unbuilt — phase 1
+stores a count and nothing else. Then M3, then L2.

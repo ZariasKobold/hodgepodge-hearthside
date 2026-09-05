@@ -1,12 +1,12 @@
 # CLAUDE.md — Hodgepodge Hearthside project context
 
-<!-- HH v0.22.0 | Last updated: 2026-09-04 -->
+<!-- HH v0.22.1 | Last updated: 2026-09-05 -->
 
 ---
 
-## Current Version: 0.22.0
+## Current Version: 0.22.1
 
-## Last Updated: 2026-09-04
+## Last Updated: 2026-09-05
 
 **Live at hodgepodgehearthside.com** (Cloudflare Pages, auto-deploys on push to
 `main`). Repo: `ZariasKobold/hodgepodge-hearthside`.
@@ -302,6 +302,18 @@ Four rules in it that should not be undone:
   way to click on it" was the report. They now carry a border and a dotted
   underline. Being clickable and looking clickable are two separate features,
   and only the first one has a test.
+- **`furthest` is derived, never merely stored** (`furthestReached`). v0.22.0
+  shipped it as a stored value falling back to the *current* phase, so stepping
+  backwards redefined how far the player had come: the forward button vanished
+  and the walk became a one-way trip into its own past. Found in production
+  within the hour. It is now the maximum of the stamp, where the player is
+  standing, and **the furthest phase with anything recorded in it** — the last
+  of which is what repairs a record the bug already damaged, with no migration.
+- **A phase behind the furthest point is settled, `locked` or not.** Every
+  phase's action button is *also* what advances the walk, so landing on a
+  walked-past phase with its action already spent — Payday reading "Already
+  collected", disabled — leaves no way onward from inside it. That was the
+  second half of the same production report.
 - **Reversal only works because nothing was ever destroyed.** `healInjury`
   writes `removedAt` and `annihilateModel` writes a flag, both chosen so the
   campaign's story stayed legible. That readability decision is what made this

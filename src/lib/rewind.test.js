@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   playablePhases, phasePosition, previousPhase, phasesAfter, phaseHasWork,
-  revisionImpact, clearedRecord, unwindArsenal,
+  revisionImpact, clearedRecord, unwindArsenal, furthestReached,
 } from './rewind.js'
 import { createAftermath } from './aftermath.js'
 
@@ -53,6 +53,64 @@ describe('which phases have work in them', () => {
 
   it('notices collected scrip even when the amount is zero', () => {
     expect(phaseHasWork(createAftermath({ paid: true, scripEarned: 0 }), 'payday')).toBe(true)
+  })
+})
+
+describe('how far the walk has got', () => {
+  it('trusts a stamped value', () => {
+    const rec = createAftermath({ phase: 'payday', furthest: 'advance_leader' })
+    expect(furthestReached(game(), rec).id).toBe('advance_leader')
+  })
+
+  /**
+   * THE REGRESSION. Stepping backwards used to redefine how far the player had
+   * come, because `furthest` fell back to the *current* phase when unset. The
+   * forward button then vanished and the walk became a one-way trip into its
+   * own past — reported from production with a Payday reading "Already
+   * collected" and nothing able to move.
+   */
+  it('does not shrink to wherever the player is standing', () => {
+    const rec = createAftermath({
+      phase: 'payday',
+      furthest: 'back_alley_doctor',
+      paid: true,
+      barter: { flipped: true, value: 3, bought: [] },
+    })
+    const out = furthestReached(game(), rec)
+    expect(out.id).toBe('back_alley_doctor')
+    expect(out.index).toBe(4)
+  })
+
+  /**
+   * Self-healing, and the reason this is derived rather than merely stored: an
+   * aftermath already in flight when the feature shipped carries no stamp at
+   * all, and a barter flip that exists is proof the barter phase was reached.
+   */
+  it('recovers a record that was never stamped, from the work in it', () => {
+    const rec = createAftermath({
+      phase: 'draw_hand',
+      paid: true,
+      barter: { flipped: true, value: 3, bought: [] },
+    })
+    expect(rec.furthest).toBeUndefined()
+    expect(furthestReached(game(), rec).id).toBe('barter')
+  })
+
+  it('counts a locked phase as reached even when it recorded nothing', () => {
+    const rec = createAftermath({ phase: 'draw_hand' })
+    const out = furthestReached(game(), rec, { locked: ['draw_hand', 'payday', 'barter'] })
+    expect(out.id).toBe('barter')
+  })
+
+  it('starts at the first phase for a blank aftermath', () => {
+    const out = furthestReached(game(), createAftermath())
+    expect(out.index).toBe(0)
+    expect(out.id).toBe('draw_hand')
+  })
+
+  it('ignores a stamp naming a phase this game never plays', () => {
+    const rec = createAftermath({ phase: 'determine_injuries', furthest: 'barter' })
+    expect(furthestReached(forfeited(), rec).id).toBe('determine_injuries')
   })
 })
 

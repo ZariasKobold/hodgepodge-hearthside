@@ -86,6 +86,43 @@ export function phaseHasWork(record, phaseId) {
 }
 
 /**
+ * How far through the walk this aftermath has actually got.
+ *
+ * Three sources, and the furthest of them wins:
+ *
+ *   1. `record.furthest`, where a previous session stamped it;
+ *   2. where the player is standing now;
+ *   3. **the furthest phase with anything recorded in it** — derived, and the
+ *      one that makes this self-healing.
+ *
+ * The third matters more than it looks. The first cut trusted only the stored
+ * value and fell back to the *current* phase when it was missing — so stepping
+ * backwards redefined how far you had come, the forward button vanished, and
+ * the walk became a one-way trip into its own past. Any aftermath already in
+ * flight when this shipped had no stored value at all, so it broke immediately.
+ *
+ * Deriving from the record fixes those records without a migration: a barter
+ * flip that exists is proof the barter phase was reached, whatever the
+ * bookkeeping says. Work alone under-reports — the doctor and the injuries can
+ * both be walked through legitimately empty — which is why it is the maximum of
+ * all three rather than the derivation on its own.
+ */
+export function furthestReached(game, record, { locked = [] } = {}) {
+  const order = playablePhases(game).map((p) => p.id)
+  const at = (id) => order.indexOf(id)
+
+  const stored = record?.furthest ? at(record.furthest) : -1
+  const here = record?.phase ? at(record.phase) : -1
+  const worked = order.reduce(
+    (max, id, i) => (phaseHasWork(record, id) || locked.includes(id) ? i : max),
+    -1
+  )
+
+  const index = Math.max(stored, here, worked, 0)
+  return { index, id: order[index] ?? null }
+}
+
+/**
  * What revising this phase would unassign, in the player's own words.
  *
  * **The phase itself is included, and that is the point.** Revising Payday

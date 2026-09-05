@@ -16,7 +16,7 @@ import {
 import { isThirst } from '../data/equipment.js'
 import {
   playablePhases, phasePosition, previousPhase, revisionImpact,
-  clearedRecord, describePhase, phaseHasWork,
+  clearedRecord, describePhase, phaseHasWork, furthestReached,
 } from '../lib/rewind.js'
 import { useState } from 'react'
 import { uid } from '../lib/shape/arsenal.js'
@@ -102,14 +102,26 @@ export default function Aftermath({
    */
   const order = playablePhases(open).map((p) => p.id)
   const locked = a.locked || []
-  const isLocked = (id) => locked.includes(id)
-  const furthest = a.furthest && order.includes(a.furthest) ? a.furthest : a.phase
+  const { index: furthestAt, id: furthest } = furthestReached(open, a, { locked })
   const at = phasePosition(open, a.phase)
-  const furthestAt = phasePosition(open, furthest)
   const back = previousPhase(open, a.phase)
   const forward = at >= 0 && at < furthestAt ? order[at + 1] : null
 
-  const goTo = (id) => { setRevising(null); patch({ phase: id }) }
+  /**
+   * A phase behind the furthest point is settled, whether or not it is in
+   * `locked`.
+   *
+   * Otherwise walking back onto one lands on its live form with its action
+   * already spent — Payday reading "Already collected", disabled — and since
+   * every phase's action button is *also* what advances the walk, there is then
+   * no way onward from inside it. A settled phase shows what it recorded and
+   * lets the rail carry you on, which is the whole point of being able to move.
+   */
+  const isSettled = (id) => locked.includes(id) || phasePosition(open, id) < furthestAt
+
+  // `furthest` is written on every move. Leaving it to be re-derived is what
+  // let stepping backwards erase it.
+  const goTo = (id) => { setRevising(null); patch({ phase: id, furthest }) }
 
   const advance = () => {
     const to = nextPhase(open, a.phase)
@@ -139,7 +151,15 @@ export default function Aftermath({
   const unlock = (phaseId) => {
     const impact = revisionImpact(open, a, phaseId)
     if (!impact.any) {
-      patch({ phase: phaseId, locked: locked.filter((id) => id !== phaseId) })
+      // Nothing here or after it to lose, so resuming from here is free — and
+      // `furthest` has to come back too, or a phase settled purely by position
+      // stays settled and this button appears to do nothing.
+      patch({
+        phase: phaseId,
+        furthest: phaseId,
+        locked: locked.filter((id) => id !== phaseId),
+        done: false,
+      })
       return
     }
     setRevising({ phaseId, impact })
@@ -169,7 +189,7 @@ export default function Aftermath({
    * components, and it says the right thing: a settled phase is a statement of
    * what happened, not a form.
    */
-  const showing = isLocked(a.phase) ? null : a.phase
+  const showing = isSettled(a.phase) ? null : a.phase
 
   const earned = experienceFor(open, leader)
 
@@ -200,7 +220,7 @@ export default function Aftermath({
         />
       )}
 
-      {isLocked(a.phase) && (
+      {isSettled(a.phase) && (
         <LockedPhase
           name={current.name}
           items={describePhase(a, a.phase)}
