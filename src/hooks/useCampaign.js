@@ -18,6 +18,7 @@ import {
   MIN_WEEKS_TOTAL, MAX_WEEKS_TOTAL,
 } from '../lib/shape/campaign.js'
 import { belongsTo, shouldRelease } from '../lib/shape/ownership.js'
+import { unwindArsenal } from '../lib/rewind.js'
 import { readBundle, refileForImport } from '../lib/shape/migrate.js'
 
 /**
@@ -490,6 +491,17 @@ export function useCampaign({ userId = null, userReady = true, onSaved, onArsena
    * leader rather than inferred from the games, because the box on the arsenal
    * sheet is a box: it is ticked or it is not.
    */
+  /**
+   * Put the arsenal back to before these aftermath phases ran.
+   *
+   * The arithmetic is `unwindArsenal`, which is pure and tested; this is only
+   * the seam that writes it. Everything it reverses is named in the aftermath
+   * record, so nothing had to be tagged — the record *is* the provenance.
+   */
+  const rewindPhases = useCallback((record, phaseIds, order) => {
+    setArsenal((a) => unwindArsenal(a, record, phaseIds, { order }))
+  }, [setArsenal])
+
   const useMiraculousRecovery = useCallback(() => {
     setArsenal((a) => ({ leader: { ...a.leader, miraculousRecoveryUsed: true } }))
   }, [setArsenal])
@@ -514,6 +526,7 @@ export function useCampaign({ userId = null, userReady = true, onSaved, onArsena
     buyEquipment, removeEquipment,
     addInjury, healInjury, dropInjury, annihilateModel,
     advanceLeader, advanceTotem, setTotem, addCrewCardAdvancement,
+    rewindPhases,
     useMiraculousRecovery,
     // the participation, for anything that needs the seat rather than the player
     participation: campaign && arsenal ? participationForArsenal(campaign, arsenal.id) : null,

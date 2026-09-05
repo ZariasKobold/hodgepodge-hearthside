@@ -4034,3 +4034,185 @@ Files: `src/hooks/useSync.js`, `CLAUDE.md`, `package.json`
 RESOLVED: arsenals are adopted by a reconcile, not only pushed by a save.
 UNVERIFIED: still nothing against the live server; and step G's watch.
 NEXT: the audit.
+
+---
+
+### Session 40 — v0.21.2
+Date: 2026-09-04
+
+**docs: the third audit — `docs/audits/audit-v0.21.1.md`**
+
+Due at Session 39, run at Session 40. Six sessions all called "39" is how the
+counter got lost; §5 was rewritten last session to forbid the lettered suffix,
+and its third trigger — a new top-level module — is what actually fired this.
+Worth recording that the rewrite is not what fixed it: the two triggers that
+fire on ordinary feature sessions have been ignored every time they fired, and
+the rare one was obeyed immediately. That is an argument for keeping §5's list
+short rather than adding to it.
+
+Findings only; no fix code, per §5. Priority order is H1, M1, M2, M3, L2, L1,
+L3, and M2 is closed by this session's own `CLAUDE.md` edits.
+
+**The transcription was read against the book, and it is correct.** This is the
+result that could not be obtained any other way, and it is the third audit in a
+row to have carried it as the concentrated risk. 82 barter rows checked on
+name, barter rating, campaign cost and suit; 9 relics; 28 injury rows; all 6
+reflip conditions; 14 Lucky Miss; 7 doctor rows; table sizes 60/63/74/30/15/7;
+all 7 flip semantics. Every value matches.
+
+Two things learned doing it that are worth reusing:
+
+- **A graphical table needs glyph coordinates, not character columns.**
+  `EXPERIENCE_TRACK` is a drawn grid, and `pdftotext -layout` places its digits
+  only approximately — enough to make the values look right while leaving the
+  *positions* unproven, which is precisely where its known past error lived.
+  Real coordinates via `pypdf` resolve ten of the fifteen numbers to exact grid
+  columns at 35.37pt spacing, all ten matching; p.37's worked example pins the
+  first three boxes independently. `pdftotext -raw` also beats `-layout` for
+  reading the barter table, because it preserves document order where the
+  two-column layout scrambles it.
+- **The reflip conditions carry a real asymmetry.** Traitor reflips on *leader*
+  or totem; Headstrong on *master* or totem. The book means both, and the code
+  preserves the difference. Anyone tidying those two into one predicate would be
+  changing the game silently.
+
+**The standing warning about `Aftermath.jsx` was wrong.** It said barter, the
+doctor and the injury flips "all append and would double on a revisit". They do
+not: every phase derives its remaining work from the record rather than trusting
+a flag — `pending` excludes subjects already flipped, bought items are disabled,
+boxes already taken are excluded — and derivation is the stronger guarantee. The
+one real defect is M1: `PhaseAdvance`'s `onDone` calls `advanceLeader` *before*
+writing the `applied` flag that guards it, so a write torn between the two
+recomputes `crossed` from the new box count and crosses a second set. Swapping
+the statements makes the failure under-advance rather than double-advance.
+
+**The dialogue files agree exactly** — 241 of 241, the only unmatched code
+string being `HANK_TOGGLE_KEY`. §5's check passes for the first time by
+measurement rather than by eye. The checker is written but not committed (L2),
+and the traps are recorded because all three cost time: the codes are
+alphanumeric (`H1-01` beside `S-04`), so the obvious `[A-Z]{1,3}-` pattern drops
+six entries; the repo is CRLF, so a `"$` anchor never matches; and the strings
+in `hank.js` include their own surrounding quote marks. Getting any of the three
+wrong reports 241 false mismatches, which it did, twice.
+
+**H1 is the finding that matters.** `useSync.js` has no test file. That is where
+v0.21.1's missing push loop lived, it was found by looking at production rather
+than by the suite, and nothing has changed to make the next silent omission
+catchable. `planSync` is pure and well tested; `reconcile` is the shell around
+it that decides what is actually written.
+
+An external prompt collection (`JeremyMorgan/Claude-Code-Reviewing-Prompts`,
+CC0) was vetted before use — 23 markdown files, no executable content, no
+injection — and used as a checklist reference only. It assumes
+Express/MongoDB/JWT, so it was adapted rather than followed; following it
+literally would have produced findings about middleware this project does not
+have.
+
+Files: `docs/audits/audit-v0.21.1.md` (new), `CLAUDE.md`, `docs/VERSION_HISTORY.md`
+RESOLVED: the transcription risk, for these three files as they stand; the
+aftermath idempotency question; §5's dialogue check; audit findings M8 and L2
+from v0.5.2, both of which were recorded as open and were not.
+UNVERIFIED: nothing new. M3's corrupt-row path is reasoned from the code, not
+reproduced — it needs a malformed `doc` in D1 to observe.
+NEXT: H1 (`useSync.test.js`), then M1's two-line swap.
+
+---
+
+### Session 41 — v0.22.0
+Date: 2026-09-04
+
+**feat: the aftermath goes backwards; and the sync loops are testable at last**
+
+Three things, in the order they were done: the audit's M1 and H1, then item 0b's
+fourth bullet.
+
+**M1 — two statements swapped.** `PhaseAdvance`'s `onDone` applied the
+advancement and *then* wrote the `applied` flag guarding it. Two writes; if the
+second never landed, a reopened phase recomputed `crossed` from the new box
+count and crossed a second set. Writing the flag first makes a torn write
+under-advance — visible, and the player can say so — instead of double-advancing,
+which is silent and unrecoverable. The window cannot be closed without a
+transaction across two hooks; its consequence can be made the harmless one, and
+that is the whole fix.
+
+**H1 — `reconcile` moved to `src/lib/reconcile.js`.** §6 keeps rules out of
+React, and this was the one place the rule had never reached: the loops that
+carry `planSync`'s decision out could not be called without a browser, an
+account and a database. `runReconcile` takes storage and the network as injected
+ports and returns the state rather than setting it. 18 tests, and the first
+fails against the v0.21.1 code.
+
+**Writing those tests found a live bug, which is the entire argument for H1.**
+`stripSyncFields` was applied only on the campaign pull path, so every pulled
+arsenal carried the server's `version` into localStorage — against the rule
+written in that function's own comment. The larger half: the identical-copies
+auto-settle compared documents raw, and a conflict *by definition* means the
+server's version has moved away from this device's base, so the two always
+differed by that field at the exact moment the question was asked.
+`sameInSubstance` returned false every single time. **The one case the app is
+allowed to settle by itself could never fire, for either kind** — described in
+CLAUDE.md as "provably lossless" and dead in practice. Both halves fixed, both
+pinned by tests.
+
+**The aftermath goes backwards — item 0b's fourth bullet.** That bullet asked
+for a change in where the truth lives rather than a Back button, and the change
+turned out to be smaller than expected: **the record already is the
+provenance.** Every arsenal effect the aftermath applies is named in the record
+already — `bought` names the equipment, `attempts` the injuries healed, `flips`
+the injuries attached, `taken` the advancements. Nothing needed tagging.
+Rewinding is replaying the record backwards. `src/lib/rewind.js`, pure, 27 tests.
+
+What the player gets: a clickable phase rail for anything already reached, Back
+and Forward buttons, and a lock per phase. Moving around is free and changes
+nothing. A locked phase shows what it recorded instead of its inputs. Unlocking
+one warns first, naming the actual things that would come undone, and on confirm
+winds the arsenal back and lets the walk resume from there.
+
+Four rules worth keeping:
+
+- **Later phases unwind before earlier ones.** Payday funds the barter and the
+  doctor; reverse the payday first and the balance floors at zero, silently
+  eating the refund about to arrive. `unwindArsenal` sorts into reverse phase
+  order itself so a caller cannot get it wrong. Two tests pin it, including one
+  asserting the result is the same whichever order the phases are passed in.
+- **A revision undoes the phase it is revising, not only what follows.** This
+  was found in the browser and by nothing else: unlocking Payday while its scrip
+  was still in the purse produced a screen reading "Already collected" with no
+  way to change the figure — a read-only view wearing an edit button. The test
+  suite was green across that mistake, which is the same lesson as H1 arriving
+  twice in one session.
+- **The warning names the actual things** — "Coffee — bought, 2 scrip back",
+  never "3 items". A count is not something anyone can answer "are you sure?" to.
+- **Reversal is only possible because nothing was ever destroyed.**
+  `healInjury` writes `removedAt` and `annihilateModel` writes a flag, both
+  chosen so the campaign's story stayed legible. A readability decision made
+  versions ago is what made this feature cheap.
+
+Purchases and injury flips now record the **row id** they created, so an undo
+removes the row it made rather than one that merely looks like it; the advance
+phase records `boxesApplied`, because once the boxes are checked `boxesCrossed`
+reads a different track and would name a different set. Older records without
+ids still unwind, by matching the most recent equipment row of that kind.
+
+Verified in a browser against a seeded campaign, not only in tests: bought a
+Helmet for 2 (correct stock for a 1 of Rams — Helmet 2, Healing Salve 1,
+Blackjack 2, exactly as the book was read at the audit), went back to Payday,
+unlocked, and watched the warning name the flip and the Helmet. Confirming
+refunded the scrip, returned the equipment, blanked the barter record, took the
+payday back and left the Collect button live again reading the correct
+recomputed figure. Then walked forward again and watched each phase lock behind.
+
+`actions.rewindPhases` was missing from `campaignActions` in `App.jsx` on the
+first attempt — the build was clean and the tests were green, and only clicking
+the button found it. Worth writing down beside the other two.
+
+Files: `src/lib/rewind.js` (new), `src/lib/rewind.test.js` (new),
+`src/lib/reconcile.js` (new), `src/lib/reconcile.test.js` (new),
+`src/hooks/useSync.js`, `src/hooks/useCampaign.js`, `src/components/Aftermath.jsx`,
+`src/App.jsx`, `src/styles/app.css`, `CLAUDE.md`, `package.json`
+RESOLVED: audit H1, M1 and M2; item 0b's fourth bullet; and a live sync bug that
+made the identical-copies auto-settle unreachable for both kinds.
+UNVERIFIED: the rewind has not been exercised at a real table, and the doctor's
+`addsInjury` outcomes are still not applied to the arsenal at all (noticed while
+building this; recorded under Known issues).
+NEXT: M3 (surface the corrupt count), then L2 (commit the dialogue checker).

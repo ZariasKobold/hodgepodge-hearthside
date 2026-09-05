@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { remote, remoteArsenals, planSync, stampOwner, SyncError } from '../lib/remote.js'
+import { remote, remoteArsenals } from '../lib/remote.js'
+import { runReconcile } from '../lib/reconcile.js'
 import {
   saveCampaign, loadCampaign, campaignIds, knownVersion, rememberVersion,
   isDirty, markDirty, saveArsenal, loadArsenal, arsenalIds, removeArsenal,
@@ -7,8 +8,7 @@ import {
 import {
   belongsTo,
 } from '../lib/shape/ownership.js'
-import { sameInSubstance } from '../lib/shape/compare.js'
-import { resolveConflict, conflictExport, planPull } from '../lib/shelf.js'
+import { resolveConflict, conflictExport } from '../lib/shelf.js'
 import { exportJSON } from '../lib/storage.js'
 /**
  * Keeps the local shelf and the account's shelf in step.
@@ -121,300 +121,40 @@ export function useSync({ user, available, onChanged }) {
     setState((s) => ({ ...s, status: 'syncing', error: null }))
 
     /**
-     * This account's campaigns, not this browser's.
+     * The work itself lives in `src/lib/reconcile.js`.
      *
-     * Signing out clears nothing from localStorage, so without this filter the
-     * next account to sign in would try to push the previous one's campaigns,
-     * be refused by the ownership gate — correctly — and see its own work fail
-     * to sync behind them (audit v0.11.0, H1).
+     * It was moved there so it could be tested: §6 keeps rules out of React,
+     * and the loops below the decision were the one part of the sync path no
+     * test could reach. That is exactly where v0.21.1's missing arsenal push
+     * hid — see the header of that file. What is left here is what a hook is
+     * for: knowing whether the component is still mounted, and turning a
+     * result into state.
      */
-    const mine = campaignIds()
-      .map((id) => loadCampaign(id))
-      .filter(Boolean)
-      .filter((c) => belongsTo(c, user?.id))
-
-    const myArsenals = arsenalIds()
-      .map((id) => loadArsenal(id))
-      .filter(Boolean)
-      .filter((a) => belongsTo(a, user?.id))
-
-    let theirs
-    let theirArsenals
-    try {
-      // Both listings, or neither. A half-known picture is not something to
-      // reason about: planning arsenals against an empty list would read every
-      // local one as an adoption and push the lot.
-      ;[theirs, theirArsenals] = await Promise.all([remote.list(), remoteArsenals.list()])
-    } catch (err) {
-      if (!alive.current) return
-      setState({
-        status: err instanceof SyncError && err.signedOut ? 'offline' : 'failed',
-        pushed: 0, pulled: 0, held: 0, adopted: 0, conflicts: [],
-        error: err.message,
-        at: Date.now(),
-      })
-      return
-    }
-
-    /**
-     * The listing **is** the server stating its current version for every
-     * campaign, so record it before deciding anything.
-     *
-     * Without this the whole scheme deadlocks, and it did. A version was only
-     * ever learned from a pull or an accepted push — so a device whose local
-     * copy was *newer* than the server's could obtain one by neither route: it
-     * never pulled, because it was ahead, and its push was refused for having
-     * no base version. The shelf sat on "not saved to your account" for ever
-     * with no way out. Every device already holding work when the version check
-     * shipped was in exactly that position.
-     *
-     * Recording here is not a loophole in the check. `baseVersion` has to be a
-     * version the server told us, and this is the server telling us, in the
-     * request immediately before the write. If another device writes in the gap
-     * between this list and our PUT, the stored `updated_at` moves past what we
-     * recorded and we are refused — which is the check working, not failing.
-     */
-    /**
-     * The listing no longer records anything, and that is a correction rather
-     * than a revert.
-     *
-     * It used to stamp a version for every campaign here, before deciding
-     * anything, to break a deadlock where a device ahead of the server could
-     * obtain a version by neither route. But recording a version you were
-     * *told* is not the same as holding a copy that *incorporates* it, and
-     * the gate in `putCampaign` could not tell the difference — so every
-     * push passed, including from devices whose document had merged nothing.
-     * That is how a portrait was destroyed after the guard meant to protect
-     * it shipped.
-     *
-     * A version is now recorded only where the content actually arrives: on a
-     * pull, or on a push the server accepted. The deadlock it was fixing is
-     * gone by a different route — `planSync` asks whether this copy is dirty,
-     * so a device that is merely *ahead in clock time* no longer tries to
-     * push at all.
-     */
-    const { pull, push, adopted, conflicts } = planSync(mine, theirs, {
-      baseOf: knownVersion,
-      isDirty,
+    const result = await runReconcile({
+      userId: user.id,
+      pushDisabled: PUSH_DISABLED,
+      storage: {
+        campaignIds, loadCampaign, saveCampaign,
+        arsenalIds, loadArsenal, saveArsenal,
+      },
+      remote: {
+        listCampaigns: () => remote.list(),
+        putCampaign: (doc, opts) => remote.put(doc, opts),
+        listArsenals: () => remoteArsenals.list(),
+        putArsenal: (doc, opts) => remoteArsenals.put(doc, opts),
+      },
+      versions: { knownVersion, rememberVersion, isDirty, markDirty },
     })
-
-    /**
-     * The same function, a second time, with different inputs.
-     *
-     * Step 5 of the plan is explicit that `planSync` must be **parameterised
-     * rather than rewritten**: it is pure, tested, and its four outcomes are
-     * correct for any versioned document, so teaching it to understand two
-     * kinds at once would be changing the one piece of code here that can lose
-     * twelve weeks in order to avoid calling it twice.
-     */
-    const arsenalPlan = planSync(myArsenals, theirArsenals, {
-      baseOf: knownVersion,
-      isDirty,
-    })
-
-    /**
-     * Pull first. If the push half fails, the browser has still gained whatever
-     * the account held, and nothing local was thrown away to get it.
-     * Anything the server hands back is this account's by definition — it was
-     * fetched with their session — so stamp it on the way in.
-     *
-     * Wrapped, because this loop was the one that threw. An exception here used
-     * to escape `reconcile` entirely: `remote.list` had its own catch, and
-     * everything after it had none, so a throw became an unhandled rejection
-     * and the status stayed on `syncing` for ever. **A sync that fails has to
-     * say so** — the shelf's "Checking your account for campaigns…" is drawn
-     * from that status, and a spinner that never resolves is the one failure
-     * mode a local-first app should not have.
-     */
-    let pulled = 0
-    let pullFailure = null
-    const arsenalClashes = []
-    for (const remoteDoc of pull) {
-      try {
-        /**
-         * A pulled document is **v2** — the arsenal is nested inside it — so
-         * taking it means lifting it, which writes an `arsenal:<id>`. That is
-         * where a week of play lives, and `planSync` decided to pull by looking
-         * at the *campaign's* dirty flag, having never heard of the arsenal.
-         *
-         * `planPull` is the guard: it compares each arsenal by content and
-         * refuses to overwrite one this device has changed, reporting a
-         * conflict instead. If any arsenal in the document conflicts it writes
-         * nothing at all — the campaign and its arsenals came out of one
-         * document and are one decision.
-         */
-        const plan = planPull(remoteDoc, { loadArsenal, isDirty, sameInSubstance })
-        if (plan.conflicts.length > 0) {
-          arsenalClashes.push(...plan.conflicts)
-          continue
-        }
-
-        for (const arsenal of plan.arsenals) {
-          saveArsenal(stampOwner(arsenal, user.id), { keepTimestamp: true })
-          // No version is recorded against an arsenal yet: the server has no
-          // arsenal documents at all (`doc IS NULL` on every row), so there is
-          // no number to record. Step F gives them their own. Clearing the
-          // dirty flag is honest either way — this copy now *is* the account's.
-          markDirty(arsenal.id, false)
-        }
-
-        saveCampaign(stampOwner(plan.campaign, user.id), { keepTimestamp: true })
-        // The version we were just handed is, by definition, the version this
-        // copy is now based on — and this copy is the account's own, so it
-        // owes the account nothing.
-        rememberVersion(plan.campaign.id, remoteDoc.version)
-        markDirty(plan.campaign.id, false)
-        pulled += 1
-      } catch (err) {
-        pullFailure = pullFailure || err.message
-      }
-    }
-
-    /**
-     * Arsenals second, and that ordering resolves an overlap rather than
-     * causing one.
-     *
-     * A **v2** campaign still carries its arsenal nested inside, so the pulls
-     * above lift one out. A **v3** campaign carries none, and the arsenal
-     * arrives here instead, as its own document. Doing this second means the
-     * authoritative v3 document wins wherever both exist — and once a row has
-     * been pushed as v3 the nested copy is gone from the server anyway, so the
-     * overlap is temporary by construction.
-     */
-    for (const incoming of arsenalPlan.pull) {
-      try {
-        saveArsenal(stampOwner(incoming, user.id), { keepTimestamp: true })
-        rememberVersion(incoming.id, incoming.version)
-        markDirty(incoming.id, false)
-        pulled += 1
-      } catch (err) {
-        pullFailure = pullFailure || err.message
-      }
-    }
-
-    let pushed = 0
-    let failure = null
-    /**
-     * Held, not attempted. See PUSH_DISABLED — the server cannot store a v3
-     * campaign without losing the arsenal, so the honest thing is to keep the
-     * work here and say so, rather than send something that reads as saved.
-     */
-    const held = PUSH_DISABLED ? push.length + arsenalPlan.push.length : 0
-    for (const campaign of PUSH_DISABLED ? [] : push) {
-      try {
-        const { saved } = await remote.put(campaign, { baseVersion: knownVersion(campaign.id) })
-        // Claimed now that the account has actually accepted it, and recorded
-        // at the version it assigned — without which the very next mirror
-        // would be refused as stale.
-        saveCampaign(stampOwner(campaign, user.id), { keepTimestamp: true })
-        rememberVersion(campaign.id, saved?.version)
-        // The account has it now. Anything typed after this marks it again.
-        markDirty(campaign.id, false)
-        pushed += 1
-      } catch (err) {
-        // Carry on rather than stop. An earlier version broke out of this loop
-        // on the first failure, so a single unpushable campaign kept every
-        // campaign behind it from ever reaching the account (audit v0.11.0, H1).
-        //
-        // A conflict here means another device wrote between our listing and
-        // our push, which is a race rather than a fault and is fixed by trying
-        // again. The server's own wording — "pull before pushing" — is an
-        // instruction to a program, not to a person reading a shelf.
-        failure = failure || (err.stale
-          ? 'Another device saved this campaign a moment ago. Nothing is lost; try again.'
-          : err.message)
-      }
-    }
-
-    /**
-     * Arsenals last, because `arsenals.campaign_id` references `campaigns(id)`
-     * and D1 enforces foreign keys — an arsenal pushed before its table names a
-     * row the server does not have.
-     *
-     * This loop went missing once, and how is worth recording: an edit script
-     * used a string replace whose target did not match and said nothing. The
-     * end-to-end test still passed, because `mirrorArsenal` pushes on every
-     * save and the test *made* a save — so the only broken case was the one the
-     * test did not cover: an arsenal already dirty before the app opened.
-     * Adopting existing work is exactly that case, and it is the one the sync
-     * pause left everybody in.
-     */
-    for (const arsenal of PUSH_DISABLED ? [] : arsenalPlan.push) {
-      try {
-        const { saved } = await remoteArsenals.put(arsenal, { baseVersion: knownVersion(arsenal.id) })
-        saveArsenal(stampOwner(arsenal, user.id), { keepTimestamp: true })
-        rememberVersion(arsenal.id, saved?.version)
-        markDirty(arsenal.id, false)
-        pushed += 1
-      } catch (err) {
-        // Carry on rather than stop, so one unpushable leader cannot keep every
-        // other one behind it from reaching the account (audit v0.11.0, H1).
-        failure = failure || (err.stale
-          ? 'Another device saved this leader a moment ago. Nothing is lost; try again.'
-          : err.message)
-      }
-    }
 
     if (!alive.current) return
-    /**
-     * A conflict is neither an error nor a success, and the advice this used to
-     * give was impossible to follow.
-     *
-     * It said "open it on one device and save to settle it" — and saving cannot
-     * settle anything, because a conflict means the copy is already dirty and
-     * the base version already differs. Saving again changes neither, so the
-     * next reconcile reports the same conflict and every push is refused. The
-     * app was telling people to do the one thing that could not work, for ever.
-     *
-     * Now the two documents are carried out to a screen that can show them.
-     */
-    const clashes = []
-    for (const { id } of conflicts) {
-      const a = mine.find((c) => c.id === id) || null
-      const b = theirs.find((c) => c.id === id) || null
-
-      /**
-       * The one case the app is allowed to settle by itself.
-       *
-       * Both copies moved, and they moved to the same place — two devices that
-       * made the same edit, or a dirty flag set by a save that changed nothing.
-       * There is no choice to offer, so offering one would be diligence
-       * performed rather than exercised. Provably lossless: the documents are
-       * equal, so taking either loses none of the other.
-       */
-      if (a && b && sameInSubstance(a, b)) {
-        rememberVersion(id, b.version)
-        markDirty(id, false)
-        continue
-      }
-      clashes.push({ kind: 'campaign', id, mine: a, theirs: b })
-    }
-    clashes.push(...arsenalClashes)
-    for (const { id } of arsenalPlan.conflicts) {
-      const a = myArsenals.find((x) => x.id === id) || null
-      const b = theirArsenals.find((x) => x.id === id) || null
-      if (a && b && sameInSubstance(a, b)) {
-        rememberVersion(id, b.version)
-        markDirty(id, false)
-        continue
-      }
-      clashes.push({ kind: 'arsenal', id, mine: a, theirs: b })
-    }
-
-    const trouble = pullFailure || failure
+    const { changed, ...next } = result
     setState({
-      status: trouble ? 'failed' : clashes.length > 0 ? 'conflicted' : 'synced',
-      pushed,
-      pulled,
-      held,
-      adopted: adopted.length,
-      conflicts: clashes,
-      error: trouble,
+      ...next,
       // Always stamped, success or failure. `settled` is derived from `at`, so
       // leaving it null on a bad reconcile is what hangs the shelf.
       at: Date.now(),
     })
-    if (pulled > 0) onChanged?.()
+    if (changed) onChanged?.()
   }, [onChanged, user, available])
 
   useEffect(() => {

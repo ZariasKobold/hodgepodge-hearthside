@@ -14,6 +14,12 @@ import {
   weeksRemaining, isCampaignOver, gamesWon, gamesPlayed,
 } from '../lib/shape/campaign.js'
 import { isThirst } from '../data/equipment.js'
+import {
+  playablePhases, phasePosition, previousPhase, revisionImpact,
+  clearedRecord, describePhase, phaseHasWork,
+} from '../lib/rewind.js'
+import { useState } from 'react'
+import { uid } from '../lib/shape/arsenal.js'
 
 /**
  * The aftermath — six phases, one game, one sitting or several.
@@ -38,6 +44,8 @@ import { isThirst } from '../data/equipment.js'
 export default function Aftermath({
   campaign, arsenal, leader, week, actions,
 }) {
+  /** Set while a revision is being confirmed. Never a modal — see below. */
+  const [revising, setRevising] = useState(null)
   // Scoped to the arsenal that is open. In v2 the campaign named its own
   // local arsenal; in v3 the arsenal is the thing you have open and the
   // campaign is a table that may seat several.
@@ -84,17 +92,121 @@ export default function Aftermath({
 
   const patch = (next) => actions.updateGame(open.id, (g) => ({ aftermath: { ...g.aftermath, ...next } }))
 
+  /**
+   * Where the walk has got to, and what has been settled.
+   *
+   * `furthest` bounds forward travel: you may revisit anything you have
+   * reached, and you may not skip ahead to a phase you have not played. `locked`
+   * is what the player has settled — a locked phase is read-only until they say
+   * otherwise, which is what makes free movement safe rather than alarming.
+   */
+  const order = playablePhases(open).map((p) => p.id)
+  const locked = a.locked || []
+  const isLocked = (id) => locked.includes(id)
+  const furthest = a.furthest && order.includes(a.furthest) ? a.furthest : a.phase
+  const at = phasePosition(open, a.phase)
+  const furthestAt = phasePosition(open, furthest)
+  const back = previousPhase(open, a.phase)
+  const forward = at >= 0 && at < furthestAt ? order[at + 1] : null
+
+  const goTo = (id) => { setRevising(null); patch({ phase: id }) }
+
   const advance = () => {
     const to = nextPhase(open, a.phase)
-    if (to) patch({ phase: to })
-    else patch({ done: true })
+    const settled = locked.includes(a.phase) ? locked : [...locked, a.phase]
+    if (to) {
+      patch({
+        phase: to,
+        locked: settled,
+        // Only ever moves forward: revisiting phase 2 must not forget that
+        // phase 5 has been played, or the work there becomes unreachable.
+        furthest: phasePosition(open, to) > furthestAt ? to : furthest,
+      })
+    } else {
+      patch({ done: true, locked: settled })
+    }
   }
+
+  /**
+   * Unlock a phase so it can be revised.
+   *
+   * Anything recorded after it was decided while this phase said something
+   * else, so it cannot simply stand. The player is shown exactly what would be
+   * unassigned — the actual items, not a count — and nothing moves until they
+   * say yes. On yes the arsenal is wound back through `rewindPhases` and those
+   * phases return to blank.
+   */
+  const unlock = (phaseId) => {
+    const impact = revisionImpact(open, a, phaseId)
+    if (!impact.any) {
+      patch({ phase: phaseId, locked: locked.filter((id) => id !== phaseId) })
+      return
+    }
+    setRevising({ phaseId, impact })
+  }
+
+  const confirmRevision = () => {
+    const { phaseId, impact } = revising
+    // Includes the phase being revised — see `revisionImpact`. Undoing it is
+    // what makes it editable again rather than a screen saying "already done".
+    const doomed = impact.phases.map((p) => p.id)
+    actions.rewindPhases(a, doomed, order)
+    const cleared = clearedRecord(a, doomed)
+    patch({
+      ...cleared,
+      phase: phaseId,
+      furthest: phaseId,
+      locked: locked.filter((id) => id !== phaseId && !doomed.includes(id)),
+      done: false,
+    })
+    setRevising(null)
+  }
+
+  /**
+   * A locked phase renders its record rather than its inputs.
+   *
+   * Cheaper and safer than threading a `readOnly` prop through five phase
+   * components, and it says the right thing: a settled phase is a statement of
+   * what happened, not a form.
+   */
+  const showing = isLocked(a.phase) ? null : a.phase
 
   const earned = experienceFor(open, leader)
 
   return (
     <>
-      <PhaseRail phases={phases} current={a.phase} />
+      <PhaseRail
+        phases={phases}
+        current={a.phase}
+        furthestAt={furthestAt}
+        positionOf={(id) => phasePosition(open, id)}
+        locked={locked}
+        onGo={goTo}
+      />
+
+      <PhaseNav
+        back={back}
+        forward={forward}
+        names={Object.fromEntries(phases.map((p) => [p.id, p.name]))}
+        onGo={goTo}
+      />
+
+      {revising && (
+        <RevisionWarning
+          name={phases.find((p) => p.id === revising.phaseId)?.name || 'this phase'}
+          impact={revising.impact}
+          onCancel={() => setRevising(null)}
+          onConfirm={confirmRevision}
+        />
+      )}
+
+      {isLocked(a.phase) && (
+        <LockedPhase
+          name={current.name}
+          items={describePhase(a, a.phase)}
+          onUnlock={() => unlock(a.phase)}
+        />
+      )}
 
       {withdrewEarly(open) && (
         <p className="gap-note">
@@ -105,7 +217,7 @@ export default function Aftermath({
         </p>
       )}
 
-      {a.phase === 'draw_hand' && (
+      {showing === 'draw_hand' && (
         <>
           <HankSays>{aftermathReaction({ result: open.result, week })}</HankSays>
           <Field>
@@ -131,7 +243,7 @@ export default function Aftermath({
         </>
       )}
 
-      {a.phase === 'payday' && (
+      {showing === 'payday' && (
         <PhasePayday
           game={open}
           record={a}
@@ -143,7 +255,7 @@ export default function Aftermath({
         />
       )}
 
-      {a.phase === 'barter' && (
+      {showing === 'barter' && (
         <PhaseBarter
           week={week}
           arsenal={arsenal}
@@ -151,17 +263,29 @@ export default function Aftermath({
           handSize={a.handSize}
           onFlip={(next) => patch({ barter: { ...a.barter, ...next, flipped: next.value != null } })}
           onBuy={(entry, thirst) => {
+            // The row id is minted here rather than inside `createEquipment`
+            // so the record can name the exact row this purchase created.
+            // Undoing then removes that row, not merely one that looks like it.
+            const rowId = uid('eqp')
             actions.buyEquipment(
-              { equipmentId: entry.id, name: entry.name, cc: entry.cc, page: entry.page, thirst: thirst || isThirst(entry.id) },
+              {
+                id: rowId, equipmentId: entry.id, name: entry.name,
+                cc: entry.cc, page: entry.page, thirst: thirst || isThirst(entry.id),
+              },
               entry.cc
             )
-            patch({ barter: { ...a.barter, bought: [...(a.barter.bought || []), entry.id] } })
+            patch({
+              barter: {
+                ...a.barter,
+                bought: [...(a.barter.bought || []), { rowId, equipmentId: entry.id, name: entry.name, cc: entry.cc }],
+              },
+            })
           }}
           onDone={advance}
         />
       )}
 
-      {a.phase === 'advance_leader' && (
+      {showing === 'advance_leader' && (
         <PhaseAdvance
           week={week}
           leader={leader}
@@ -188,18 +312,34 @@ export default function Aftermath({
             // player who abandons the phase halfway has not half-advanced a
             // leader with no record of what the boxes bought.
             const crossed = boxesCrossed(leader.experience?.boxesChecked || 0, earned)
-            if (!a.advance.applied && crossed.length) {
+            const alreadyApplied = a.advance.applied
+            // The flag is written FIRST, and the order is the whole point.
+            // These are two writes; if the second never lands, a reopened phase
+            // recomputes `crossed` from the *new* box count and crosses a second
+            // set. Writing `applied` first makes a torn write under-advance —
+            // visible, and the player can say so — instead of double-advancing,
+            // which is silent and unrecoverable. Audit v0.21.1, M1.
+            patch({
+              advance: {
+                ...a.advance,
+                experienceEarned: earned,
+                applied: true,
+                // Recorded rather than recomputed later: once the boxes are
+                // checked, `boxesCrossed` reads a different track and would
+                // name a different set. The undo needs the number that was
+                // actually applied.
+                boxesApplied: alreadyApplied ? (a.advance.boxesApplied ?? 0) : crossed.length,
+              },
+            })
+            if (!alreadyApplied && crossed.length) {
               actions.advanceLeader({ boxes: crossed.length, taken: [] })
             }
-            patch({
-              advance: { ...a.advance, experienceEarned: earned, applied: true },
-            })
             advance()
           }}
         />
       )}
 
-      {a.phase === 'back_alley_doctor' && (
+      {showing === 'back_alley_doctor' && (
         <PhaseDoctor
           week={week}
           arsenal={arsenal}
@@ -214,7 +354,7 @@ export default function Aftermath({
         />
       )}
 
-      {a.phase === 'determine_injuries' && (
+      {showing === 'determine_injuries' && (
         <PhaseInjuries
           week={week}
           arsenal={arsenal}
@@ -222,15 +362,18 @@ export default function Aftermath({
           game={open}
           record={a.injuries}
           onFlip={(entry) => {
+            const rowId = entry.result.attaches ? uid('inj') : null
             if (entry.result.attaches) {
               actions.addInjury({
+                id: rowId,
                 name: entry.result.name,
                 page: entry.result.page,
                 modelId: entry.isLeader ? null : entry.modelId,
                 titleGroup: entry.titleGroup,
               })
             }
-            patch({ injuries: { flips: [...(a.injuries.flips || []), entry] } })
+            // `rowId` is what lets a revision detach exactly this injury.
+            patch({ injuries: { flips: [...(a.injuries.flips || []), { ...entry, rowId }] } })
           }}
           onFinish={(doomed) => {
             for (const d of doomed) {
@@ -253,7 +396,15 @@ export default function Aftermath({
                 .findLast?.((i) => i.name === justAttached.result.name)
               if (row) actions.dropInjury(row.id)
             }
-            patch({ done: true, annihilated: doomed.map((d) => d.name) })
+            // Keys as well as names: `annihilateModel` was called with the
+            // key, so that is what a revision has to look up to bring a model
+            // back. The names stay because they are what the player reads.
+            patch({
+              done: true,
+              annihilated: doomed.filter((d) => !d.isLeader).map((d) => d.key),
+              annihilatedNames: doomed.map((d) => d.name),
+              locked: (a.locked || []).includes(a.phase) ? (a.locked || []) : [...(a.locked || []), a.phase],
+            })
           }}
         />
       )}
@@ -300,24 +451,128 @@ function PhasePayday({ game, record, onPay }) {
 
 /* ── chrome ─────────────────────────────────────────────────────── */
 
-function PhaseRail({ phases, current }) {
+/**
+ * The six phases, and the way back to any of them.
+ *
+ * A phase already reached is a button; one not yet played is not, because
+ * skipping ahead would mean recording phase five off a phase three that never
+ * happened. Skipped phases stay inert and keep saying why.
+ */
+function PhaseRail({ phases, current, furthestAt, positionOf, locked, onGo }) {
   return (
     <nav className="rail" aria-label="Aftermath phase">
       {phases.map((p) => {
-        const state = p.skipped ? 'skip' : p.id === current ? 'now' : 'todo'
+        const pos = positionOf(p.id)
+        const reached = !p.skipped && pos >= 0 && pos <= furthestAt
+        const isNow = p.id === current
+        const state = p.skipped ? 'skip' : isNow ? 'now' : reached ? 'done' : 'todo'
+        const shut = locked.includes(p.id)
+        const label = `${p.name}${shut ? ' — locked' : ''}`
+
+        if (!reached || isNow) {
+          return (
+            <span
+              key={p.id}
+              className={`rail__item rail__item--${state}`}
+              aria-current={isNow ? 'step' : undefined}
+              title={p.reason || undefined}
+            >
+              <span className="rail__n">{p.n}</span>
+              <span className="rail__name">{p.name}</span>
+            </span>
+          )
+        }
         return (
-          <span
+          <button
             key={p.id}
-            className={`rail__item rail__item--${state}`}
-            aria-current={p.id === current ? 'step' : undefined}
-            title={p.reason || undefined}
+            type="button"
+            className={`rail__item rail__item--${state} rail__item--go`}
+            onClick={() => onGo(p.id)}
+            title={`Back to ${label}`}
           >
-            <span className="rail__n">{p.n}</span>
+            <span className="rail__n">{shut ? '·' : p.n}</span>
             <span className="rail__name">{p.name}</span>
-          </span>
+          </button>
         )
       })}
     </nav>
+  )
+}
+
+/** Step one phase either way. Forward is bounded by how far the walk has got. */
+function PhaseNav({ back, forward, names, onGo }) {
+  if (!back && !forward) return null
+  return (
+    <div className="phasenav">
+      {back
+        ? <Button ghost onClick={() => onGo(back)}>{`← ${names[back]}`}</Button>
+        : <span />}
+      {forward
+        ? <Button ghost onClick={() => onGo(forward)}>{`${names[forward]} →`}</Button>
+        : <span />}
+    </div>
+  )
+}
+
+/**
+ * A phase the player has settled.
+ *
+ * Shows what it recorded and offers the way back in. Revising is a decision
+ * with consequences, so it is never one click away from an input the player
+ * might touch by accident.
+ */
+function LockedPhase({ name, items, onUnlock }) {
+  return (
+    <Field>
+      <Label>{name} — locked</Label>
+      {items.length > 0 ? (
+        <ul className="hire__list">
+          {items.map((line, i) => <li key={i}><span>{line}</span></li>)}
+        </ul>
+      ) : (
+        <p className="note">Nothing was recorded here.</p>
+      )}
+      <p className="note">
+        Settled, so it stays put while you move around. Unlock it if it needs
+        changing — you will be told what that costs before anything moves.
+      </p>
+      <Button ghost onClick={onUnlock}>Unlock and revise</Button>
+    </Field>
+  )
+}
+
+/**
+ * What revising a phase would unassign, before it happens.
+ *
+ * Named items rather than a count, because "are you sure?" is unanswerable
+ * unless the player can see what they are giving up. It is not a modal: the
+ * `.gap-note` styling means it shows with Hank off too, since this is substance
+ * rather than narration (§5).
+ */
+function RevisionWarning({ name, impact, onCancel, onConfirm }) {
+  return (
+    <div className="gap-note">
+      <p>
+        <strong>Revising {name} undoes it, and everything after it.</strong>{' '}
+        The later phases were decided while this one said something else, so
+        they cannot stand — and this one has to come undone before you can
+        change it. Everything below goes back to the arsenal: scrip refunded,
+        equipment returned, injuries and advancements taken off. Then you walk
+        it again from here.
+      </p>
+      {impact.phases.map((p) => (
+        <div key={p.id}>
+          <strong>{p.name}</strong>
+          <ul className="hire__list">
+            {p.items.map((line, i) => <li key={i}><span>{line}</span></li>)}
+          </ul>
+        </div>
+      ))}
+      <div className="phasenav">
+        <Button ghost onClick={onCancel}>Leave it alone</Button>
+        <Button onClick={onConfirm}>Unassign and revise</Button>
+      </div>
+    </div>
   )
 }
 

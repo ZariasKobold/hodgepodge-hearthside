@@ -58,7 +58,7 @@ export default function App() {
     setHouseRules,
     logGame, updateGame, buyEquipment, addInjury, healInjury, dropInjury, annihilateModel,
     advanceLeader, advanceTotem, setTotem, addCrewCardAdvancement,
-    useMiraculousRecovery,
+    useMiraculousRecovery, rewindPhases,
   } = useCampaign({
     // The shelf is scoped to the account, not the browser. Without this a
     // second person signing in on a shared machine sees the first one's
@@ -250,7 +250,7 @@ export default function App() {
     buyEquipment,
     addInjury, healInjury, dropInjury, annihilateModel,
     advanceLeader, advanceTotem, setTotem, addCrewCardAdvancement,
-    useMiraculousRecovery,
+    useMiraculousRecovery, rewindPhases,
     onHire: (model, cost) => {
       addModel(model, { scripPaid: cost })
       spendScrip(cost)

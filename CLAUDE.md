@@ -1,10 +1,10 @@
 # CLAUDE.md — Hodgepodge Hearthside project context
 
-<!-- HH v0.21.1 | Last updated: 2026-09-04 -->
+<!-- HH v0.22.0 | Last updated: 2026-09-04 -->
 
 ---
 
-## Current Version: 0.21.1
+## Current Version: 0.22.0
 
 ## Last Updated: 2026-09-04
 
@@ -140,7 +140,7 @@ aftermath. Shipped and live:
 | **The service worker** | v0.19.3. It cached Pages' SPA fallback under asset URLs, so a browser that loaded mid-deploy got a **permanent white screen** no reload could clear. Live since v0.14.0, observed in production on 2026-09-03. Two guards now — never write HTML under a non-navigation request, never serve it either — plus a cache-version bump that purges anyone already poisoned. |
 | **Membership** | v0.17.0. Owner-issued single-use invites, two gates (redeem → pending → host admits), per-campaign nicknames, opt-in Discord identity, and a read-only shared arsenal page. Writes were **not** widened — see below. |
 
-456 tests.
+503 tests.
 
 ### The book is on disk, and must not be committed
 
@@ -209,51 +209,136 @@ production and finding no arsenal documents there.
 Two lessons worth keeping: **assert that an edit matched**, and a green test
 suite says nothing about a path no test walks.
 
-### ⚠ The audit is overdue, and here is when to run it
+**Adoption is confirmed on production — 2026-09-04.** The owner opened v0.21.1
+on a signed-in phone and `ars_msz7vwn6x9k64r` came up `schema_version 3`,
+`version 1`, `doc` written, scrip 3, still seated at its campaign. That is the
+exact path the missing loop broke, checked where it actually matters rather than
+in a test. The other five arsenals remain `schema_version 0` with no `doc` —
+**that is correct**, not a failure: they are the projection-only rows a v2
+campaign push left behind, and each adopts when its own owner next opens the app.
 
-It was scheduled for Session 39. Sessions 39, 39b, 39c, 39d, 39e and 39f went by
-without it, and Session 40 added a new top-level module on top. §5 has been
-rewritten to say why the counter stopped counting (six sessions all called "39"
-read as one) and its third trigger has been tightened to the wording the old note
-demanded. **Number sessions plainly from here — 41, 42, 43.**
+### Membership works; the link nobody has clicked does not
 
-**Run it after the v3 cutover, not before**, and this is a judgment rather than a
-deferral. The §5 ritual reads every file in `src/` for cross-file drift; a
-substantial fraction of `src/` — `campaignShape.js`, `useCampaign.js`, the shelf,
-the wizard steps — is being replaced by item 0 in the next session or two.
-Auditing code that is about to be deleted spends the audit's attention on the one
-part of the codebase where it cannot pay off, and the audit that matters is the
-one that reads the *new* shape with the book open.
+Also settled on 2026-09-04, by reading remote rather than reasoning about it.
+The host's Players tab says **"1 in the campaign"** while correctly listing an
+admitted member, and both halves of that are right.
 
-What that means concretely: **the cutover is the trigger.** The moment
-`src/lib/shape/` is what the app runs on, audit before anything else ships. If
-the cutover slips past two more sessions, run it anyway — the argument above
-expires the moment "about to be replaced" stops being true.
+`campaign_members` holds a real `active` row — so v0.20.2's fix holds — but every
+`campaigns.member_of` on production is `NULL`, and `listSharedArsenals` gathers
+the group with `WHERE id = ? OR member_of = ?`. No pointer, no arsenal in the
+group. The pointer is set by `BringALeader` in `steps/Players.jsx`, on the
+**member's** device, and it is explicit by design: linking is what puts your
+arsenal in front of other people, so it should be a thing you did rather than a
+thing that happened. **A member who has been admitted has not yet arrived.**
 
-Carry all of the below into it.
+Two things follow. The screen never says this — an admitted member appears in
+the host's list while being invisible in Everyone's arsenal, and nothing explains
+the gap to either of them. And `campaign_members.arsenal_id`, added in 0005, is
+still `NULL` everywhere because nothing writes it; wiring it is what lets a
+member bring an arsenal without needing a campaign row of their own to point,
+which is the membership rewire still outstanding below.
 
-Two places the risk is concentrated:
+### ✅ The audit has run — `docs/audits/audit-v0.21.1.md`
 
-- **The three new data files are transcription from a PDF**, and a wrong barter
-  rating or flip value is silent and permanent — the app will confidently offer
-  the wrong equipment forever, and no test can catch it because the test would
-  be transcribed from the same source. This needs the book open beside the file.
-  The totem findings later in Session 37 are the proof this matters: two
-  comments and a test name repeated a wrong belief about the register for two
-  audits, and one API call settled it. **Where a claim is about an external
-  source, go and look.**
-  The counts to expect: 82 barter items (4 always-available plus six at each
-  value 1–13), 9 relics, 28 injury rows, and 60/63/74/30/15/7 advancement
-  entries. `EXPERIENCE_TRACK` is the one already known to have been wrong once,
-  so re-check it against p.31 and the worked example on p.37.
-- **`Aftermath.jsx` writes to the arsenal mid-flow**, so every write has to be
-  idempotent against a reopened phase. `paid` and `advance.applied` guard two of
-  them; check the rest.
+Session 40, after the v3 cutover as planned. **Number sessions plainly from
+here — 41, 42, 43.** §5's third trigger (a new top-level module) is what finally
+fired it, and that is worth keeping: the two triggers that fire on ordinary
+feature sessions were ignored every time, and the one that fires rarely was
+obeyed at once. Keep §5's list short and its wording narrow.
+
+**The transcription is correct.** All three data files were read against the
+book — 82 barter rows (name, rating, campaign cost, suit), 9 relics, 28 injury
+rows, all 6 reflip conditions, 14 Lucky Miss, 7 doctor rows, the table sizes
+60/63/74/30/15/7 and all 7 flip semantics. Every value matches. That closes the
+standing "needs the book open beside the file" risk **for these files as they
+stand** — it does not close it for anything transcribed later.
+
+`EXPERIENCE_TRACK` is verified too, and the method is worth reusing: character
+columns from `pdftotext -layout` are not good enough for a graphical grid, but
+real glyph coordinates are. Ten of the fifteen numbers resolve to exact columns
+at 35.37pt spacing across 13 columns and all ten match; p.37's worked example
+independently pins the first three boxes as 1, 1, 2 and confirms 13 boxes per
+row, so 39 in total.
+
+**`Aftermath.jsx` is idempotent**, and the warning that used to sit here — that
+barter, the doctor and the injury flips "all append and would double on a
+revisit" — was **wrong by the time it was read**. Every phase derives its
+remaining work from the record rather than trusting a flag, which is the
+stronger guarantee: `pending` excludes subjects already flipped, bought items
+are disabled, and boxes already taken are excluded. There is no way back either
+— the phase rail is inert spans and `done: true` removes the game from `open`.
+One ordering defect survives, and it is finding M1.
+
+The findings, in priority order: ~~**H1**~~ and ~~**M1**~~ are **fixed in
+v0.22.0**; ~~**M2**~~ was closed by correcting this file. Still open: **M3** the
+`corrupt` flag is computed and silently discarded; **L1** the OAuth state cookie
+is never cleared; **L2** the dialogue checker still is not committed; **L3**
+`AFTERMATH_INJURED[0]`'s timing.
+
+### The aftermath goes backwards now — v0.22.0
+
+Item 0b's fourth bullet, and it arrived by the route that item asked for: **the
+record is the provenance.** Every arsenal effect the aftermath applies is already
+named in the record — `bought` names the equipment, `attempts` the injuries
+healed, `flips` the injuries attached, `taken` the advancements — so nothing
+needed tagging and rewinding is replaying the record backwards. That is
+`src/lib/rewind.js`, pure and 27 tests.
+
+Four rules in it that should not be undone:
+
+- **Later phases unwind before earlier ones.** Payday funds the barter and the
+  doctor. Reverse the payday first and the balance floors at zero, silently
+  eating the refund that was about to arrive. `unwindArsenal` sorts into reverse
+  phase order itself, so a caller cannot get this wrong.
+- **A revision undoes the phase it is revising, not just what follows.** Found
+  in the browser, not in a test: unlocking Payday while its scrip was still in
+  the purse gave a screen reading "Already collected" with no way to change the
+  figure — a read-only view wearing an edit button.
+- **The warning names the actual things.** "Coffee — bought, 2 scrip back", not
+  "3 items". A count is not something a player can answer "are you sure?" to.
+- **A reachable phase has to look like a control.** The first cut made walked
+  phases into bare buttons with no border and only a hover colour, which is
+  indistinguishable from the inert spans beside them — "I see the rail but no
+  way to click on it" was the report. They now carry a border and a dotted
+  underline. Being clickable and looking clickable are two separate features,
+  and only the first one has a test.
+- **Reversal only works because nothing was ever destroyed.** `healInjury`
+  writes `removedAt` and `annihilateModel` writes a flag, both chosen so the
+  campaign's story stayed legible. That readability decision is what made this
+  feature possible at all.
+
+Purchases and injury flips now record the **row id** they created, so an undo
+removes the row it made rather than one that merely looks like it; and the
+advance phase records `boxesApplied`, because once the boxes are checked
+`boxesCrossed` reads a different track and would name a different set.
+
+### `reconcile` is testable, and testing it found a live bug — v0.22.0
+
+H1's fix. The orchestration moved out of `useSync` into `src/lib/reconcile.js`
+as `runReconcile`, a plain function with storage and the network injected —
+§6's rule, applied to the one place it had never reached. 18 tests, and the
+first one fails against the v0.21.1 code.
+
+**Writing them found something.** `stripSyncFields` was applied only on the
+campaign pull path, so every pulled arsenal carried the server's `version` into
+localStorage — against the rule in that function's own comment. Worse, the
+identical-copies auto-settle compared raw documents, and a conflict *by
+definition* means the server's version has moved away from this device's base.
+So `sameInSubstance` returned false every single time and **the one case the app
+is allowed to settle by itself could never fire, for either kind.** Both halves
+are fixed and both are pinned by tests.
+
+The lesson is the one v0.21.1 wrote down and did not act on: a green suite says
+nothing about a path no test walks. `planSync` had 29 tests and was never the
+problem; the loops around it had none.
 
 ### Audits
 
-`docs/audits/audit-v0.11.0.md` is the current one (Session 29), and it now
-carries a status block. **Every finding is closed** — both print findings, all
+`docs/audits/audit-v0.21.1.md` is the current one (Session 40); its findings
+are listed above and none is closed yet.
+
+`docs/audits/audit-v0.11.0.md` is the second (Session 29), and it carries a
+status block. **Every finding is closed** — both print findings, all
 three highs, all five mediums and all fourteen lows, across v0.12.0 and
 v0.13.0. Two lows (L6, L13) are closed as *documented rather than changed*,
 with the reasoning written into the code.
@@ -267,9 +352,11 @@ that may not have finished syncing.
 
 `docs/audits/audit-v0.5.2.md` is the first one. **H1, M1, M2, M3, M4, M5, M7
 and L8 are done.** M6 was **retracted** — a measurement error, not drift.
-**M8 is still open**, and this file claimed for eight versions that it was not:
-totems are named in the legality message and not excluded by the check. The
-ten lows are all still open too.
+**M8 is closed** — `isSelectionSource` excludes totems by name (`!isTotem`)
+and has since v0.16.0. This file asserted the opposite for several versions
+while its own feature table said otherwise; settled by reading the code at the
+v0.21.1 audit. **L2 is closed too** — `loadLocalRegister` is wired and
+`useRoster` calls it. The other nine lows are still open.
 
 Two things from that work worth keeping:
 
@@ -476,11 +563,13 @@ things. All four are designed at the end of the plan doc; none is built.
     hiring to increase their pool as normal." Those become soulstones in that
     game's pool and never scrip. If anyone wants them as scrip it is a house
     rule, and the still-missing half is that nothing shows the leftover at all.
-- **The aftermath must go backwards, then lock.** Not a Back button — a change
-  of where the truth lives. Every phase's effect on the arsenal has to be
-  *derived from the record and reconciled*, not appended when a button is
-  pressed. Only `paid` and `advance.applied` guard anything today; barter, the
-  doctor and the injury flips all append and would double on a revisit.
+- ~~**The aftermath must go backwards, then lock.**~~ **Shipped v0.22.0.** It
+  went the way this bullet asked — the truth moved, rather than a Back button
+  being bolted on. The record was already the provenance, so `src/lib/rewind.js`
+  replays it backwards; see the v0.22.0 section above for the four rules in it.
+  The premise that "barter, the doctor and the injury flips all append and would
+  double on a revisit" was **already false** when the v0.21.1 audit checked it:
+  every phase derives its remaining work from the record.
 
 #### 1. ~~Campaign membership~~ — shipped v0.17.0
 
@@ -577,10 +666,9 @@ he visibly changes when a leader dies — it costs one line of code.
   v0.5.2 audit's M6 was a false positive for exactly that reason. A generator
   that writes `hank-dialogue.md` from `hank.js` would retire the dual-file rule
   entirely.
-- **Ten low audit findings**, catalogued in `docs/audits/audit-v0.5.2.md`. The
-  most substantive is L2: `VITE_REGISTRY_MODE=local` is documented in
-  `.env.example` and wired to nothing, so `npm run seed` writes a file the app
-  cannot read.
+- **Nine low audit findings**, catalogued in `docs/audits/audit-v0.5.2.md`.
+  L2 is closed: `VITE_REGISTRY_MODE=local` reaches `loadLocalRegister` now, and
+  `useRoster` reads the seeded file.
 
 ### Never verified
 
@@ -743,7 +831,15 @@ conflict; neither is the same as two devices disagreeing.
   picker became `characteristicOptions` in v0.18.3 and is a component away from
   being reusable there.
 - `hank.js` and `hank-dialogue.md` are kept in sync by hand. A generator script
-  in `scripts/` would make the code the single source. Not written.
+  in `scripts/` would make the code the single source. Not written — though the
+  v0.21.1 audit proved the two files agree exactly (241 of 241) and recorded the
+  three traps any checker has to survive.
+- **The doctor's `addsInjury` outcomes are not applied.** Three of the seven
+  Back-Alley Doctor results hand the patient a fresh injury — the black joker's
+  "Oops?" and the 9 — and `onAttempt` only spends the scrip and heals. The
+  ledger says "healed, then hurt" while the arsenal records only the healing.
+  Noticed while building the rewind; not fixed there, because it is a rules
+  change rather than a navigation one.
 - `useCampaign` exposes a flat `leader` adapter so the four wizard steps didn't
   need rewriting. Fine now; retire it once the wizard reads the arsenal
   directly, or it becomes a second shape to keep in sync.
@@ -848,6 +944,8 @@ hodgepodge-hearthside/
 │   │   ├── aftermath.js    the six phases, as arithmetic
 │   │   ├── rules.js        live rules text, memory-only (§4)
 │   │   ├── remote.js       the D1 client + planSync, the merge that can lose data
+│   │   ├── reconcile.js    runReconcile — the sync loops, injectable and tested
+│   │   ├── rewind.js       going back through an aftermath, and what it costs
 │   │   └── recordImage.js  canvas PNG + the LEGAL constant
 │   ├── hooks/              useCampaign, useRoster, useRules, useAuth, useHank, useSync
 │   ├── components/         wizard steps and shared UI
@@ -1156,7 +1254,7 @@ every session. `docs/VERSION_HISTORY.md` holds how it got this way.
 npm install
 cp .env.example .env
 npm run dev      # Vite only — NO Functions, NO database. useAuth degrades to signed out.
-npm run test     # 456 tests; `functions/` is in the run too, for the authz tests
+npm run test     # 503 tests; `functions/` is in the run too, for the authz tests
 npm run build    # production bundle — the dev proxy does NOT exist here
 npm run seed     # optional local register file; ask BiggerHat's maintainer first
 

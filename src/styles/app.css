@@ -1246,6 +1246,32 @@ body::after {
 }
 .rail__item--now { color: var(--brass); background: var(--brass-wash); }
 .rail__item--skip { color: var(--line); text-decoration: line-through; }
+/* A phase already walked, and reachable again.
+   It has to *look* like a control: the first cut was a bare button with no
+   border and only a hover colour, which is indistinguishable from the plain
+   spans beside it. "I see the rail but no way to click on it" was the report. */
+.rail__item--done { color: var(--ink-soft); }
+.rail__item--go {
+  border: 1px solid var(--line-soft); background: none; cursor: pointer;
+  font-family: inherit; font-size: inherit;
+}
+.rail__item--go .rail__name {
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+.rail__item--go:hover,
+.rail__item--go:focus-visible {
+  color: var(--brass); background: var(--brass-wash); border-color: var(--brass);
+}
+.rail__item--go:hover .rail__name,
+.rail__item--go:focus-visible .rail__name { text-decoration-style: solid; }
+
+/* Back and forward through the aftermath, one phase at a time. */
+.phasenav {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 10px; margin: -8px 0 18px;
+}
+.phasenav .btn { font-size: 12px; padding: 5px 11px; }
 
 /* One card, entered by hand — the app owns no fate deck. */
 .flip { margin-bottom: 18px; }
