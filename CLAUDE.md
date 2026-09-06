@@ -4,7 +4,7 @@
 
 ---
 
-## Current Version: 0.22.5
+## Current Version: 0.22.6
 
 ## Last Updated: 2026-09-05
 
@@ -140,7 +140,7 @@ aftermath. Shipped and live:
 | **The service worker** | v0.19.3. It cached Pages' SPA fallback under asset URLs, so a browser that loaded mid-deploy got a **permanent white screen** no reload could clear. Live since v0.14.0, observed in production on 2026-09-03. Two guards now — never write HTML under a non-navigation request, never serve it either — plus a cache-version bump that purges anyone already poisoned. |
 | **Membership** | v0.17.0. Owner-issued single-use invites, two gates (redeem → pending → host admits), per-campaign nicknames, opt-in Discord identity, and a read-only shared arsenal page. Writes were **not** widened — see below. |
 
-557 tests.
+570 tests.
 
 ### The book is on disk, and must not be committed
 
@@ -378,6 +378,42 @@ Rules in it that should not be undone:
 The record and the PNG also grew a **Gained by advancement** section. Tier-2
 actions and abilities had nowhere to appear on either before, so a leader who
 had earned an action showed a card that was missing it.
+
+### Dr. Mo's injuries are real now — v0.22.6
+
+Two of his seven results heal an injury and hand the patient another; the black
+joker hands one over for nothing. `onAttempt` spent the scrip and healed, and
+**never wrote the injury** — so the ledger read "healed, then hurt" over an
+arsenal that had only healed. The screen's advice was worse than useless: it
+said to flip in phase 6 instead, and phase 6 flips only for models *killed
+during the game*, so a patient who survived had no row there at all.
+
+The follow-up flip now happens on the doctor's own screen and the attempt cannot
+be committed until it lands. Three rules:
+
+- **Anything that does not injure goes back** (`resolveDoctorInjury`). p.33:
+  "reflip any jokers or other results that do not give the model an injury
+  (including being killed off)". That is exactly `resolveInjuryFlip`'s
+  `attaches`, so this wraps it rather than restating the table — and the
+  per-model conditions fold into the same rule instead of sitting beside it.
+- **A duplicate goes back too.** "The model got lucky" is the *injury phase's*
+  rule; the doctor's own sentence says throw back anything that does not injure.
+  The stricter reading is also the one that keeps "Oops?" a punishment.
+- **That flip is not cheatable**, and could not matter if it were: both jokers
+  are reflipped, and they are the only results `cheated` affects.
+
+**And the hole this opened, which was already there.** p.36: "after flipping for
+injuries, **all** models with three or more injury upgrades attached are
+annihilated" — the paragraph above naming a model that gained one "in some
+other manner" and survives until exactly this check. `PhaseInjuries` counted
+only the subjects it had flipped for, and closed with `onFinish([])` outright
+when nobody died. So a model Dr. Mo pushed to three walked away. It is
+`doomedSubjects` over the whole live crew now, and the nobody-died branch runs
+the check like any other.
+
+Recording his injuries is what made that reachable rather than theoretical,
+which is the general shape of it: **a rule that is never exercised cannot be
+observed to be wrong.**
 
 ### A repair screen you can only visit once is a trap — v0.22.5
 
@@ -994,12 +1030,6 @@ conflict; neither is the same as two devices disagreeing.
   in `scripts/` would make the code the single source. Not written — though the
   v0.21.1 audit proved the two files agree exactly (241 of 241) and recorded the
   three traps any checker has to survive.
-- **The doctor's `addsInjury` outcomes are not applied.** Three of the seven
-  Back-Alley Doctor results hand the patient a fresh injury — the black joker's
-  "Oops?" and the 9 — and `onAttempt` only spends the scrip and heals. The
-  ledger says "healed, then hurt" while the arsenal records only the healing.
-  Noticed while building the rewind; not fixed there, because it is a rules
-  change rather than a navigation one.
 - `useCampaign` exposes a flat `leader` adapter so the four wizard steps didn't
   need rewriting. Fine now; retire it once the wizard reads the arsenal
   directly, or it becomes a second shape to keep in sync.
@@ -1415,7 +1445,7 @@ every session. `docs/VERSION_HISTORY.md` holds how it got this way.
 npm install
 cp .env.example .env
 npm run dev      # Vite only — NO Functions, NO database. useAuth degrades to signed out.
-npm run test     # 557 tests; `functions/` is in the run too, for the authz tests
+npm run test     # 570 tests; `functions/` is in the run too, for the authz tests
 npm run build    # production bundle — the dev proxy does NOT exist here
 npm run seed     # optional local register file; ask BiggerHat's maintainer first
 

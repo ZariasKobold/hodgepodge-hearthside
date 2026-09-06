@@ -6,6 +6,7 @@ import {
   tierOfBox, boxesCrossed, experienceWasted, trackIsFull, TOTAL_EXPERIENCE_BOXES,
   doctorOutcome, doctorAffordable,
   modelsToFlipFor, resolveInjuryFlip, resolveLuckyMiss, annihilatedAfterInjuries,
+  resolveDoctorInjury, doomedSubjects,
 } from './aftermath.js'
 import { EXPERIENCE_TRACK, EXPERIENCE_BOXES, offerFor, findTable } from '../data/advancements.js'
 import { BARTER, THIRST, barterOffer, thirstOffer, ALWAYS } from '../data/equipment.js'
@@ -351,5 +352,102 @@ describe('injuries', () => {
   it('annihilates at three injuries and not at two', () => {
     expect(annihilatedAfterInjuries({ a: 2, b: 3, c: 4 })).toEqual(['b', 'c'])
     expect(annihilatedAfterInjuries({ a: 0 })).toEqual([])
+  })
+})
+
+/**
+ * p. 33, on the black joker and on the 9: "flip on the injury chart and reflip
+ * any jokers or other results that do not give the model an injury (including
+ * being killed off)." Stricter than the injury phase, and simpler: anything
+ * that does not attach goes back.
+ */
+describe("the injury Dr. Mo hands out", () => {
+  it('takes a result that attaches', () => {
+    const out = resolveDoctorInjury(3, 'ram', {})
+    expect(out.name).toBe('Severe Amputation')
+    expect(out.attaches).toBe(true)
+    expect(out.reflip).toBe(false)
+  })
+
+  it('throws back a result that injures nobody', () => {
+    const out = resolveDoctorInjury(1, 'ram', {})
+    expect(out.name).toBe('Just a Flesh Wound')
+    expect(out.reflip).toBe(true)
+  })
+
+  /* "including being killed off" — named in the book, so it is named here. */
+  it('throws back Killed Off, and never annihilates', () => {
+    const out = resolveDoctorInjury(13, 'ram', {})
+    expect(out.reflip).toBe(true)
+    expect(out.annihilates).toBe(false)
+    expect(out.reflipWhy).toContain('killed off')
+  })
+
+  it('throws back both jokers and reaches no Lucky Miss', () => {
+    const red = resolveDoctorInjury('redJoker', null, {})
+    expect(red.reflip).toBe(true)
+    expect(red.luckyMiss).toBe(false)
+    expect(resolveDoctorInjury('blackJoker', null, {}).reflip).toBe(true)
+  })
+
+  /* The per-model conditions fold into the same rule rather than sitting
+     beside it: a result the model cannot take does not injure it. */
+  it('throws back a result this model cannot take, and says which', () => {
+    const out = resolveDoctorInjury(5, 'ram', { isLeader: true })
+    expect(out.name).toBe('Headstrong')
+    expect(out.reflip).toBe(true)
+    expect(out.reflipWhy).toBe('this model is a master or totem')
+  })
+
+  it('throws back an injury the model already carries', () => {
+    const out = resolveDoctorInjury(3, 'ram', { injuryNames: ['Severe Amputation'] })
+    expect(out.reflip).toBe(true)
+    expect(out.reflipWhy).toContain('already has')
+  })
+
+  it('is null for a value off the table', () => {
+    expect(resolveDoctorInjury(null, null, {})).toBeNull()
+  })
+})
+
+/**
+ * p. 36: "After flipping for injuries, ALL models with three or more injury
+ * upgrades attached are annihilated" — not only the ones that flipped. The
+ * paragraph above it makes the point deliberately, naming a model that gained
+ * an injury "in some other manner" and survives until this check.
+ */
+describe('who the end of phase six carries off', () => {
+  const crew = [
+    { key: 'm1', name: 'Bo' },
+    { key: 'm2', name: 'Cass' },
+    { key: 'leader', name: 'The leader', isLeader: true },
+  ]
+  const counts = { m1: 3, m2: 1, leader: 0 }
+  const countFor = (s) => counts[s.key] ?? 0
+
+  it('takes anyone at three injuries, flipped for or not', () => {
+    expect(doomedSubjects(crew, countFor).map((s) => s.key)).toEqual(['m1'])
+  })
+
+  /* THE REGRESSION THIS EXISTS FOR. Dr. Mo's "Oops?" is the common way to
+     reach three without being killed in the game, and the old check only
+     looked at models it had flipped for — so that model walked away. */
+  it('takes a model the doctor pushed to three, who never flipped', () => {
+    const doctored = { m1: 0, m2: 3, leader: 0 }
+    expect(doomedSubjects(crew, (s) => doctored[s.key]).map((s) => s.key)).toEqual(['m2'])
+  })
+
+  it('takes a Killed Off result even at no injuries', () => {
+    expect(doomedSubjects(crew, () => 0, ['m2']).map((s) => s.key)).toEqual(['m2'])
+  })
+
+  it('never lists the same subject twice', () => {
+    const out = doomedSubjects(crew, countFor, ['m1'])
+    expect(out.map((s) => s.key)).toEqual(['m1'])
+  })
+
+  it('takes nobody when nobody qualifies', () => {
+    expect(doomedSubjects(crew, () => 2)).toEqual([])
+    expect(doomedSubjects([], () => 9)).toEqual([])
   })
 })

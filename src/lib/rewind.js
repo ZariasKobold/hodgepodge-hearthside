@@ -176,9 +176,14 @@ export function describePhase(record, phaseId) {
       return out
     }
     case 'back_alley_doctor':
-      return (record.doctor?.attempts || []).map(
-        (a) => `Dr. Mo on ${a.injuryName || 'an injury'} — ${a.outcome?.net === 'healed' ? 'healed' : 'no result'}, 1 scrip back`
-      )
+      return (record.doctor?.attempts || []).map((a) => {
+        // The warning names the actual things, so "are you sure?" is a
+        // question somebody can answer. An injury he *gave* is the half most
+        // worth naming, because undoing takes it back off again.
+        const got = a.outcome?.heals ? 'healed' : 'no result'
+        const gave = a.hurt?.name ? `, ${a.hurt.name} removed` : ''
+        return `Dr. Mo on ${a.injuryName || 'an injury'} — ${got}${gave}, 1 scrip back`
+      })
     case 'determine_injuries':
       return (record.injuries?.flips || []).map(
         (f) => `${f.subjectName || f.name || 'a model'} — ${f.result?.attaches ? f.result.name : 'no injury'}`

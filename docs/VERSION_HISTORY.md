@@ -4546,3 +4546,87 @@ RESOLVED: the reported Skl 5; and a guessed row can be corrected after placing.
 UNVERIFIED: still DOM-read, not seen — the pane's screenshot capture goes black
 past the first viewport on this page. The totem branch remains untried.
 NEXT: the aftermath hand (item 0b, second bullet). Then M3, then L2.
+
+---
+
+### Session 47 — v0.22.6
+Date: 2026-09-05
+
+**feat: Dr. Mo's injuries are applied, and everyone at three is carried off**
+
+Chosen over the crew builder and the aftermath hand because it is a live
+arithmetic bug in games being played now, and this project's rule is that a
+wrong number is worse than a crash because nobody notices it.
+
+**The doctor never wrote the injuries he inflicts.** Two of the seven results
+heal an injury and hand the patient another (the 9); the black joker hands one
+over for nothing. `onAttempt` spent the scrip and healed, and stopped there — so
+the ledger printed "healed, then hurt" over an arsenal that had merely healed,
+and the crew was quietly a little healthier than the book allows.
+
+The screen's standing advice was worse than nothing: it told the player to flip
+on the injury chart "for the same model in phase six and record it there".
+Phase 6 flips only for models **killed during the game**, so a patient who
+survived Dr. Mo has no row there to write in. The instruction could not be
+followed in the ordinary case.
+
+So the follow-up flip is taken on the doctor's own screen, and the attempt
+cannot be committed until it lands on a result that attaches. Three rules in
+`resolveDoctorInjury`:
+
+- **Anything that does not injure goes back.** p.33: "flip on the injury chart
+  and reflip any jokers or other results that do not give the model an injury
+  (including being killed off)." That is exactly what `resolveInjuryFlip`
+  already computes as `attaches`, so this wraps it instead of restating the
+  table — and the per-model reflip conditions fold into the same rule rather
+  than sitting beside it, so the two can never disagree.
+- **A duplicate goes back too.** "The model got lucky and suffers no injury" is
+  the *injury phase's* rule; the doctor's own sentence says to throw back
+  anything that does not injure, and a result the model already carries does
+  not. The stricter reading is also the one that keeps "Oops?" a punishment.
+- **It is not cheatable**, and could not matter if it were — both jokers are
+  reflipped here, and they are the only results `cheated` changes. Which is
+  `FlipInput`'s own rule: ask for it only where it decides something.
+
+**Then the hole that opened, which had been there all along.** p.36: "After
+flipping for injuries, **all** models with three or more injury upgrades
+attached are annihilated" — and the paragraph directly above it makes the point
+on purpose, naming a model that gained an injury "in some other manner (such as
+from the Mutagen Injector equipment in the middle of a game)" and survives until
+exactly this check.
+
+`PhaseInjuries` counted only the subjects it had flipped for, and worse, closed
+the aftermath with `onFinish([])` outright when nobody had died. So a model Dr.
+Mo pushed to three simply walked away. It is now `doomedSubjects` over the whole
+live crew, grouped by title so two copies of one model are one subject, and the
+nobody-died branch runs the check like every other.
+
+Recording the doctor's injuries is what made that reachable rather than
+theoretical. **A rule that is never exercised cannot be observed to be wrong** —
+the same shape as v0.21.1's "a green suite says nothing about a path no test
+walks", one level up.
+
+Verified in the browser on a seeded crew: Aunty Mel carrying two injuries, five
+scrip, nobody killed in the game. A 9 healed Senseless and demanded a flip;
+Killed Off, Just a Flesh Wound and a duplicate Leadfooted were each thrown back
+with their reason and the button stayed disabled; Severe Amputation stuck. A
+black joker on Leadfooted then added Pack Mule for nothing, taking her to three.
+Phase 6 said "Nobody died. There is nothing to flip for" **and** listed her as
+too hurt to go on, and closing the aftermath set `annihilated` on her row.
+Scrip went 5 → 4 → 3. The ledger names the injury he gave, and so does the
+revision warning.
+
+Files: `src/lib/aftermath.js`, `src/lib/aftermath.test.js`,
+`src/components/aftermath/PhaseDoctor.jsx`,
+`src/components/aftermath/PhaseInjuries.jsx`, `src/components/Aftermath.jsx`,
+`src/lib/rewind.js`, `src/lib/rewind.test.js`, `CLAUDE.md`, `package.json`,
+`docs/VERSION_HISTORY.md`
+RESOLVED: the Known-issue bullet on `addsInjury`, retired from CLAUDE.md; and
+the annihilation check now covers the crew rather than the casualty list.
+UNVERIFIED: `grantsCharacteristic` (Undead / Construct on the 10 and 11) is
+still shown and not applied — models carry no characteristics field, which the
+note on screen says plainly. The doctor's flipped red joker still only *tells*
+you to flip on Lucky Miss; no Lucky Miss result is persisted anywhere in the
+app, in either phase, so that stays consistent rather than half-done.
+NEXT: the aftermath hand (item 0b, second bullet), then the crew builder. M3,
+L1, L2, L3 still open.

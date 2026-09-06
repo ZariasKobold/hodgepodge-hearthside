@@ -369,7 +369,24 @@ export default function Aftermath({
           onAttempt={(attempt) => {
             actions.spendScrip(1)
             if (attempt.outcome.heals) actions.healInjury(attempt.injuryId)
-            patch({ doctor: { attempts: [...(a.doctor.attempts || []), attempt] } })
+            /**
+             * The injury he gives in exchange, which until v0.22.6 was shown on
+             * screen and never written — so the ledger read "healed, then hurt"
+             * over an arsenal that had only healed. `addedRowId` is the id
+             * `rewind.js` already looks for to take it back off again.
+             */
+            let addedRowId = null
+            if (attempt.hurt) {
+              addedRowId = uid('inj')
+              actions.addInjury({
+                id: addedRowId,
+                name: attempt.hurt.name,
+                page: attempt.hurt.page,
+                modelId: attempt.isLeader ? null : attempt.modelId,
+                titleGroup: attempt.titleGroup,
+              })
+            }
+            patch({ doctor: { attempts: [...(a.doctor.attempts || []), { ...attempt, addedRowId }] } })
           }}
           onDone={advance}
         />

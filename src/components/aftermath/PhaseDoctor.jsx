@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { Label, Field, Button, Select } from '../ui.jsx'
 import HankSays from '../HankSays.jsx'
-import FlipInput from '../FlipInput.jsx'
+import FlipInput, { isJoker } from '../FlipInput.jsx'
 import { healGreeting, healed, healCantAfford } from '../../data/hank.js'
-import { doctorOutcome, doctorAffordable, DOCTOR_FEE_PER_ATTEMPT } from '../../lib/aftermath.js'
+import {
+  doctorOutcome, doctorAffordable, resolveDoctorInjury, DOCTOR_FEE_PER_ATTEMPT,
+} from '../../lib/aftermath.js'
 import {
   injuriesFor, liveModels, activeInjuryCount,
 } from '../../lib/shape/arsenal.js'
@@ -17,6 +19,20 @@ import {
  *
  * Two of the seven results heal an injury and hand you another one; one hands
  * you an injury for nothing. That is the deal, and the flip may be cheated.
+ *
+ * ## The injury he inflicts is taken here, not somewhere else
+ *
+ * Until v0.22.6 the screen told the player to "flip on the injury chart for the
+ * same model in phase six and record it there", and the arsenal recorded only
+ * the healing — so the ledger said "healed, then hurt" over a record that had
+ * merely healed. The instruction was also usually impossible: phase 6 flips
+ * only for models **killed during the game**, so a patient who survived has no
+ * row there to write in.
+ *
+ * So the follow-up flip happens on this screen, and the attempt cannot be
+ * committed until it lands on a result that actually attaches (p.33 — reflip
+ * anything that does not). Nothing about that flip is cheatable; see
+ * `resolveDoctorInjury`.
  */
 
 /** Every injured subject in the crew, leader included, as one list. */
@@ -49,9 +65,9 @@ function Ledger({ attempts }) {
             <span>{a.injuryName} — {a.outcome.name}</span>
             <span className="hire__paid">
               {a.outcome.net === 'healed' ? 'healed'
-                : a.outcome.net === 'traded' ? 'healed, then hurt'
-                : a.outcome.net === 'worse' ? 'made worse'
-                : 'nothing'}
+                : a.outcome.net === 'traded' ? `healed, then ${a.hurt?.name || 'hurt'}`
+                  : a.outcome.net === 'worse' ? (a.hurt?.name || 'made worse')
+                    : 'nothing'}
             </span>
           </li>
         ))}
@@ -67,14 +83,42 @@ export default function PhaseDoctor({ week, arsenal, leader, record, onAttempt, 
 
   const [pick, setPick] = useState({ subject: '', injuryId: '' })
   const [flip, setFlip] = useState({ value: null, suit: null, cheated: false })
+  /** The second flip, for the two results that hand out an injury. */
+  const [hurt, setHurt] = useState({ value: null, suit: null })
 
   const subject = subjects.find((s) => s.key === pick.subject) || null
   const injury = subject?.injuries.find((i) => i.id === pick.injuryId) || null
   const canPay = doctorAffordable(arsenal.scrip)
   const outcome = flip.value != null ? doctorOutcome(flip.value) : null
 
+  /**
+   * What the patient already carries, so a result they have is thrown back and
+   * a result their kind cannot take is too. The same facts `PhaseInjuries`
+   * assembles, from the same place.
+   */
+  const patient = subject
+    ? {
+      isLeader: Boolean(subject.isLeader),
+      isTotem: false,
+      injuryNames: subject.injuries.map((i) => i.name),
+    }
+    : {}
+
+  const wounds = Boolean(outcome?.addsInjury)
+  const hurtResult = wounds && hurt.value != null
+    ? resolveDoctorInjury(hurt.value, hurt.suit, patient)
+    : null
+  const hurtNeedsSuit = hurt.value != null && !isJoker(hurt.value) && !hurt.suit
+  const hurtReady = !wounds || Boolean(hurtResult?.attaches)
+
+  function reset() {
+    setPick({ subject: '', injuryId: '' })
+    setFlip({ value: null, suit: null, cheated: false })
+    setHurt({ value: null, suit: null })
+  }
+
   function commit() {
-    if (!injury || !outcome || !canPay) return
+    if (!injury || !outcome || !canPay || !hurtReady) return
     onAttempt({
       subjectKey: subject.key,
       isLeader: Boolean(subject.isLeader),
@@ -85,9 +129,12 @@ export default function PhaseDoctor({ week, arsenal, leader, record, onAttempt, 
       flip: flip.value,
       cheated: flip.cheated,
       outcome,
+      /** The injury he gave in exchange, if he gave one. */
+      hurt: hurtResult
+        ? { value: hurt.value, suit: hurt.suit, name: hurtResult.name, page: hurtResult.page }
+        : null,
     })
-    setPick({ subject: '', injuryId: '' })
-    setFlip({ value: null, suit: null, cheated: false })
+    reset()
   }
 
   /**
@@ -126,7 +173,8 @@ export default function PhaseDoctor({ week, arsenal, leader, record, onAttempt, 
         <strong>{DOCTOR_FEE_PER_ATTEMPT} scrip per attempt, kept either way.</strong>{' '}
         The flip decides what he manages; the fee is for showing up. Two results
         heal the injury and give a new one, and the black joker gives one for
-        nothing. The flip may be cheated from your aftermath hand.
+        nothing — you flip for that injury here and it is attached here. His
+        flip may be cheated from your aftermath hand; the injury flip may not.
       </p>
 
       {attempts.length > 0 && <Ledger attempts={attempts} />}
@@ -179,9 +227,9 @@ export default function PhaseDoctor({ week, arsenal, leader, record, onAttempt, 
             <span className="hire__adj">p.{outcome.page}</span>
             <span className="hire__total">
               {outcome.net === 'healed' ? 'healed'
-                : outcome.net === 'traded' ? 'healed, and a new injury'
-                : outcome.net === 'worse' ? 'a new injury'
-                : 'no change'}
+                : outcome.net === 'traded' ? `healed, and ${hurtResult?.attaches ? hurtResult.name : 'a new injury'}`
+                : outcome.net === 'worse' ? (hurtResult?.attaches ? hurtResult.name : 'a new injury')
+                  : 'no change'}
             </span>
           </div>
         )}
@@ -194,12 +242,32 @@ export default function PhaseDoctor({ week, arsenal, leader, record, onAttempt, 
           </p>
         )}
 
-        {outcome?.addsInjury && (
-          <p className="note note--warn">
-            This one costs an injury too. Flip on the injury chart for the same
-            model in phase six and record it there, rerolling jokers and anything
-            that does not actually injure.
-          </p>
+        {wounds && (
+          <Field>
+            <Label>The injury it costs — flip on the injury chart (p.34)</Label>
+            <FlipInput
+              label={`What did ${subject?.label || 'the patient'} flip?`}
+              value={hurt.value}
+              suit={hurt.suit}
+              onChange={(next) => setHurt({ value: next.value, suit: next.suit })}
+              needsCheated={false}
+            />
+            <p className="gap-note">
+              <strong>Anything that does not injure goes back.</strong> p.33 says
+              to reflip jokers and any result that does not give the model an
+              injury, killed off included — so this one keeps asking until it
+              lands on something that attaches. It is the one flip here you may
+              not cheat.
+            </p>
+            {hurtNeedsSuit && <p className="note">Which suit?</p>}
+            {hurtResult && (
+              <p className={hurtResult.attaches ? 'note' : 'note note--warn'}>
+                {hurtResult.attaches
+                  ? `${hurtResult.name} · p.${hurtResult.page} — this one sticks.`
+                  : `${hurtResult.name} — flip again, ${hurtResult.reflipWhy}.`}
+              </p>
+            )}
+          </Field>
         )}
 
         {outcome?.luckyMiss === 'ifFlipped' && !flip.cheated && (
@@ -209,8 +277,10 @@ export default function PhaseDoctor({ week, arsenal, leader, record, onAttempt, 
           </p>
         )}
 
-        <Button onClick={commit} disabled={!injury || !outcome || !canPay}>
-          Pay {DOCTOR_FEE_PER_ATTEMPT} scrip and apply
+        <Button onClick={commit} disabled={!injury || !outcome || !canPay || !hurtReady}>
+          {wounds && !hurtReady
+            ? 'Flip for the injury first'
+            : `Pay ${DOCTOR_FEE_PER_ATTEMPT} scrip and apply`}
         </Button>
       </div>
 

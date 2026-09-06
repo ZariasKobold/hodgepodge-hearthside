@@ -3,10 +3,12 @@ import { Label, Field, Button } from '../ui.jsx'
 import HankSays from '../HankSays.jsx'
 import FlipInput, { isJoker } from '../FlipInput.jsx'
 import { injuryLine, annihilationLine, miraculousRecovery, leaderLost } from '../../data/hank.js'
-import { resolveInjuryFlip, resolveLuckyMiss, ANNIHILATION_THRESHOLD } from '../../lib/aftermath.js'
+import {
+  resolveInjuryFlip, resolveLuckyMiss, doomedSubjects, ANNIHILATION_THRESHOLD,
+} from '../../lib/aftermath.js'
 import { REFLIP_REASONS } from '../../data/injuries.js'
 import {
-  injuryNamesFor, injuriesFor,
+  injuryNamesFor, injuriesFor, liveModels,
 } from '../../lib/shape/arsenal.js'
 /**
  * Phase 6 — one flip per model that died, and the only phase a forfeited
@@ -93,29 +95,84 @@ export default function PhaseInjuries({
 
   /* ── the end-of-phase check ───────────────────────────────────── */
 
-  const counts = {}
-  for (const s of subjects) {
-    const list = s.isLeader
-      ? injuriesFor(arsenal, {})
-      : injuriesFor(arsenal, s.model?.titleGroup ? { titleGroup: s.model.titleGroup } : { modelId: s.key })
-    counts[s.key] = list.length
-  }
-  const overThreshold = subjects.filter((s) => counts[s.key] >= ANNIHILATION_THRESHOLD)
-  const killedOff = flips.filter((f) => f.result?.annihilates)
-  const doomed = [
-    ...overThreshold,
-    ...killedOff
-      .filter((f) => !overThreshold.some((s) => s.key === f.subjectKey))
-      .map((f) => ({ key: f.subjectKey, name: f.subjectName, isLeader: f.isLeader })),
+  /**
+   * **Everyone**, not only the models that flipped.
+   *
+   * p.36: "After flipping for injuries, all models with three or more injury
+   * upgrades attached are annihilated" — and the paragraph above it says so
+   * deliberately, naming a model that gained an injury "in some other manner
+   * (such as from the Mutagen Injector equipment in the middle of a game)" and
+   * survives until exactly this check. This used to count only `subjects`, so a
+   * model that reached three by any other route walked away. Dr. Mo is the
+   * common route and his injuries have been recorded since v0.22.6, which is
+   * what made the hole reachable rather than theoretical.
+   *
+   * Grouped by title the way `injuriesFor` groups them, so two copies of one
+   * model are one subject and are not counted twice.
+   */
+  const everyone = [
+    { key: 'leader', name: leader.name || 'Your leader', isLeader: true },
+    ...(() => {
+      const seen = new Set()
+      return liveModels(arsenal).filter((m) => {
+        if (!m.titleGroup) return true
+        if (seen.has(m.titleGroup)) return false
+        seen.add(m.titleGroup)
+        return true
+      })
+    })().map((m) => ({ key: m.id, name: m.name, model: m })),
   ]
+
+  const countFor = (s) => (s.isLeader
+    ? injuriesFor(arsenal, {})
+    : injuriesFor(arsenal, s.model?.titleGroup ? { titleGroup: s.model.titleGroup } : { modelId: s.key })
+  ).length
+
+  const killedOffKeys = flips.filter((f) => f.result?.annihilates).map((f) => f.subjectKey)
+  const doomed = doomedSubjects(everyone, countFor, killedOffKeys)
   const leaderDoomed = doomed.some((d) => d.isLeader)
   const anyInjured = flips.some((f) => f.result?.attaches)
 
+  /**
+   * Nobody died — which is not the same as nobody being annihilated.
+   *
+   * This branch used to close the aftermath with `onFinish([])`, skipping the
+   * end-of-phase check altogether. p.36 puts no condition on that check: "after
+   * flipping for injuries, all models with three or more injury upgrades
+   * attached are annihilated", and a crew where nobody fell can still contain
+   * someone Dr. Mo pushed to three a minute ago. So there is nothing to *flip*
+   * for, and there may still be someone to carry off.
+   */
   if (subjects.length === 0) {
     return (
       <>
         <p className="note">Nobody died. There is nothing to flip for.</p>
-        <Button onClick={() => onFinish([])}>Close the aftermath</Button>
+        {doomed.length > 0 && (
+          <Field>
+            <Label>Still too hurt to go on</Label>
+            <ul className="hire__list">
+              {doomed.map((d) => (
+                <li key={d.key}>
+                  <span>{d.name}</span>
+                  <span className="hire__paid">
+                    {d.isLeader && !leader.miraculousRecoveryUsed
+                      ? 'Fate intervenes — the first time only'
+                      : `${ANNIHILATION_THRESHOLD} injuries — annihilated`}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </Field>
+        )}
+        {leaderDoomed && (
+          <HankSays tone="grave">
+            {leader.miraculousRecoveryUsed ? leaderLost({ week }) : miraculousRecovery({ week })}
+          </HankSays>
+        )}
+        {doomed.length > 0 && !leaderDoomed && (
+          <HankSays tone="grave">{annihilationLine({ isLeader: false, week })}</HankSays>
+        )}
+        <Button onClick={() => onFinish(doomed)}>Close the aftermath</Button>
       </>
     )
   }
@@ -249,7 +306,7 @@ export default function PhaseInjuries({
             <Label>End of the phase — who is too hurt to go on</Label>
             {doomed.length === 0 ? (
               <p className="note">
-                Everyone who fell is still in the arsenal. Nobody reached{' '}
+                Everyone is still in the arsenal. Nobody in the crew is carrying{' '}
                 {ANNIHILATION_THRESHOLD} injuries.
               </p>
             ) : (

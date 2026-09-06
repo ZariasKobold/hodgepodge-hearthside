@@ -302,6 +302,35 @@ describe('unwinding the arsenal', () => {
     expect(out.leader.advancements.map((x) => x.id)).toEqual(['adv_1'])
   })
 
+  /* Two of Dr. Mo's seven results heal one injury and attach another. Undoing
+     has to put the first back and take the second off — and it was already
+     written to look for `addedRowId` before anything ever wrote one. */
+  it('takes back the injury the doctor gave and restores the one he healed', () => {
+    const a = arsenal({
+      scrip: 0,
+      injuries: [
+        { id: 'inj_1', name: 'Senseless', removedAt: 123 },
+        { id: 'inj_2', name: 'Leadfooted' },
+      ],
+    })
+    const rec = createAftermath({
+      doctor: {
+        attempts: [{
+          injuryId: 'inj_1',
+          injuryName: 'Senseless',
+          outcome: { name: '“How many fingers do you need?”', heals: true, addsInjury: true, net: 'traded' },
+          hurt: { name: 'Leadfooted', page: 35 },
+          addedRowId: 'inj_2',
+        }],
+      },
+    })
+    const out = unwindArsenal(a, rec, ['back_alley_doctor'], { order: ORDER })
+
+    expect(out.scrip).toBe(1)
+    expect(out.injuries.map((i) => i.id)).toEqual(['inj_1'])
+    expect(out.injuries[0].removedAt).toBe(null)
+  })
+
   it('removes a totem that came off the tier-3 table', () => {
     const a = arsenal({ totem: { name: 'Wisp', advancements: [] } })
     const rec = createAftermath({

@@ -30,7 +30,9 @@ import {
 } from './campaign.js'
 import { EXPERIENCE_BOXES, tablesForTier } from '../data/advancements.js'
 import { barterOffer, thirstOffer } from '../data/equipment.js'
-import { injuryResult, luckyMissResult, doctorResult } from '../data/injuries.js'
+import {
+  injuryResult, luckyMissResult, doctorResult, REFLIP_REASONS,
+} from '../data/injuries.js'
 
 export { AFTERMATH_PHASES, ANNIHILATION_THRESHOLD, DOCTOR_FEE_PER_ATTEMPT }
 
@@ -263,6 +265,51 @@ export function doctorAffordable(scrip) {
   return scrip >= DOCTOR_FEE_PER_ATTEMPT
 }
 
+/**
+ * The injury two of the doctor's results hand out, resolved.
+ *
+ * p. 33, on the black joker and on the 9: *"flip on the injury chart and
+ * reflip any jokers or other results that do not give the model an injury
+ * (including being killed off)."* So the reflip rule here is stricter than the
+ * injury phase's and simpler to state: **anything that does not attach an
+ * injury is thrown back.** `resolveInjuryFlip` already computes exactly that as
+ * `attaches`, which is why this wraps it rather than restating the table.
+ *
+ * That subsumes the per-model conditions too. A leader who flips Headstrong has
+ * a result that does not injure them, so it goes back either way — one rule
+ * instead of two, and no chance of the two disagreeing.
+ *
+ * **Not cheatable.** The book grants a cheat on the doctor's own flip and says
+ * nothing about this one, and `cheated` could not change the answer regardless:
+ * both jokers are reflipped here, and they are the only results it affects
+ * (`FlipInput`, which asks for it solely where it decides something).
+ *
+ * A duplicate counts as a reflip. "The model got lucky and suffers no injury"
+ * is the *injury phase's* rule; the doctor's own sentence says to throw back
+ * anything that does not injure, and a result the model already carries does
+ * not. The stricter reading is also the one that keeps "Oops?" a punishment.
+ */
+export function resolveDoctorInjury(value, suit, model = {}) {
+  const out = resolveInjuryFlip(value, suit, model, { cheated: false })
+  if (!out) return null
+  return {
+    ...out,
+    /** Never annihilates: the doctor's flip is looking for an injury, and
+        "killed off" is named in the book as a result to throw back. */
+    annihilates: false,
+    luckyMiss: false,
+    reflip: !out.attaches,
+    reflipWhy: out.attaches ? null : whyNoInjury(out),
+  }
+}
+
+function whyNoInjury(out) {
+  if (out.reflip) return REFLIP_REASONS[out.reflipIf] || 'this model cannot take that result'
+  if (out.duplicate) return 'this model already has that injury'
+  if (out.annihilates) return 'killed off is not an injury'
+  return 'that result does not attach an injury'
+}
+
 /* ── phase 6 — determine injuries ───────────────────────────────── */
 
 /**
@@ -335,6 +382,32 @@ export function annihilatedAfterInjuries(counts) {
   return Object.entries(counts)
     .filter(([, n]) => n >= ANNIHILATION_THRESHOLD)
     .map(([id]) => id)
+}
+
+/**
+ * Everyone the end of phase 6 carries off, which is **not** only the models
+ * that flipped.
+ *
+ * p. 36: *"After flipping for injuries, all models with three or more injury
+ * upgrades attached are annihilated."* All models. The paragraph directly above
+ * it makes the point on purpose — a model that gained an injury "in some other
+ * manner (such as from the Mutagen Injector equipment in the middle of a game)"
+ * is not annihilated then, it is annihilated *here*.
+ *
+ * The screen used to count only the subjects it had flipped for, so a model
+ * that reached three by any other route walked away. Dr. Mo is the common
+ * route: two of his seven results hand out an injury, and until v0.22.6 the app
+ * did not even record those — fixing that is what made this reachable.
+ *
+ * Takes counts already computed by the caller, because "how many injuries does
+ * this subject have" needs the arsenal's grouping rules (`injuriesFor`) and
+ * those live in `shape/arsenal.js`, which this module must not import.
+ */
+export function doomedSubjects(subjects, injuryCountFor, killedOffKeys = []) {
+  const killed = new Set(killedOffKeys)
+  return subjects.filter(
+    (s) => killed.has(s.key) || injuryCountFor(s) >= ANNIHILATION_THRESHOLD
+  )
 }
 
 /* ── the walk ───────────────────────────────────────────────────── */
