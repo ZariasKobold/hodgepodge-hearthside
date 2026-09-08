@@ -1,12 +1,12 @@
 # CLAUDE.md — Hodgepodge Hearthside project context
 
-<!-- HH v0.22.1 | Last updated: 2026-09-05 -->
+<!-- HH v0.23.0 | Last updated: 2026-09-08 -->
 
 ---
 
-## Current Version: 0.22.6
+## Current Version: 0.23.0
 
-## Last Updated: 2026-09-05
+## Last Updated: 2026-09-08
 
 **Live at hodgepodgehearthside.com** (Cloudflare Pages, auto-deploys on push to
 `main`). Repo: `ZariasKobold/hodgepodge-hearthside`.
@@ -140,7 +140,79 @@ aftermath. Shipped and live:
 | **The service worker** | v0.19.3. It cached Pages' SPA fallback under asset URLs, so a browser that loaded mid-deploy got a **permanent white screen** no reload could clear. Live since v0.14.0, observed in production on 2026-09-03. Two guards now — never write HTML under a non-navigation request, never serve it either — plus a cache-version bump that purges anyone already poisoned. |
 | **Membership** | v0.17.0. Owner-issued single-use invites, two gates (redeem → pending → host admits), per-campaign nicknames, opt-in Discord identity, and a read-only shared arsenal page. Writes were **not** widened — see below. |
 
-570 tests.
+589 tests.
+
+### Unfinished business finds the player now — v0.23.0
+
+Two of this app's repairs shipped as a panel on the screen that fixes them, and
+both were invisible in practice. Checked against production on 2026-09-08:
+**not one arsenal on the database had ever been paid its starting scrip.** Every
+one of them was owed something, `startingScripGranted` was `null` or absent on
+all six, and a player had to ask in Discord why she was still short. The offer
+had been live since v0.19.1, on the **last step of the creation wizard** — a
+screen nobody returns to after building their leader.
+
+`src/lib/outstanding.js` + `OutstandingBar.jsx` invert that: the finding travels
+to the player, above every view. Rules that should not be undone:
+
+- **Nothing is stored and nothing is dismissible.** The whole list is derived on
+  every render. An item leaves because it was *fixed* — a dismissed warning and
+  a resolved one are indistinguishable a week later, and only one is true.
+- **It is `.gap-note`, never `<HankSays>`** (§5). One of these items is a defect
+  report, and somebody who turned the voice off still needs it.
+- **The things are named, never counted.** "3 items" is not something a player
+  can check against their own table; "Gatling Gun" is.
+- **`goToFix('creation')` lands on step 3 directly.** The step rail only jumps
+  *backwards* (`i < step`), so dropping somebody at step 0 and expecting four
+  Continue clicks is how the offer went unclaimed on every arsenal for six days.
+- **An arsenal nobody has started building is owed nothing.** `owedStartingScrip`
+  alone says 3 for an empty one — all 25 unspent, never reconciled — so the bar
+  greeted a brand-new leader with a claim about money. Gated on
+  `startingArsenalSpend > 0`. Found in the browser, first thing on the screen.
+- **The shelf half is not padding.** A player with two leaders would otherwise
+  have to *open* the second to be told it is owed scrip, which is the same "you
+  had to already be looking" failure the bar exists to end.
+
+### ⚠ An aftermath can be recorded and never reach the arsenal — UNDIAGNOSED
+
+Found on production on 2026-09-08, and it is the reason the bar checks the
+record against the arsenal at all. **This is a live defect with no fix in this
+version**, only detection.
+
+`ars_mt4kvlyi0dptdb` (Santa Muerte) walked one aftermath across two sittings six
+days apart. The payday landed — arsenal `updatedAt` 2026-09-02T14:54, scrip 1.
+Everything from the barter onward was done on 2026-09-08 between 17:31 and
+17:46, reached the **campaign** document (`version 16`, `updatedAt` 17:46:37)
+and never reached the **arsenal** document, whose content is still frozen at
+Sep 2 while its row was pushed to `version 7` that same minute. So the record
+says a Gatling Gun, three advancements and three experience boxes; the arsenal
+has `equipment: []`, `advancements: []`, `boxesChecked: 0`, and scrip 1 — which
+is the payday alone, un-decremented by a purchase that the record says happened.
+
+What is established, and what is not:
+
+- **Established:** the writers are correct (`buyEquipment`, `advanceLeader` in
+  `useCampaign.js`), they *are* wired (`Aftermath.jsx` `onBuy` / `onTake`), and
+  the same path worked end to end for `ars_msz7vwn6x9k64r` on 2026-09-05 —
+  equipment, advancements and boxes all match that record exactly. So it is not
+  simply broken for everyone.
+- **Established:** the barter's `rowId` and the advancements' `id`s were minted,
+  which means those handlers *ran*. Only the arsenal half of each is missing.
+- **Not established:** the mechanism. The suspects that were checked and cleared
+  are localStorage quota (23 KB doc), the dirty-flag prefix (shared by both
+  kinds, ids disambiguate), and a rewind (the record still holds everything).
+  The two still open are a pull overwriting a local edit without raising a
+  conflict, and a second signed-in device re-pushing a stale copy.
+- **Do not "fix" this by replaying the record forward** until the mechanism is
+  known. The record is the provenance (`lib/rewind.js`) and replaying it into an
+  arsenal that partly received it is how you double-apply an advancement.
+
+Related and probably the same family: `shelf.test.js:349` ("writes when the two
+say the same thing, whatever the flag claims") failed once in a full run on
+2026-09-08 and passed in isolation and on every rerun. That test exercises
+`sameInSubstance` against the v2→v3 lift, and `sameInSubstance` is exactly what
+decides whether a pull overwrites or conflicts. An intermittent false there
+would be a mechanism for the above.
 
 ### The book is on disk, and must not be committed
 
@@ -950,7 +1022,15 @@ with a real "you paid nothing" moment could use it.
 
 ### Known issues
 
-**High:** none currently.
+**High:**
+- **An aftermath can be recorded and never reach the arsenal.** Observed on
+  production 2026-09-08, mechanism undiagnosed — see the ⚠ section above for the
+  evidence and for the suspects already cleared. `OutstandingBar` now *detects*
+  it on any arsenal it happens to, which is the only part that shipped.
+- **Nothing puts a drifted aftermath back.** The record holds every effect, so
+  the data is recoverable in principle, but there is no route in the app and a
+  naive replay would double-apply anything that did land. The mechanism has to
+  be known first.
 
 ~~**Unresolved by design — conflicts need a person.**~~ **Built, v0.20.0.**
 `ConflictNotice` shows both copies in the player's own terms and offers keep

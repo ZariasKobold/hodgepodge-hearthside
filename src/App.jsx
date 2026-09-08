@@ -22,6 +22,8 @@ import ArsenalLibrary from './components/ArsenalLibrary.jsx'
 import Campaign from './components/steps/Campaign.jsx'
 import Arsenal from './components/steps/Arsenal.jsx'
 import ArsenalSheet from './components/ArsenalSheet.jsx'
+import OutstandingBar from './components/OutstandingBar.jsx'
+import { outstandingFor, outstandingAcross } from './lib/outstanding.js'
 import './styles/app.css'
 
 /** A stable case number, so the same leader always files under the same mark. */
@@ -212,6 +214,42 @@ export default function App() {
     return true
   }, [step, leader])
 
+  /**
+   * Unfinished business — scrip never paid, advancements with no target, an
+   * aftermath the arsenal never received. Derived on every render rather than
+   * stored, and see `lib/outstanding.js` for why none of it is dismissible.
+   *
+   * The shelf half is not padding. The player this was built for has two
+   * leaders and both were owed scrip; reporting only the open one would repeat
+   * the exact failure the bar exists to end.
+   */
+  const outstanding = useMemo(
+    () => outstandingFor({ arsenal, campaign }),
+    [arsenal, campaign]
+  )
+
+  const outstandingElsewhere = useMemo(
+    () => outstandingAcross(shelf.filter((e) => e.arsenal.id !== arsenal?.id)),
+    [shelf, arsenal]
+  )
+
+  /**
+   * Send the player to the screen that resolves an item.
+   *
+   * Creation lands on the Record step directly. The step rail only jumps
+   * *backwards* (`i < step`), so dropping somebody at step 0 and expecting
+   * them to walk four screens forward is how the starting-scrip offer stayed
+   * unclaimed on every arsenal for six days.
+   */
+  const goToFix = (where) => {
+    if (where === 'creation') {
+      setStep(3)
+      setView('create')
+    } else if (where === 'arsenal') {
+      setView('arsenal')
+    }
+  }
+
   const openCampaign = (id) => {
     open(id)
     setStep(3)
@@ -278,6 +316,18 @@ export default function App() {
             commit somebody is about to read out to you. */}
         <ErrorBoundary>
         {invite.status !== 'none' && <InviteBanner invite={invite} auth={auth} />}
+
+        {/* Above every view on purpose. The one thing that cannot be assumed
+            about somebody who is owed scrip is which screen they are on, and
+            both previous repairs shipped as a panel on a screen nobody
+            revisits. Renders nothing when there is nothing owed. */}
+        {admitted && (
+          <OutstandingBar
+            items={outstanding}
+            others={outstandingElsewhere}
+            onGo={goToFix}
+          />
+        )}
 
         {!admitted && <SignInGate auth={auth} />}
 

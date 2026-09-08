@@ -1,0 +1,243 @@
+/**
+ * What a leader still owes the player's attention.
+ *
+ * The app has grown several one-time repairs — starting scrip that was
+ * displayed for eighteen versions and never paid (v0.19.1), advancements
+ * recorded before anything asked which action they modified (v0.22.2) — and
+ * every one of them shipped as a panel on a screen. That is the mistake this
+ * module exists to stop repeating. A repair nobody can find is not a repair:
+ * the starting-scrip offer lives on the last step of the *creation* wizard, a
+ * screen nobody returns to after building their leader, and six days after it
+ * shipped not one arsenal on the database had been paid.
+ *
+ * So the finding moves to the player rather than waiting for the player to
+ * walk into it. Everything here is derived on every read, never stored and
+ * never dismissible — an item disappears because it was **fixed**, which is
+ * the only signal worth trusting. A dismissed warning and a resolved one look
+ * identical a week later, and only one of them is true.
+ *
+ * ## The aftermath record is the provenance
+ *
+ * `lib/rewind.js` already leans on the fact that every arsenal effect the
+ * aftermath applies is named in the record it wrote — `bought` names the
+ * equipment, `taken` the advancements, `boxesApplied` the experience. That is
+ * what makes going backwards possible, and it makes this possible too: the
+ * record says what should be true of the arsenal, so anything the record
+ * claims and the arsenal lacks is drift, and drift is worth saying out loud.
+ *
+ * It is not hypothetical. A player finished one aftermath across two sittings
+ * six days apart; the barter purchase and all three advancements reached the
+ * *game record* and none of them reached the arsenal, so her leader's card was
+ * missing an action she had earned and her sheet omitted equipment she had
+ * paid for. Nothing in the app said a word, because nothing was looking.
+ *
+ * Every drift check is deliberately **one-sided**: it reports what the record
+ * has and the arsenal lacks, never the reverse. An arsenal may legitimately
+ * hold things no record mentions — a hand-built starting arsenal, anything
+ * from before the record carried ids — and calling those "extra" would be the
+ * app being confidently wrong about weeks it did not witness.
+ */
+
+import { owedStartingScrip, startingArsenalSpend } from './shape/arsenal.js'
+import { advancementsToRepair } from './advancement.js'
+
+/**
+ * Advancements the record says were taken and the leader does not have.
+ *
+ * **Matched by id, and entries without one are skipped rather than guessed
+ * at.** `uid('adv')` arrived in v0.22.2; everything older is id-less, and
+ * matching those by name would report a leader who has one "Skill Boost" as
+ * missing the second "Skill Boost" they also took. A missed drift is a bar
+ * that stays quiet; an invented one sends somebody hunting a bug that is not
+ * there, and the second costs more than the first.
+ */
+function missingAdvancements(arsenal, records) {
+  const held = new Set()
+  for (const a of arsenal?.leader?.advancements || []) if (a.id) held.add(a.id)
+  for (const a of arsenal?.totem?.advancements || []) if (a.id) held.add(a.id)
+  for (const a of arsenal?.crewCardAdvancements || []) if (a.id) held.add(a.id)
+
+  const missing = []
+  for (const r of records) {
+    for (const t of r.advance?.taken || []) {
+      // A totem taken off the tier-3 table is the crew gaining a totem, not an
+      // advancement on anybody — `Aftermath.jsx` sends it to `setTotem`, so
+      // there is no entry to look for and its absence proves nothing.
+      if (t.tableId === 'totem') continue
+      if (!t.id || held.has(t.id)) continue
+      missing.push(t)
+    }
+  }
+  return missing
+}
+
+/**
+ * Equipment the record says was bought and the arsenal does not hold.
+ *
+ * `rowId` has been minted by the barter phase since v0.22.0 precisely so a
+ * purchase names the row it created, and nothing in the app removes an
+ * equipment row except a rewind — which clears the record in the same breath.
+ * So a purchase still named by a record whose row has gone is drift.
+ */
+function missingEquipment(arsenal, records) {
+  const held = new Set((arsenal?.equipment || []).map((e) => e.id).filter(Boolean))
+  const missing = []
+  for (const r of records) {
+    for (const b of r.barter?.bought || []) {
+      if (!b.rowId || held.has(b.rowId)) continue
+      missing.push(b)
+    }
+  }
+  return missing
+}
+
+/**
+ * Experience boxes the records account for that the track has not been crossed
+ * for.
+ *
+ * One-sided, and it has to be: `boxesApplied` only exists on records written
+ * since v0.22.0, while `boxesChecked` accumulates over every game ever played.
+ * Comparing the two as equals would report every leader with older history as
+ * short. Only a track holding *fewer* boxes than the records already claim is
+ * evidence of anything.
+ */
+function boxShortfall(arsenal, records) {
+  let claimed = 0
+  for (const r of records) {
+    if (!r.advance?.applied) continue
+    if (typeof r.advance.boxesApplied !== 'number') continue
+    claimed += r.advance.boxesApplied
+  }
+  const checked = arsenal?.leader?.experience?.boxesChecked || 0
+  return Math.max(0, claimed - checked)
+}
+
+/** The aftermath records belonging to this arsenal. */
+function recordsFor(arsenal, campaign) {
+  return (campaign?.games || [])
+    .filter((g) => g.arsenalId === arsenal?.id && g.aftermath)
+    .map((g) => g.aftermath)
+}
+
+/** English for a list of names, so the bar can say what it actually found. */
+function nameList(names) {
+  if (names.length === 1) return names[0]
+  if (names.length === 2) return `${names[0]} and ${names[1]}`
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+}
+
+/**
+ * Everything outstanding on one arsenal, worst first.
+ *
+ * `where` names the screen that resolves the item, so the bar can offer a way
+ * there rather than describing one. `null` means there is nowhere to send
+ * anybody yet — which is a true and useful thing to say, and much better than
+ * a button that goes somewhere unhelpful.
+ */
+export function outstandingFor({ arsenal, campaign } = {}) {
+  if (!arsenal) return []
+  const items = []
+  const records = recordsFor(arsenal, campaign)
+
+  const advDrift = missingAdvancements(arsenal, records)
+  const eqpDrift = missingEquipment(arsenal, records)
+  const boxes = boxShortfall(arsenal, records)
+
+  if (advDrift.length || eqpDrift.length || boxes) {
+    // Joined with semicolons and each clause labelled, because the inner lists
+    // already spend the word "and" — running them together produced "Skill
+    // Boost, Cruel Lessons and Balanced Sword, Gatling Gun and 3 experience
+    // boxes", which reads as one list of five unrelated things.
+    const parts = []
+    if (advDrift.length) {
+      const names = nameList(advDrift.map((a) => a.name))
+      parts.push(`the advancement${advDrift.length === 1 ? '' : 's'} ${names}`)
+    }
+    if (eqpDrift.length) {
+      parts.push(`${nameList(eqpDrift.map((e) => e.name))} from the barter`)
+    }
+    if (boxes) parts.push(`${boxes} experience ${boxes === 1 ? 'box' : 'boxes'}`)
+    items.push({
+      id: 'aftermath-drift',
+      kind: 'aftermath-drift',
+      severity: 'high',
+      count: advDrift.length + eqpDrift.length + boxes,
+      title: 'An aftermath was recorded but never reached this leader',
+      detail: `The game record says you earned ${parts.join('; ')}. `
+        + 'None of it is on the arsenal, so the card, the sheet and the '
+        + 'campaign rating are all short.',
+      where: null,
+      // Deliberately empty: the detail above already names everything, and the
+      // bar prints `names` as a second list underneath.
+      names: [],
+    })
+  }
+
+  /**
+   * An arsenal nobody has started spending is not owed anything yet — it is
+   * being built right now.
+   *
+   * `owedStartingScrip` alone says 3, because an empty arsenal has all 25
+   * soulstones unspent and has never been reconciled. True, and useless: it
+   * fires the moment somebody clicks "build a new leader", so the very first
+   * thing a new player would see is the app telling them it owes them money
+   * for a leader they have not made. Caught in the browser, where it was the
+   * first thing on the screen. The grant is a fact about a *finished* starting
+   * arsenal, and there is no such thing until something has been bought.
+   */
+  const owed = startingArsenalSpend(arsenal) > 0 ? owedStartingScrip(arsenal) : 0
+  if (owed > 0) {
+    items.push({
+      id: 'starting-scrip',
+      kind: 'starting-scrip',
+      severity: 'medium',
+      count: owed,
+      title: `${owed} starting scrip you were never paid`,
+      detail: 'Each starting soulstone you chose not to spend becomes one '
+        + 'scrip, up to three (p. 15). The creation screen showed that number '
+        + 'for a long time without ever paying it in.',
+      where: 'creation',
+      names: [],
+    })
+  }
+
+  const toRepair = [
+    ...advancementsToRepair(arsenal.leader),
+    ...advancementsToRepair(arsenal.totem),
+  ]
+  if (toRepair.length) {
+    items.push({
+      id: 'unplaced-advancements',
+      kind: 'unplaced-advancements',
+      severity: 'medium',
+      count: toRepair.length,
+      title: toRepair.length === 1
+        ? 'An advancement does not say which action it changed'
+        : `${toRepair.length} advancements do not say which action they changed`,
+      detail: 'A tier-1 advancement modifies one chosen action (p. 31), and '
+        + 'until it names one, the record and the arsenal sheet cannot show '
+        + 'what it did.',
+      where: 'arsenal',
+      names: toRepair.map((a) => a.name),
+    })
+  }
+
+  return items
+}
+
+/**
+ * Outstanding items across the whole shelf, grouped by arsenal.
+ *
+ * The open leader is only one of them. A player with two leaders would
+ * otherwise have to *open* the second one to be told it is owed scrip, which
+ * is the same "you had to already be looking" failure this module exists to
+ * end — and the player it was written for has exactly two.
+ */
+export function outstandingAcross(entries = []) {
+  const groups = []
+  for (const e of entries) {
+    const items = outstandingFor(e)
+    if (items.length) groups.push({ arsenal: e.arsenal, items })
+  }
+  return groups
+}

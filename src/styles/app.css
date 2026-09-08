@@ -1485,3 +1485,28 @@ body::after {
   margin: 14px 0 8px;
   flex-wrap: wrap;
 }
+
+/* unfinished business ---------------------------------------------------
+   Sits above every view, because the whole point is that the player is not
+   already on the screen that fixes it. Built on `.gap-note` rather than on a
+   colour of its own: this is substance, it shows in both Hank modes (§5), and
+   it should read as the app being straight with you rather than as an alarm.
+
+   Not fixed-position. A bar that follows you down the page is an interruption,
+   and these items are not urgent in that sense — they have been true for days
+   and the campaign is safe meanwhile. It waits at the top like a note left on
+   the desk. */
+.outstanding { margin: 0 0 4px; }
+.outstanding__item { margin-bottom: 12px; }
+
+/* Only the drift item earns the ember edge. It is the one that says something
+   went wrong rather than something is unfinished, and if every item shouted,
+   none of them would. */
+.outstanding__item--high { border-color: var(--ember-deep); }
+
+.outstanding__names { color: var(--brass); }
+.outstanding__go { margin-top: 10px; }
+.outstanding__others { margin: 0 0 20px; }
+.outstanding__others strong { color: var(--brass); font-weight: 700; }
+
+@media print { .outstanding { display: none; } }

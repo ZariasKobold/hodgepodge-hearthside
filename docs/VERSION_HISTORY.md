@@ -4630,3 +4630,107 @@ you to flip on Lucky Miss; no Lucky Miss result is persisted anywhere in the
 app, in either phase, so that stays consistent rather than half-done.
 NEXT: the aftermath hand (item 0b, second bullet), then the crew builder. M3,
 L1, L2, L3 still open.
+
+---
+
+### Session 41 — v0.23.0
+Date: 2026-09-08
+
+**feat: unfinished business finds the player, instead of waiting to be found**
+
+Started as a question from the table — Madeline said she was still missing
+starting scrip — and the answer was that she was right, and so was everybody
+else. Checked against production rather than reasoned about: **not one arsenal
+on the database had ever been paid.** Five of the six were owed something (2, 2,
+1, 3 and 3), the sixth had spent all 25 and was owed nothing, and
+`startingScripGranted` was `null` or absent on every one. The offer had been
+live since v0.19.1.
+
+**The offer was reachable and nobody reached it.** It renders only at
+`view === 'create' && step === 3`, the last step of the *creation* wizard. That
+is two clicks from the shelf and four Continue presses from a cold load, and it
+is a screen nobody revisits after building their leader. This is the second time
+a repair has shipped where the fix lives rather than where the player is —
+`UnplacedAdvancements` was the first — so the pattern got a name and an
+inversion.
+
+**Key decisions and why:**
+
+- **Derived every render, stored nowhere, dismissible never.** An item leaves
+  the bar because it was *fixed*. A dismissal would let the bar and the truth
+  drift apart, and a dismissed warning is indistinguishable from a resolved one
+  a week later.
+- **`.gap-note`, not `<HankSays>`** (§5). One of the three items is a defect
+  report. Somebody who turned the voice off still needs to be told the app is
+  holding scrip it never paid them.
+- **Named, never counted.** "3 items" is not a thing a player can check against
+  their own table. The copy went through a browser pass for this: the first cut
+  ran the three clauses into one list and produced "Skill Boost, Cruel Lessons
+  and Balanced Sword, Gatling Gun and 3 experience boxes", which reads as five
+  unrelated things. Labelled clauses, joined with semicolons.
+- **An arsenal nobody has started building is owed nothing.** `owedStartingScrip`
+  says 3 for an empty one — 25 unspent, never reconciled — so the first cut
+  greeted a brand-new leader with a claim about money it owed them for a leader
+  they had not made. Caught in the browser as the first thing on the screen.
+  Gated on `startingArsenalSpend > 0`, with a test.
+- **The shelf half.** A player with two leaders would otherwise have to open the
+  second one to be told it is owed scrip. Madeline has exactly two, and both
+  were owed 2.
+
+**And a live defect the bar was widened to catch.**
+
+Reading her documents to answer the original question turned up something worse
+than unpaid scrip. `ars_mt4kvlyi0dptdb` walked one aftermath across two sittings
+six days apart. The payday reached the arsenal on 2026-09-02. The barter and all
+three advancements were done on 2026-09-08 between 17:31 and 17:46, reached the
+**campaign** document, and never reached the **arsenal** — whose content is
+still frozen at Sep 2 while its row was pushed to `version 7` that same minute.
+Her leader's card was missing an action she had earned, and her sheet omitted
+equipment she had paid for. Nothing in the app said a word.
+
+So the bar's third check compares the aftermath record against the arsenal. The
+record is already the provenance — `lib/rewind.js` goes backwards through it —
+which means it also says what *should* be true going forwards.
+
+Rules in that check:
+
+- **One-sided, always.** It reports what the record has and the arsenal lacks,
+  never the reverse. An arsenal legitimately holds things no record mentions.
+- **Matched by id; id-less entries are skipped, not guessed at.** `uid('adv')`
+  arrived in v0.22.2 and `rowId` in v0.22.0. Matching older entries by name
+  would report a leader holding one "Skill Boost" as missing the second one they
+  also took. An invented drift costs more than a missed one.
+- **Boxes compare one way too.** `boxesChecked` accumulates over every game ever
+  played while `boxesApplied` only exists since v0.22.0, so only a track holding
+  *fewer* boxes than the records claim is evidence of anything.
+- **The item offers no button.** There is nowhere to send anybody, and saying so
+  plainly beats a button that goes somewhere unhelpful.
+
+**The mechanism is not diagnosed and nothing was changed to chase it.** The
+writers are correct and are wired; the same path worked end to end for
+`ars_msz7vwn6x9k64r` on 2026-09-05 with equipment, advancements and boxes all
+matching. The `rowId` and advancement ids were minted, so the handlers ran and
+only the arsenal half went missing. Cleared: quota (a 23 KB document), the dirty
+prefix (shared by both kinds, ids disambiguate), and a rewind (the record is
+intact). Still open: a pull overwriting a local edit without raising a conflict,
+and a second signed-in device re-pushing a stale copy.
+
+Verified in a browser against her actual documents, seeded into localStorage:
+the drift item named all five things, the scrip item offered "Take me to it",
+the button landed on the Record step, "Credit 2 scrip" took the arsenal from 1
+to 3 with `startingScripGranted: 2` written through to storage, and the scrip
+item disappeared while the drift item stayed.
+
+Files: `src/lib/outstanding.js` (new), `src/lib/outstanding.test.js` (new, 19
+tests), `src/components/OutstandingBar.jsx` (new), `src/App.jsx`,
+`src/styles/app.css`, `CLAUDE.md`, `package.json`, `docs/VERSION_HISTORY.md`
+RESOLVED: the starting-scrip offer is now findable, and so is the advancement
+repair panel; both are reported wherever the player happens to be standing.
+UNVERIFIED: the drift detector has never fired on a *second* real case — it is
+built from one, and one is not a pattern. `shelf.test.js:349` failed once in a
+full run and passed in isolation and on every rerun; that test exercises
+`sameInSubstance`, which is what decides whether a pull overwrites or conflicts,
+so it may be the same family as the drift and is worth chasing first.
+NEXT: diagnose the drift before building any repair for it — a replay into an
+arsenal that partly received the record double-applies. Then the aftermath hand
+(item 0b), M3, L1, L2, L3.
