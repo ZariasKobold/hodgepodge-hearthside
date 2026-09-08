@@ -19,6 +19,7 @@ import {
 } from '../lib/shape/campaign.js'
 import { belongsTo, shouldRelease } from '../lib/shape/ownership.js'
 import { unwindArsenal } from '../lib/rewind.js'
+import { planRepair, repairPatch } from '../lib/repair.js'
 import { readBundle, refileForImport } from '../lib/shape/migrate.js'
 
 /**
@@ -332,6 +333,19 @@ export function useCampaign({ userId = null, userReady = true, onSaved, onArsena
     setArsenal((a) => startingScripPatch(a) || {})
   }, [setArsenal])
 
+  /**
+   * Put back what the v0.24.0 lost-update ate.
+   *
+   * A delta against the aftermath record, never a forward replay — the payday
+   * landed in the real case and everything after it did not, so replaying would
+   * pay it twice. See `lib/repair.js`. Offered rather than applied on load, for
+   * the same reason `creditStartingScrip` is: moving somebody's scrip without
+   * telling them is indistinguishable from the bug being repaired.
+   */
+  const repairAftermathDrift = useCallback(() => {
+    setArsenal((a) => repairPatch(a, planRepair({ arsenal: a, campaign })) || {})
+  }, [setArsenal, campaign])
+
   /* ── arsenal actions ──────────────────────────────────────────── */
 
   const addModel = useCallback((model, { scripPaid = 0 } = {}) => {
@@ -547,7 +561,7 @@ export function useCampaign({ userId = null, userReady = true, onSaved, onArsena
     // wizard adapter — same surface the step components already expect
     leader, set: setLeader, setPick,
     addModel, removeModel, spendScrip, earnScrip,
-    creditStartingScrip,
+    creditStartingScrip, repairAftermathDrift,
     owedStartingScrip: arsenal ? owedStartingScrip(arsenal) : 0,
     // games and the aftermath
     logGame, updateGame, removeGame,

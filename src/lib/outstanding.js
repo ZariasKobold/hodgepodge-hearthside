@@ -40,84 +40,7 @@
 
 import { owedStartingScrip, startingArsenalSpend } from './shape/arsenal.js'
 import { advancementsToRepair } from './advancement.js'
-
-/**
- * Advancements the record says were taken and the leader does not have.
- *
- * **Matched by id, and entries without one are skipped rather than guessed
- * at.** `uid('adv')` arrived in v0.22.2; everything older is id-less, and
- * matching those by name would report a leader who has one "Skill Boost" as
- * missing the second "Skill Boost" they also took. A missed drift is a bar
- * that stays quiet; an invented one sends somebody hunting a bug that is not
- * there, and the second costs more than the first.
- */
-function missingAdvancements(arsenal, records) {
-  const held = new Set()
-  for (const a of arsenal?.leader?.advancements || []) if (a.id) held.add(a.id)
-  for (const a of arsenal?.totem?.advancements || []) if (a.id) held.add(a.id)
-  for (const a of arsenal?.crewCardAdvancements || []) if (a.id) held.add(a.id)
-
-  const missing = []
-  for (const r of records) {
-    for (const t of r.advance?.taken || []) {
-      // A totem taken off the tier-3 table is the crew gaining a totem, not an
-      // advancement on anybody — `Aftermath.jsx` sends it to `setTotem`, so
-      // there is no entry to look for and its absence proves nothing.
-      if (t.tableId === 'totem') continue
-      if (!t.id || held.has(t.id)) continue
-      missing.push(t)
-    }
-  }
-  return missing
-}
-
-/**
- * Equipment the record says was bought and the arsenal does not hold.
- *
- * `rowId` has been minted by the barter phase since v0.22.0 precisely so a
- * purchase names the row it created, and nothing in the app removes an
- * equipment row except a rewind — which clears the record in the same breath.
- * So a purchase still named by a record whose row has gone is drift.
- */
-function missingEquipment(arsenal, records) {
-  const held = new Set((arsenal?.equipment || []).map((e) => e.id).filter(Boolean))
-  const missing = []
-  for (const r of records) {
-    for (const b of r.barter?.bought || []) {
-      if (!b.rowId || held.has(b.rowId)) continue
-      missing.push(b)
-    }
-  }
-  return missing
-}
-
-/**
- * Experience boxes the records account for that the track has not been crossed
- * for.
- *
- * One-sided, and it has to be: `boxesApplied` only exists on records written
- * since v0.22.0, while `boxesChecked` accumulates over every game ever played.
- * Comparing the two as equals would report every leader with older history as
- * short. Only a track holding *fewer* boxes than the records already claim is
- * evidence of anything.
- */
-function boxShortfall(arsenal, records) {
-  let claimed = 0
-  for (const r of records) {
-    if (!r.advance?.applied) continue
-    if (typeof r.advance.boxesApplied !== 'number') continue
-    claimed += r.advance.boxesApplied
-  }
-  const checked = arsenal?.leader?.experience?.boxesChecked || 0
-  return Math.max(0, claimed - checked)
-}
-
-/** The aftermath records belonging to this arsenal. */
-function recordsFor(arsenal, campaign) {
-  return (campaign?.games || [])
-    .filter((g) => g.arsenalId === arsenal?.id && g.aftermath)
-    .map((g) => g.aftermath)
-}
+import { aftermathDrift } from './repair.js'
 
 /** English for a list of names, so the bar can say what it actually found. */
 function nameList(names) {
@@ -137,11 +60,14 @@ function nameList(names) {
 export function outstandingFor({ arsenal, campaign } = {}) {
   if (!arsenal) return []
   const items = []
-  const records = recordsFor(arsenal, campaign)
-
-  const advDrift = missingAdvancements(arsenal, records)
-  const eqpDrift = missingEquipment(arsenal, records)
-  const boxes = boxShortfall(arsenal, records)
+  // One source of truth for "what is missing", shared with the repair that
+  // puts it back. Two implementations of that question would eventually answer
+  // it differently, and the failure mode is a bar that reports a loss the
+  // repair cannot find — or worse, the reverse.
+  const drift = aftermathDrift(arsenal, campaign)
+  const advDrift = drift.advancements.map((a) => a.entry)
+  const eqpDrift = drift.equipment.map((e) => e.bought)
+  const boxes = drift.boxes
 
   if (advDrift.length || eqpDrift.length || boxes) {
     // Joined with semicolons and each clause labelled, because the inner lists
@@ -165,8 +91,9 @@ export function outstandingFor({ arsenal, campaign } = {}) {
       title: 'An aftermath was recorded but never reached this leader',
       detail: `The game record says you earned ${parts.join('; ')}. `
         + 'None of it is on the arsenal, so the card, the sheet and the '
-        + 'campaign rating are all short.',
-      where: null,
+        + 'campaign rating are all short. Nothing is lost — the record still '
+        + 'holds all of it, and it can be put back.',
+      where: 'arsenal',
       // Deliberately empty: the detail above already names everything, and the
       // bar prints `names` as a second list underneath.
       names: [],

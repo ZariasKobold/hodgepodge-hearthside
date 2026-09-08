@@ -7,6 +7,7 @@ import {
 } from './migrate.js'
 import { createArsenal, createModel, STARTING_ARSENAL_WEEK, ARSENAL_SCHEMA_VERSION } from './arsenal.js'
 import { createCampaign, createParticipation, CAMPAIGN_SCHEMA_VERSION } from './campaign.js'
+import { sameInSubstance } from './compare.js'
 
 /**
  * A v2 campaign as it actually sits in localStorage today: the leader, the
@@ -361,5 +362,42 @@ describe('a lifted arsenal knows when it was last touched', () => {
     const doc = v2Campaign({ updatedAt: 111 })
     doc.arsenals[0].updatedAt = 222
     expect(splitLegacyCampaign(doc).arsenals[0].updatedAt).toBe(222)
+  })
+})
+
+/**
+ * The lift must be a pure function of its input.
+ *
+ * `sameInSubstance` compares `createdAt` — `canonical` drops only `updatedAt` —
+ * and it is what decides whether a pull may overwrite a local copy or has to
+ * raise a conflict. A lift that reached for `Date.now()` produced a different
+ * arsenal every time, so a v2 arsenal lifted on two devices could never be
+ * recognised as the same one.
+ */
+describe('the lift is deterministic', () => {
+  const v2 = () => ({
+    schemaVersion: 2,
+    id: 'cmp_x',
+    startedAt: 1700000000000,
+    arsenals: [{ id: 'ars_x', faction: 'guild', keywords: ['a', 'b'], models: [], leader: { name: 'X' } }],
+    games: [],
+  })
+
+  it('lifts the same document to the same arsenal twice', () => {
+    const a = migrateCampaign(v2()).arsenals[0]
+    const b = migrateCampaign(v2()).arsenals[0]
+    expect(a.createdAt).toBe(b.createdAt)
+    expect(sameInSubstance(a, b)).toBe(true)
+  })
+
+  it('takes createdAt from the campaign rather than the clock', () => {
+    const lifted = migrateCampaign(v2()).arsenals[0]
+    expect(lifted.createdAt).toBe(1700000000000)
+  })
+
+  it('keeps an arsenal that already knows when it was created', () => {
+    const doc = v2()
+    doc.arsenals[0].createdAt = 42
+    expect(migrateCampaign(doc).arsenals[0].createdAt).toBe(42)
   })
 })

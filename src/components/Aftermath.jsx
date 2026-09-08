@@ -14,6 +14,7 @@ import {
   weeksRemaining, isCampaignOver, gamesWon, gamesPlayed,
 } from '../lib/shape/campaign.js'
 import { isThirst } from '../data/equipment.js'
+import { summariseGame, summariseAftermath } from '../lib/aftermathHistory.js'
 import {
   playablePhases, phasePosition, previousPhase, revisionImpact,
   clearedRecord, describePhase, phaseHasWork, furthestReached,
@@ -614,26 +615,95 @@ function RevisionWarning({ name, impact, onCancel, onConfirm }) {
   )
 }
 
+/**
+ * Games already finished, and what was recorded in each.
+ *
+ * Two complaints from the same player, on the same afternoon, and they turned
+ * out to be one feature.
+ *
+ * **"It could use more of a separating header, because it's currently easy to
+ * miss."** This was a `<Field>` with a `<Label>`, which is the styling used for
+ * a form control's caption — so a list of everything you have ever played was
+ * dressed as the small print under an input, sitting directly beneath the game
+ * log it has nothing to do with. It is a section now, with a rule above it.
+ *
+ * **"It would be nice to have a read-only view, just in case you realize there
+ * is an issue."** A submitted aftermath locks, on purpose — reopening one is
+ * how edits start spanning several games. But locked and unreadable are not the
+ * same thing, and the app had conflated them: the only way to check what you
+ * had recorded was to photograph the screen before pressing the last button,
+ * which is what she had actually been doing. Every phase is legible here and
+ * none of it is editable.
+ *
+ * Collapsed by default, one open at a time. Twelve weeks of expanded records
+ * would bury the game log at the top of this screen, which is the thing
+ * somebody arriving mid-campaign came here to use.
+ */
 function History({ games }) {
+  const [openId, setOpenId] = useState(null)
+
   return (
-    <Field>
-      <Label>Games played</Label>
-      <ul className="hire__list">
-        {games.map((g) => (
-          <li key={g.id}>
-            <span>
-              Week {g.week}
-              {g.opponent ? ` · ${g.opponent}` : ''}
-              {g.strategy ? ` · ${g.strategy}` : ''}
-            </span>
-            <span className="hire__paid">
-              {g.result === 'win' ? 'won' : g.result === 'loss' ? 'lost' : g.result === 'draw' ? 'drew' : '—'}
-              {' · '}{g.vpSelf}–{g.vpOpponent}
-              {g.aftermath?.scripEarned ? ` · +${g.aftermath.scripEarned} scrip` : ''}
-            </span>
-          </li>
-        ))}
+    <section className="history">
+      <h2 className="history__head">Games played</h2>
+      <p className="note">
+        Finished aftermaths, exactly as they were recorded. Read-only — once an
+        aftermath is submitted it stays submitted.
+      </p>
+
+      <ul className="history__list">
+        {games.map((g) => {
+          const s = summariseGame(g)
+          const open = openId === g.id
+          return (
+            <li key={g.id} className="history__game">
+              <button
+                type="button"
+                className="history__row"
+                onClick={() => setOpenId(open ? null : g.id)}
+                aria-expanded={open}
+              >
+                <span className="history__when">
+                  Week {s.week}
+                  {s.opponent ? ` · ${s.opponent}` : ''}
+                  {s.strategy ? ` · ${s.strategy}` : ''}
+                </span>
+                <span className="history__result">
+                  {s.result || '—'}
+                  {s.vp ? ` · ${s.vp}` : ''}
+                  {s.scrip ? ` · +${s.scrip} scrip` : ''}
+                </span>
+                <span className="history__toggle">
+                  {open ? 'Hide' : 'What was recorded'}
+                </span>
+              </button>
+
+              {open && (
+                <div className="history__record">
+                  {summariseAftermath(g).map((p) => (
+                    <div key={p.id} className="history__phase">
+                      <Label>{p.n} · {p.name}</Label>
+                      {p.skipped ? (
+                        <p className="note">
+                          Forfeited — withdrew on or before turn two.
+                        </p>
+                      ) : p.lines.length ? (
+                        <ul className="history__lines">
+                          {p.lines.map((line, i) => <li key={i}>{line}</li>)}
+                        </ul>
+                      ) : (
+                        // Said rather than left blank: a phase that renders
+                        // nothing reads as the app having forgotten, which is
+                        // the doubt this whole view exists to remove.
+                        <p className="note">Nothing recorded.</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </li>
+          )
+        })}
       </ul>
-    </Field>
+    </section>
   )
 }

@@ -55,7 +55,7 @@ export default function App() {
     shelf, openId, open, close, startNew, discard, adopt, refresh,
     leader, set, setPick,
     campaign, arsenal, week, mustHire, addModel, spendScrip, earnScrip,
-    creditStartingScrip, owedStartingScrip,
+    creditStartingScrip, owedStartingScrip, repairAftermathDrift,
     setWeek, stepWeek, setWeekMode, resetWeek, setStartedAt, setWeeksTotal,
     setHouseRules,
     logGame, updateGame, buyEquipment, addInjury, healInjury, dropInjury, annihilateModel,
@@ -357,6 +357,7 @@ export default function App() {
             onHire={() => setView('campaign')}
             onSheet={() => setView('sheet')}
             onPlaceAdvancement={placeAdvancementAt}
+            onRepairDrift={repairAftermathDrift}
           />
         )}
 

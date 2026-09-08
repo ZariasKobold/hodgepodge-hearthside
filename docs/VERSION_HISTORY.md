@@ -4734,3 +4734,137 @@ so it may be the same family as the drift and is worth chasing first.
 NEXT: diagnose the drift before building any repair for it — a replay into an
 arsenal that partly received the record double-applies. Then the aftermath hand
 (item 0b), M3, L1, L2, L3.
+
+---
+
+### Session 42 — v0.24.0
+Date: 2026-09-08
+
+**fix: a reconcile in flight was overwriting the player's work with its own snapshot**
+
+The drift found in Session 41 is diagnosed, and it was never an aftermath bug.
+
+`runReconcile` reads every local document into `mine` / `myArsenals` **before**
+it awaits the two listings. Both push loops then wrote that opening snapshot
+back over local storage with `keepTimestamp: true` and called `markDirty(id,
+false)`. Three things made it as bad as it was: an aftermath is slow, thinking
+work, so the window is minutes wide; `keepTimestamp` put the *old clock reading*
+back too, so `updatedAt` went backwards and nothing downstream could see that a
+revert had happened; and clearing the dirty flag meant the real edit was never
+pushed again. Silent, and permanent.
+
+**Why it read as an aftermath bug for a week.** The campaign document survives
+the identical race, because it is written on every phase patch — a clobber there
+is overwritten again seconds later. The arsenal is written only when an arsenal
+effect lands, so nothing repairs it. One bug, two documents, one of which
+self-heals.
+
+**Key decisions and why:**
+
+- **Bisected, not reasoned about.** Her real documents were seeded into a
+  browser with the game rewound to the barter phase, and a purchase was made:
+  it reached localStorage correctly, scrip decremented, `rowId` matching the
+  arsenal row. That cleared `useCampaign` and `Aftermath.jsx` in one step and
+  pointed at sync. Every hypothesis before that was wrong, including two in the
+  Session 41 write-up.
+- **`settleAfterPush` compares before it writes.** Sent versus what is on the
+  disk *now*: equal, stamp the owner and settle; different, write nothing and
+  leave it dirty so the newer copy goes up next pass. The version is remembered
+  either way — it is the account's answer about the copy that was sent, and the
+  newer copy descends from exactly that. Writing back at all only ever existed
+  to stamp the owner, which has never been worth a week of somebody's campaign.
+- **The harness had to be repaired before it could show the bug.** Its
+  `saveArsenal` only logged; a save that does not write cannot be seen to
+  clobber anything. It writes into its store now and hands the store back, so a
+  test can edit it mid-flight — which is precisely what a player doing an
+  aftermath during a reconcile does. This is the v0.22.4 lesson again: a fixture
+  easier than production proves nothing.
+- **The lift is deterministic.** `migrateArsenal` reached for `Date.now()` when
+  a v2 arsenal had no `createdAt`, and `canonical` drops only `updatedAt` — so
+  two lifts of one document never compared equal, and `sameInSubstance` decides
+  whether a pull may overwrite or must raise a conflict. A v2 arsenal lifted on
+  two devices could never be recognised as the same arsenal. It takes the
+  campaign's `createdAt ?? startedAt` now. It had been showing up as a flaky
+  `shelf.test.js:349`, passing or failing on the millisecond; three consecutive
+  full runs are clean.
+
+**feat: a finished aftermath can be read back**
+
+Two reports from the same player, one afternoon, one feature. The games list was
+a `<Field>` with a `<Label>` — form-caption styling — so everything she had ever
+played was dressed as small print under the game log: *"it's currently easy to
+miss."* And a submitted aftermath locked, correctly, but **locked and unreadable
+are not the same thing**: the only way to check what you had recorded was to
+photograph the screen before pressing the last button, which is what she had
+been doing.
+
+`src/lib/aftermathHistory.js` is the pure half (§6). Rules in it:
+
+- **It is not `describePhase`.** `rewind.js` renders the same record for an
+  *undo warning* — "Coffee — bought, 2 scrip back" — phrased throughout around
+  what reversing it would cost. Right above "are you sure?", nonsense in a
+  history. Two renderings of one record on purpose, like `toIndexedModel` and
+  `toCard` (§4).
+- **Every phase is listed, including the empty ones.** A history that omits what
+  did not happen reads as the app having forgotten, which is the doubt the view
+  exists to remove. Skipped is distinct from empty.
+- **One suit map.** This file declared its own with plural keys while every
+  record stores singular, so the suit silently vanished from every barter line.
+  Found by rendering a real record; the fixture had agreed with the mistake.
+
+Verified against her actual record in a browser: "Skill Boost on Carry the Flame
+from Tactical Modification — flipped 8 (cheated)", "Bought Gatling Gun for 2
+scrip", "Barter flip: 4 of Tomes", "Nothing recorded" against the doctor. It
+also shows the gap she reported herself — "Balanced Sword from Action" names no
+action, because a tier-2 advancement has nowhere to record one.
+
+**feat: and the damage it already did can be put back**
+
+`src/lib/repair.js` + `RepairAftermath.jsx`. The fix stops the loss recurring;
+one arsenal on the database was still missing what it ate.
+
+- **A delta, never a forward replay.** Replaying the record double-applies
+  everything that did land — and in the real case the payday landed and nothing
+  after it did, so a replay would pay the scrip twice. Applying the delta twice
+  is a no-op, and the panel disappears because the arsenal is whole, which is
+  the only disappearance worth trusting.
+- **Restored under the id the record already named.** A fresh id would make the
+  row unmatchable against its own provenance, and the drift check would report
+  it missing for ever. `page` and `thirst` come back off the book, since the
+  record never stored them.
+- **`aftermathDrift` is the one source of truth**, shared by `outstanding.js`
+  for detection and by the repair for the fix. Two implementations of "what is
+  missing" would eventually disagree, and the failure mode is a bar reporting a
+  loss the repair cannot find.
+- **The scrip is deducted and the arithmetic is shown**, floored at zero like
+  every other scrip write — and it *says* when it floored, because the same
+  arsenal is usually owed its p. 15 starting scrip and claiming that first is
+  the difference between the right number and a rounded one. A repair that
+  silently changes somebody's balance is indistinguishable from the bug it is
+  repairing.
+
+Verified in a browser against the real damaged documents: the starting scrip
+took her 1 → 3, the repair then took 3 → **1** — exactly the balance she should
+have had — and restored the Gatling Gun under `eqp_mtsy5kbj11nuok` with page 24
+and week 1, all three advancements with their targets, and the three experience
+boxes. The floor warning disappeared once the scrip covered the cost.
+
+Files: `src/lib/reconcile.js`, `src/lib/reconcile.test.js`,
+`src/lib/shape/migrate.js`, `src/lib/shape/migrate.test.js`,
+`src/lib/aftermathHistory.js` (new), `src/lib/aftermathHistory.test.js` (new),
+`src/lib/repair.js` (new), `src/lib/repair.test.js` (new),
+`src/lib/outstanding.js`, `src/components/RepairAftermath.jsx` (new),
+`src/components/Aftermath.jsx`, `src/components/steps/Arsenal.jsx`,
+`src/hooks/useCampaign.js`, `src/App.jsx`, `src/styles/app.css`, `CLAUDE.md`,
+`package.json`, `docs/VERSION_HISTORY.md`
+RESOLVED: the drift cannot happen again; the `shelf.test.js` flake; the games
+list is findable and readable.
+UNVERIFIED: the fix has not been observed on a real device — it is proven by
+four tests that fail against the old code and by a browser bisection of the
+write path, not by watching a second aftermath survive a reconcile. Worth
+checking the next time somebody plays.
+NEXT: Madeline presses the repair on her own device — the authoritative copy is
+there, not on the server, so nobody else can do it for her. Then decide the
+shape of reopening a finished aftermath: the owner asked for "ask the campaign
+owner for permission", and every player on the database is host of their own
+campaign, so that flow would be asking yourself.

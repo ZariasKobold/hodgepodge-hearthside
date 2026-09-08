@@ -23,6 +23,42 @@ function settles(a, b) {
 }
 
 /**
+ * Mark a pushed document settled — unless the player moved on underneath it.
+ *
+ * **The lost update that reached production on 2026-09-08.** Every local
+ * document is read into a snapshot at the top of `runReconcile`, before the two
+ * listings are even awaited. The push loops then wrote that snapshot back over
+ * local storage with `keepTimestamp: true` and cleared the dirty flag. An
+ * aftermath is slow, thinking work — minutes of it — so a reconcile that
+ * started before the barter is still in the air during the advance, and its
+ * write reverted the arsenal to the snapshot, dragged `updatedAt` *backwards*
+ * so no later comparison could see anything odd, and marked it clean so the
+ * real edit was never pushed again. A player lost a Gatling Gun, three
+ * advancements and three experience boxes, and nothing anywhere said so.
+ *
+ * The campaign document survived the identical race only because it is written
+ * on every phase patch — a clobber there is overwritten again seconds later.
+ * The arsenal is written only when an arsenal effect lands, so nothing repaired
+ * it. That asymmetry is why this looked like an aftermath bug for a week.
+ *
+ * So: compare what was sent against what is on the disk *now*. Equal, and this
+ * is the ordinary case — stamp the owner and settle it. Different, and the
+ * player has done something since; **write nothing and leave it dirty**, so the
+ * newer copy goes up on the next pass. The version is remembered either way,
+ * because it is the account's answer about the copy that was sent and the
+ * newer copy descends from exactly that.
+ *
+ * Writing back at all is only for the owner stamp. It has never been worth a
+ * week of somebody's campaign, and now it cannot cost one.
+ */
+function settleAfterPush(sent, { load, save, mark, userId }) {
+  if (!settles(load(sent.id), sent)) return false
+  save(stampOwner(sent, userId), { keepTimestamp: true })
+  mark(sent.id, false)
+  return true
+}
+
+/**
  * One reconciliation, as a plain function.
  *
  * This is the body that used to live inside `useSync`'s `reconcile` callback,
@@ -216,9 +252,10 @@ export async function runReconcile({
   for (const campaign of pushDisabled ? [] : push) {
     try {
       const { saved } = await putCampaign(campaign, { baseVersion: knownVersion(campaign.id) })
-      saveCampaign(stampOwner(campaign, userId), { keepTimestamp: true })
       rememberVersion(campaign.id, saved?.version)
-      markDirty(campaign.id, false)
+      settleAfterPush(campaign, {
+        load: loadCampaign, save: saveCampaign, mark: markDirty, userId,
+      })
       pushed += 1
     } catch (err) {
       // Carry on rather than stop. An earlier version broke out of this loop on
@@ -242,9 +279,10 @@ export async function runReconcile({
   for (const arsenal of pushDisabled ? [] : arsenalPlan.push) {
     try {
       const { saved } = await putArsenal(arsenal, { baseVersion: knownVersion(arsenal.id) })
-      saveArsenal(stampOwner(arsenal, userId), { keepTimestamp: true })
       rememberVersion(arsenal.id, saved?.version)
-      markDirty(arsenal.id, false)
+      settleAfterPush(arsenal, {
+        load: loadArsenal, save: saveArsenal, mark: markDirty, userId,
+      })
       pushed += 1
     } catch (err) {
       failure = failure || (err.stale

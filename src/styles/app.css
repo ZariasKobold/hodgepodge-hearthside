@@ -1510,3 +1510,76 @@ body::after {
 .outstanding__others strong { color: var(--brass); font-weight: 700; }
 
 @media print { .outstanding { display: none; } }
+
+/* games played, and what was recorded in each -------------------------
+   This was a `.field` with a `<Label>` — the styling used for the caption
+   under a form control — so a list of everything you have ever played was
+   dressed as small print and sat directly under the game log it has nothing
+   to do with. "It's currently easy to miss" was the report, and it was right.
+
+   A rule and real space above it is the whole fix. It is a different subject,
+   so it gets a boundary. */
+.history {
+  margin-top: 34px;
+  padding-top: 22px;
+  border-top: 1px solid var(--line);
+}
+.history__head {
+  font-family: var(--display);
+  font-size: 21px;
+  font-weight: 400;
+  color: var(--brass);
+  margin: 0 0 4px;
+}
+.history__list { list-style: none; margin: 14px 0 0; padding: 0; }
+.history__game { border-top: 1px solid var(--line); }
+.history__game:last-child { border-bottom: 1px solid var(--line); }
+
+/* The whole row is the control. A record you can read is worth more than a
+   tidy hit area, and a row-sized target is kinder on a phone than a link. */
+.history__row {
+  width: 100%;
+  display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline;
+  padding: 12px 2px;
+  background: none; border: 0; text-align: left; cursor: pointer;
+  font-family: var(--body); font-size: 15px; color: var(--text);
+  transition: color .16s ease;
+}
+.history__row:hover { color: var(--brass); }
+.history__when { flex: 1 1 auto; }
+.history__result { color: var(--mute); font-variant-numeric: tabular-nums; }
+.history__toggle {
+  font-family: var(--data); font-size: 12px; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--brass);
+  border-bottom: 1px dotted currentColor;
+}
+
+.history__record { padding: 4px 2px 18px; }
+.history__phase { margin-bottom: 14px; }
+.history__lines {
+  list-style: none; margin: 4px 0 0; padding: 0;
+  font-family: var(--body); font-size: 15px; line-height: 1.6; color: var(--text);
+}
+.history__lines li { padding: 2px 0; }
+
+@media print {
+  .history__toggle { display: none; }
+  .history__record { display: block; }
+}
+
+/* the drift repair ------------------------------------------------------
+   Louder than `.repair` alone, because this one is not a chore the app
+   created for tidiness — it is data a bug ate, and the arsenal is wrong on
+   screen until it is pressed. The ember edge is the same one the outstanding
+   bar reserves for the same finding. */
+.repair--drift { border-color: var(--ember-deep); }
+.repair__list {
+  list-style: none; margin: 12px 0 0; padding: 0;
+  font-family: var(--body); font-size: 15px; line-height: 1.6; color: var(--text);
+}
+.repair__list li { padding: 3px 0 3px 14px; position: relative; }
+.repair__list li::before {
+  content: '+'; position: absolute; left: 0;
+  color: var(--brass); font-family: var(--data);
+}
+.repair__go { margin-top: 16px; }

@@ -43,10 +43,22 @@ function harness({
     storage: {
       campaignIds: () => Object.keys(campaigns),
       loadCampaign: (id) => campaigns[id] || null,
-      saveCampaign: (doc) => { saved.campaigns.push(doc); calls.push(['saveCampaign', doc.id]) },
+      // Writes back into the store, because real storage does. A harness whose
+      // save is a no-op cannot show a save *clobbering* anything, which is
+      // exactly the class of bug that reached production — see "a stale
+      // snapshot" below.
+      saveCampaign: (doc) => {
+        campaigns[doc.id] = doc
+        saved.campaigns.push(doc)
+        calls.push(['saveCampaign', doc.id])
+      },
       arsenalIds: () => Object.keys(arsenals),
       loadArsenal: (id) => arsenals[id] || null,
-      saveArsenal: (doc) => { saved.arsenals.push(doc); calls.push(['saveArsenal', doc.id]) },
+      saveArsenal: (doc) => {
+        arsenals[doc.id] = doc
+        saved.arsenals.push(doc)
+        calls.push(['saveArsenal', doc.id])
+      },
     },
     remote: {
       listCampaigns: async () => { calls.push(['listCampaigns']); return remoteCampaigns },
@@ -69,7 +81,10 @@ function harness({
       markDirty: (id, v) => { marks[id] = v },
     },
   }
-  return { ports, calls, saved, marks, remembered }
+  // `campaigns` and `arsenals` are handed back so a test can edit the store
+  // mid-flight — which is what a player doing an aftermath while a reconcile is
+  // in the air actually does.
+  return { ports, calls, saved, marks, remembered, campaigns, arsenals }
 }
 
 const arsenal = (id, over = {}) => ({
@@ -358,5 +373,115 @@ describe('runReconcile — pulling', () => {
     const h = harness({ localArsenals: [arsenal('ars_1')], dirty: { ars_1: true } })
     const out = await runReconcile(h.ports)
     expect(out.changed).toBe(false)
+  })
+})
+
+/**
+ * The lost update that reached production — 2026-09-08.
+ *
+ * A player walked an aftermath: bought equipment, took three advancements,
+ * crossed three experience boxes. All of it reached the *campaign* document
+ * and none of it reached the *arsenal*, whose content and `updatedAt` were both
+ * still sitting six days in the past while its row on the server climbed to
+ * version 7. Her leader's card was missing an action she had earned.
+ *
+ * `runReconcile` reads every local document into `myArsenals` **before** it
+ * awaits the two listings, and then, after `putArsenal` resolves, writes that
+ * same snapshot back over local storage with `keepTimestamp: true` and clears
+ * the dirty flag. An aftermath is slow, thinking work — minutes of it — so a
+ * reconcile that started before the barter is still in the air during the
+ * advance. Its write then reverts the arsenal to the snapshot, drags
+ * `updatedAt` *backwards*, and marks it clean, so the real edit is never
+ * pushed and never noticed.
+ *
+ * The campaign survived the same race because it is written on every phase
+ * patch: a clobber there is overwritten again seconds later. The arsenal is
+ * written only when an arsenal effect lands, so nothing repairs it.
+ */
+describe('a stale snapshot must never overwrite a newer local copy', () => {
+  /** The arsenal as it stands after the player buys something mid-reconcile. */
+  const edited = (id) => arsenal(id, {
+    scrip: 1,
+    equipment: [{ id: 'eqp_1', name: 'Gatling Gun', cc: 2 }],
+    updatedAt: 900,
+  })
+
+  it('leaves the newer arsenal alone when the player edited during the push', async () => {
+    let h
+    h = harness({
+      localArsenals: [arsenal('ars_1', { scrip: 3, equipment: [], updatedAt: 100 })],
+      remoteArsenals: [{ id: 'ars_1', version: 4 }],
+      versions: { ars_1: 4 },
+      dirty: { ars_1: true },
+      // The player buys the Gatling Gun while this request is in the air.
+      putArsenal: async () => {
+        h.arsenals.ars_1 = edited('ars_1')
+        return { saved: { version: 5 } }
+      },
+    })
+
+    await runReconcile(h.ports)
+
+    const local = h.arsenals.ars_1
+    expect(local.equipment).toHaveLength(1)
+    expect(local.scrip).toBe(1)
+    // The killer detail: `keepTimestamp: true` made the revert invisible to
+    // every later comparison by putting the old clock reading back too.
+    expect(local.updatedAt).toBe(900)
+  })
+
+  it('leaves it dirty, so the edit reaches the account on the next pass', async () => {
+    let h
+    h = harness({
+      localArsenals: [arsenal('ars_1', { scrip: 3, updatedAt: 100 })],
+      remoteArsenals: [{ id: 'ars_1', version: 4 }],
+      versions: { ars_1: 4 },
+      dirty: { ars_1: true },
+      putArsenal: async () => {
+        h.arsenals.ars_1 = edited('ars_1')
+        return { saved: { version: 5 } }
+      },
+    })
+
+    await runReconcile(h.ports)
+
+    // Clearing this is what made the loss permanent: a clean document is never
+    // pushed, so the work sat on one disk until somebody noticed by eye.
+    expect(h.marks.ars_1).not.toBe(false)
+  })
+
+  it('still settles normally when nothing changed underneath', async () => {
+    const h = harness({
+      localArsenals: [arsenal('ars_1', { scrip: 3, updatedAt: 100 })],
+      remoteArsenals: [{ id: 'ars_1', version: 4 }],
+      versions: { ars_1: 4 },
+      dirty: { ars_1: true },
+    })
+
+    const result = await runReconcile(h.ports)
+
+    expect(result.pushed).toBe(1)
+    expect(h.marks.ars_1).toBe(false)
+    expect(h.remembered.ars_1).toBe(1)
+    expect(h.arsenals.ars_1.ownerUserId).toBe('u1')
+  })
+
+  it('protects campaigns the same way', async () => {
+    let h
+    h = harness({
+      localCampaigns: [campaign('cmp_1', { games: [], updatedAt: 100 })],
+      remoteCampaigns: [{ id: 'cmp_1', version: 2 }],
+      versions: { cmp_1: 2 },
+      dirty: { cmp_1: true },
+      putCampaign: async () => {
+        h.campaigns.cmp_1 = campaign('cmp_1', { games: [{ id: 'g1' }], updatedAt: 900 })
+        return { saved: { version: 3 } }
+      },
+    })
+
+    await runReconcile(h.ports)
+
+    expect(h.campaigns.cmp_1.games).toHaveLength(1)
+    expect(h.marks.cmp_1).not.toBe(false)
   })
 })

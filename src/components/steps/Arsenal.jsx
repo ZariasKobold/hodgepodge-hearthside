@@ -11,6 +11,7 @@ import { Label, Button } from '../ui.jsx'
 import LeaderRecord from '../LeaderRecord.jsx'
 import CrewCards from '../CrewCards.jsx'
 import UnplacedAdvancements from '../UnplacedAdvancements.jsx'
+import RepairAftermath from '../RepairAftermath.jsx'
 
 /**
  * Everything this leader has, in one place.
@@ -26,7 +27,7 @@ import UnplacedAdvancements from '../UnplacedAdvancements.jsx'
  */
 export default function Arsenal({
   campaign, arsenal, leader, archetype, week, rules, fileNumber,
-  onEditLeader, onHire, onSheet, onPlaceAdvancement,
+  onEditLeader, onHire, onSheet, onPlaceAdvancement, onRepairDrift,
 }) {
   const [imaging, setImaging] = useState(null)
   /** Which action each unplaced advancement is about to be given. */
@@ -70,6 +71,16 @@ export default function Arsenal({
       </div>
 
       <LeaderRecord leader={leader} archetype={archetype} fileNumber={fileNumber} rules={rules} />
+
+      {/* Above the advancement repair, because it is the bigger claim: this one
+          says the arsenal on screen is *wrong*, while that one says a line on it
+          is incomplete. Fixing this first also changes what that one has to
+          offer, since restored advancements may themselves need a target. */}
+      <RepairAftermath
+        arsenal={arsenal}
+        campaign={campaign}
+        onRepair={onRepairDrift}
+      />
 
       {/* Sits under the record rather than above it, because the record is what
           the repair is *for*: you name the action, and the line moves out of

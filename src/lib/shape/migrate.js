@@ -91,7 +91,10 @@ export function repairModel(model) {
  * Idempotent: a v3 arsenal passed in comes back with its models repaired and
  * nothing else touched.
  */
-export function migrateArsenal(arsenal, { ownerUserId = null, campaignId = null, updatedAt = null } = {}) {
+export function migrateArsenal(
+  arsenal,
+  { ownerUserId = null, campaignId = null, updatedAt = null, createdAt = null } = {}
+) {
   if (!arsenal) return null
   const lifted = createArsenal({
     ...arsenal,
@@ -108,7 +111,23 @@ export function migrateArsenal(arsenal, { ownerUserId = null, campaignId = null,
     injuries: arsenal.injuries || [],
     equipment: arsenal.equipment || [],
     crewCardAdvancements: arsenal.crewCardAdvancements || [],
-    createdAt: arsenal.createdAt ?? Date.now(),
+    /**
+     * The campaign's if the arsenal has none, and the clock only as a last
+     * resort — **because the lift has to be deterministic.**
+     *
+     * `canonical` drops `updatedAt` and nothing else, so `createdAt` is
+     * compared. Reaching for `Date.now()` here meant two lifts of the same v2
+     * document produced two different arsenals, and `sameInSubstance` is what
+     * decides whether a pull may overwrite a local copy or has to raise a
+     * conflict. So a v2 arsenal lifted on two devices could never be recognised
+     * as the same arsenal, and the one case the app is allowed to settle by
+     * itself was unreachable for exactly the documents most likely to need it.
+     *
+     * It showed up first as a flaky test — `shelf.test.js` comparing two lifts
+     * of one fixture, passing or failing on whether they landed in the same
+     * millisecond.
+     */
+    createdAt: arsenal.createdAt ?? createdAt ?? Date.now(),
   })
   return lifted
 }
@@ -167,6 +186,10 @@ export function splitLegacyCampaign(doc) {
     migrateArsenal(a, {
       ownerUserId: owner,
       campaignId: doc.id,
+      // Same reasoning as `updatedAt` below, and the same source: a nested v2
+      // arsenal is exactly as old as the campaign it came out of. Passing it
+      // keeps the lift a pure function of its input.
+      createdAt: doc.createdAt ?? doc.startedAt ?? null,
       /**
        * A v2 nested arsenal has no `updatedAt` of its own — it was part of the
        * campaign, so the campaign's was the only clock. Inheriting it is the
