@@ -1,12 +1,12 @@
 # CLAUDE.md — Hodgepodge Hearthside project context
 
-<!-- HH v0.28.0 | Last updated: 2026-09-29 -->
+<!-- HH v0.28.1 | Last updated: 2026-09-30 -->
 
 ---
 
-## Current Version: 0.28.0
+## Current Version: 0.28.1
 
-## Last Updated: 2026-09-29
+## Last Updated: 2026-09-30
 
 **Live at hodgepodgehearthside.com** (Cloudflare Pages, auto-deploys on push to
 `main`). Repo: `ZariasKobold/hodgepodge-hearthside`.
@@ -614,6 +614,8 @@ names the leader each player brought. Rules worth keeping:
   row, and must not vanish from their own table.
 - **Pending members may set a nickname, and learn nothing about the host** until
   admitted, not even the host's nickname.
+- **The invite note is the host's alone** (v0.28.1). `listMembers` sends it
+  only to the owner, as a stand-in for a missing nickname.
 - **One leader per player per table** — `linkCampaign` clears the caller's other
   links to that table; withdrawing is `DELETE /:id/link`.
 

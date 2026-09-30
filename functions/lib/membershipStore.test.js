@@ -613,6 +613,31 @@ describe('listMembers — the host, and who is bringing what', () => {
     expect(host).toMatchObject({ nickname: '', role: 'host', isYou: false, bringing: ['Hank'] })
   })
 
+  describe('the invite note — the host’s own label for a player', () => {
+    const noted = (owner, status) => fakeDB([
+      asRole(owner, status),
+      ['FROM campaign_members m JOIN users u', rows.map((r) => ({ ...r, nickname: '', invite_note: `note for ${r.user_id}` }))],
+      ['FROM campaigns c LEFT JOIN arsenals a', seated],
+    ])
+
+    it('goes to the host, so an unnamed player is still someone', async () => {
+      const { members } = await listMembers(OWNER, HOST_CAMPAIGN, noted(OWNER, null))
+      expect(members[0].inviteNote).toBe(`note for ${MEMBER}`)
+    })
+
+    it('never goes to a member — not theirs, and not anybody else’s', async () => {
+      const result = await listMembers(MEMBER, HOST_CAMPAIGN, noted(OWNER, MEMBER_ACTIVE))
+      expect(JSON.stringify(result)).not.toContain('note for')
+    })
+
+    it('is scoped to this campaign’s invites and to the player who used them', async () => {
+      const db = noted(OWNER, null)
+      await listMembers(OWNER, HOST_CAMPAIGN, db)
+      const q = db.log.find((l) => l.sql.includes('FROM campaign_members m JOIN users u'))
+      expect(q.sql).toContain('i.campaign_id = m.campaign_id AND i.redeemed_by = m.user_id')
+    })
+  })
+
   it('binds the campaign on the seating query, never a bare scan', async () => {
     const db = setup(OWNER, MEMBER_ACTIVE)
     await listMembers(MEMBER, HOST_CAMPAIGN, db)

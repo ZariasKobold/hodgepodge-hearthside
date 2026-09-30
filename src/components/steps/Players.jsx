@@ -172,6 +172,9 @@ export default function Players({ shelf, membership, signedIn }) {
               <li key={m.userId}>
                 <span>
                   {m.nickname || 'no nickname yet'}
+                  {!m.nickname && m.inviteNote && (
+                    <span className="hire__adj"> (invited as {m.inviteNote})</span>
+                  )}
                   {m.sharesIdentity && m.displayName && ` · ${m.displayName}`}
                 </span>
                 <span className="hire__paid">
@@ -282,18 +285,27 @@ function tableName(table) {
 /**
  * Your own campaign, and every campaign you have joined.
  *
- * Hidden when there is nothing to choose between — a host who has never joined
- * anyone else's table sees the page exactly as before. When it shows, a joined
- * table you have not brought a leader to says so, because an admitted member
- * with no leader linked is invisible to everyone else and has no way to know.
+ * Always shown. It was hidden when there was nothing to choose between, and a
+ * host who had been told "the row of campaigns you are in" then looked for it,
+ * could not find it, and reasonably concluded it was missing. An empty list
+ * that says why is a finding; an absent one is a question.
+ *
+ * A joined table you have not brought a leader to says so, because an
+ * admitted member with no leader linked is invisible to everyone else and has
+ * no way to know.
  */
 function TablePicker({ membership }) {
   const { joined, tableId, ownCampaignId } = membership
-  if (joined.length === 0) return null
 
   return (
     <section className="panel">
       <Label>Your campaigns</Label>
+      {joined.length === 0 && (
+        <p className="note">
+          Only your own table so far. When someone sends you an invite link,
+          the campaign you join appears here beside it.
+        </p>
+      )}
       <div className="chips">
         <Chip on={tableId === ownCampaignId} onClick={() => membership.viewTable(ownCampaignId)}>
           Your own table
@@ -320,6 +332,9 @@ function PlayerRow({ player, isHostRow = false, onRemove = null }) {
     <li>
       <span>
         {player.nickname || (isHostRow ? 'The host' : 'unnamed player')}
+        {!player.nickname && player.inviteNote && (
+          <span className="hire__adj"> (invited as {player.inviteNote})</span>
+        )}
         {player.isYou && <span className="hire__adj"> (you)</span>}
         {isHostRow && <span className="hire__adj"> · host</span>}
         {player.sharesIdentity && player.displayName && (

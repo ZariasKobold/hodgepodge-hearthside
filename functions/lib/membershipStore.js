@@ -319,7 +319,10 @@ export async function listMembers(userId, campaignId, env) {
   const [{ results }, { results: seated }] = await Promise.all([
     env.DB.prepare(
       `SELECT m.user_id, m.role, m.joined_at, m.status, m.nickname, m.share_identity,
-              u.display_name, u.avatar_url
+              u.display_name, u.avatar_url,
+              (SELECT i.note FROM campaign_invites i
+                WHERE i.campaign_id = m.campaign_id AND i.redeemed_by = m.user_id
+                ORDER BY i.redeemed_at DESC LIMIT 1) AS invite_note
          FROM campaign_members m
          JOIN users u ON u.id = m.user_id
         WHERE m.campaign_id = ?
@@ -362,6 +365,11 @@ export async function listMembers(userId, campaignId, env) {
     .map((r) => ({
       ...publicMember(r, { viewerId: userId, addressable: role === 'owner' }),
       bringing: bringing.get(r.user_id) || [],
+      // The note the host wrote on the invite this player used — "Madeline" —
+      // so a player who has not chosen a nickname is still someone. It is the
+      // host's own private note, so it goes to the host and to nobody else:
+      // a member never learns what the host called them.
+      ...(role === 'owner' && r.invite_note ? { inviteNote: r.invite_note } : {}),
     }))
 
   return { members: rows, host, viewerRole: role }

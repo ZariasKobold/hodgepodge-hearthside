@@ -5292,3 +5292,28 @@ NEXT: apply 0007/0008 remote (still outstanding from v0.27.0). Then check with a
 real member on production that they can find the host's table and bring a
 leader — nothing on production has ever been linked. **§5's third trigger fired
 (a change under `functions/`), and Session 50 is the ten-session audit.**
+
+---
+
+### Session 49 — v0.28.1
+Date: 2026-09-30
+
+**feat: an unnamed player shows the invite they used, and the campaigns row always shows**
+
+The owner's first look at v0.28.0 on production: two admitted players, both
+"unnamed player · no leader brought yet", and no way to tell which was which.
+Expected — neither had opened v0.28.0 yet — but the host needs to know whom to
+chase.
+
+- **The invite note stands in for a missing nickname.** `listMembers` reads the
+  note on the invite each player redeemed (a correlated subquery, scoped to this
+  campaign and that player, latest first), and the page shows "unnamed player
+  (invited as Madeline)". **Host only.** The note is the host's private label;
+  a member is never sent it, theirs or anyone's — asserted.
+- **"Your campaigns" is always shown.** It hid when you had joined nobody
+  else's table, so the owner, told about "a row of the campaigns you are in",
+  looked for it and found nothing. An empty list that says why is a finding; an
+  absent one is a question.
+
+3 new tests, 697 total. Verified in the browser against a local D1 as the host,
+and over HTTP that the member's response carries no note.
