@@ -298,6 +298,17 @@ function publicMember(row, { viewerId, addressable = false } = {}) {
 /**
  * Everyone in the campaign. The host sees pending applicants too, because
  * admitting them is their job; members see only who is actually in.
+ *
+ * The host comes back as `host`, apart from `members`. They own the campaign
+ * rather than belonging to it, and they only have a `campaign_members` row at
+ * all once they have chosen a nickname (`setMemberProfile`) — so building the
+ * host from the member list would make a host without a nickname vanish from
+ * the table they are running.
+ *
+ * Every entry also carries `bringing`: the leader names of the arsenals that
+ * player has sat at this table. Joined here, on the server, by user id — so the
+ * page can say "Mads · bringing Lady Justice" without the id ever leaving.
+ * Two statements beside the gate whatever the size of the group (§12b).
  */
 export async function listMembers(userId, campaignId, env) {
   requireSubject(userId, 'listMembers')
@@ -305,20 +316,55 @@ export async function listMembers(userId, campaignId, env) {
   const role = await roleIn(userId, campaignId, env)
   if (!canRead(role)) return { forbidden: true }
 
-  const { results } = await env.DB.prepare(
-    `SELECT m.user_id, m.role, m.joined_at, m.status, m.nickname, m.share_identity,
-            u.display_name, u.avatar_url
-       FROM campaign_members m
-       JOIN users u ON u.id = m.user_id
-      WHERE m.campaign_id = ?
-      ORDER BY m.joined_at ASC`
-  ).bind(campaignId).all()
+  const [{ results }, { results: seated }] = await Promise.all([
+    env.DB.prepare(
+      `SELECT m.user_id, m.role, m.joined_at, m.status, m.nickname, m.share_identity,
+              u.display_name, u.avatar_url
+         FROM campaign_members m
+         JOIN users u ON u.id = m.user_id
+        WHERE m.campaign_id = ?
+        ORDER BY m.joined_at ASC`
+    ).bind(campaignId).all(),
+    env.DB.prepare(
+      `SELECT c.id AS campaign_id, c.owner_user_id AS user_id, a.leader AS leader
+         FROM campaigns c
+         LEFT JOIN arsenals a ON a.campaign_id = c.id
+        WHERE c.id = ? OR c.member_of = ?`
+    ).bind(campaignId, campaignId).all(),
+  ])
+
+  const ownerId = (seated || []).find((r) => r.campaign_id === campaignId)?.user_id ?? null
+  const bringing = new Map()
+  for (const r of seated || []) {
+    const name = safeJson(r.leader, {})?.name
+    if (!name) continue
+    if (!bringing.has(r.user_id)) bringing.set(r.user_id, [])
+    bringing.get(r.user_id).push(name)
+  }
+
+  // The host's id is never addressable: nobody admits or removes them. You
+  // still get your own, as everywhere else.
+  const hostRow = (results || []).find((r) => ownerId && r.user_id === ownerId)
+  const hostIsYou = ownerId === userId
+  const { userId: _hidden, ...hostPublic } = hostRow
+    ? publicMember(hostRow, { viewerId: userId })
+    : { isYou: hostIsYou, nickname: '', status: MEMBER_ACTIVE, sharesIdentity: false }
+  const host = {
+    ...hostPublic,
+    ...(hostIsYou ? { userId } : {}),
+    role: 'host',
+    bringing: bringing.get(ownerId) || [],
+  }
 
   const rows = (results || [])
+    .filter((r) => !ownerId || r.user_id !== ownerId)
     .filter((r) => role === 'owner' || r.status === MEMBER_ACTIVE)
-    .map((r) => publicMember(r, { viewerId: userId, addressable: role === 'owner' }))
+    .map((r) => ({
+      ...publicMember(r, { viewerId: userId, addressable: role === 'owner' }),
+      bringing: bringing.get(r.user_id) || [],
+    }))
 
-  return { members: rows, viewerRole: role }
+  return { members: rows, host, viewerRole: role }
 }
 
 /** Host only: turn a pending applicant into a member. Gate two. */
@@ -380,6 +426,25 @@ export async function setMemberProfile(userId, campaignId, patch, env) {
   const nickname = String(patch?.nickname ?? '').slice(0, 40)
   const share = patch?.shareIdentity ? 1 : 0
 
+  /**
+   * The host has no member row until now — they own the campaign rather than
+   * joining it — so for them this is an upsert. It is still only ever the
+   * caller's own row: `owner` came from `roleIn` against the session's id, and
+   * that same id is what is bound. `status` is written active so the row reads
+   * truthfully, but nothing gates on it for the owner: `roleIn` answers
+   * "owner" before it ever looks at status.
+   */
+  if (role === 'owner') {
+    await env.DB.prepare(
+      `INSERT INTO campaign_members
+         (campaign_id, user_id, role, joined_at, status, nickname, share_identity)
+       VALUES (?,?,?,?,?,?,?)
+       ON CONFLICT(campaign_id, user_id) DO UPDATE SET
+         nickname = excluded.nickname, share_identity = excluded.share_identity`
+    ).bind(campaignId, userId, 'host', Date.now(), MEMBER_ACTIVE, nickname, share).run()
+    return { nickname, shareIdentity: share === 1 }
+  }
+
   const result = await env.DB.prepare(
     `UPDATE campaign_members SET nickname = ?, share_identity = ?
       WHERE campaign_id = ? AND user_id = ?`
@@ -411,9 +476,35 @@ export async function linkCampaign(userId, campaignId, hostCampaignId, env) {
     'UPDATE campaigns SET member_of = ? WHERE id = ? AND owner_user_id = ?'
   ).bind(hostCampaignId || null, campaignId, userId).run()
 
-  return (result.meta?.changes ?? 0) > 0
-    ? { linked: campaignId, to: hostCampaignId || null }
-    : { forbidden: true }
+  if ((result.meta?.changes ?? 0) === 0) return { forbidden: true }
+
+  // One leader per player per table. "Bring this one instead" used to leave the
+  // first still linked, so both sat in everyone's view. Cleared *after* the
+  // write that matters, and only among the caller's own rows.
+  if (hostCampaignId) {
+    await env.DB.prepare(
+      'UPDATE campaigns SET member_of = NULL WHERE owner_user_id = ? AND member_of = ? AND id != ?'
+    ).bind(userId, hostCampaignId, campaignId).run()
+  }
+
+  return { linked: campaignId, to: hostCampaignId || null }
+}
+
+/**
+ * Take your leader back off a table. Self only, and needs no role: it only
+ * ever clears `member_of` on the caller's own campaigns, so there is nothing
+ * about the host campaign it could reveal or change. The old route for this
+ * sent a null campaign id through `linkCampaign`, matched no row and answered
+ * 404 — the Withdraw button never worked.
+ */
+export async function unlinkCampaign(userId, hostCampaignId, env) {
+  requireSubject(userId, 'unlinkCampaign')
+
+  await env.DB.prepare(
+    'UPDATE campaigns SET member_of = NULL WHERE owner_user_id = ? AND member_of = ?'
+  ).bind(userId, hostCampaignId).run()
+
+  return { unlinked: hostCampaignId }
 }
 
 /* ── the shared read ────────────────────────────────────────────── */
@@ -548,22 +639,43 @@ function safeJson(text, fallback) {
 export async function listMemberships(userId, env) {
   requireSubject(userId, 'listMemberships')
 
-  const { results } = await env.DB.prepare(
-    `SELECT c.id, c.name, c.owner_user_id, m.status,
-            (SELECT COUNT(*) FROM campaign_members x
-              WHERE x.campaign_id = c.id AND x.status = ?) AS member_count
-       FROM campaigns c
-       JOIN campaign_members m ON m.campaign_id = c.id
-      WHERE m.user_id = ?`
-  ).bind(MEMBER_ACTIVE, userId).all()
+  const [{ results }, { results: linked }] = await Promise.all([
+    env.DB.prepare(
+      `SELECT c.id, c.name, c.owner_user_id, m.status,
+              m.nickname AS my_nickname, m.share_identity AS my_share,
+              h.nickname AS host_nickname,
+              (SELECT COUNT(*) FROM campaign_members x
+                WHERE x.campaign_id = c.id AND x.status = ?) AS member_count
+         FROM campaigns c
+         JOIN campaign_members m ON m.campaign_id = c.id
+         LEFT JOIN campaign_members h
+           ON h.campaign_id = c.id AND h.user_id = c.owner_user_id
+        WHERE m.user_id = ?`
+    ).bind(MEMBER_ACTIVE, userId).all(),
+    env.DB.prepare(
+      'SELECT id, member_of FROM campaigns WHERE owner_user_id = ? AND member_of IS NOT NULL'
+    ).bind(userId).all(),
+  ])
 
   return {
-    memberships: (results || []).map((r) => ({
-      campaignId: r.id,
-      name: r.name || '',
-      status: r.status,
-      memberCount: r.member_count,
-      isOwner: r.owner_user_id === userId,
-    })),
+    memberships: (results || []).map((r) => {
+      const isOwner = r.owner_user_id === userId
+      const admitted = isOwner || r.status === MEMBER_ACTIVE
+      return {
+        campaignId: r.id,
+        name: r.name || '',
+        status: r.status,
+        memberCount: r.member_count,
+        isOwner,
+        // Gate two holds here too: somebody still waiting to be admitted is
+        // told nothing about the table, not even what its host is called.
+        hostNickname: admitted ? (r.host_nickname || '') : '',
+        // Your own row, so somebody still waiting can see the name they chose.
+        nickname: r.my_nickname || '',
+        sharesIdentity: r.my_share === 1,
+        /** Which of the caller's own campaigns sit at this table. */
+        linkedCampaignIds: (linked || []).filter((l) => l.member_of === r.id).map((l) => l.id),
+      }
+    }),
   }
 }

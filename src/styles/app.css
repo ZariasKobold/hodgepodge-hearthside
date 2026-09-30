@@ -1583,3 +1583,27 @@ body::after {
   color: var(--brass); font-family: var(--data);
 }
 .repair__go { margin-top: 16px; }
+
+/* the player's own copy of the campaign book's text ---------------------
+   Only ever rendered when `public/book.json` exists on their machine — the
+   text is Wyrd's to publish and is not in this repository (src/lib/book.js).
+   Styled like the live rules text from BiggerHat, because it is the same kind
+   of thing to a reader: what the thing does, as opposed to what you own. */
+.book-text {
+  font-family: var(--body); font-size: 14px; line-height: 1.55;
+  color: var(--mute); margin: 6px 0 0;
+  padding-left: 10px; border-left: 1px solid var(--line);
+  white-space: pre-wrap;
+}
+.stock__row .book-text { flex-basis: 100%; margin-top: 8px; }
+
+/* proving you own the book ---------------------------------------------
+   Inline and quiet: it is an offer, not a wall. Nothing in the app is gated
+   on answering, so it must not look like a barrier across the page. */
+.book-gate { margin-bottom: 20px; }
+.book-gate__row {
+  display: flex; gap: 9px; align-items: center; flex-wrap: wrap;
+  margin-top: 12px;
+}
+.book-gate__row input { flex: 1 1 220px; min-width: 0; }
+@media print { .book-gate { display: none; } }

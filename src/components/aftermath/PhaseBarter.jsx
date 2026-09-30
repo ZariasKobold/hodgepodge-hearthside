@@ -7,6 +7,9 @@ import {
   heldEquipmentIds,
 } from '../../lib/shape/arsenal.js'
 import { ALWAYS } from '../../data/equipment.js'
+import BookText from '../BookText.jsx'
+import { useBookText } from '../../hooks/useBook.js'
+import { equipmentKey } from '../../lib/book.js'
 
 /**
  * Phase 3 — one flip, then shopping.
@@ -25,6 +28,14 @@ import { ALWAYS } from '../../data/equipment.js'
 export default function PhaseBarter({ week, arsenal, record, handSize, onFlip, onBuy, onDone }) {
   const { value, suit, cheated, bought = [] } = record
   const held = heldEquipmentIds(arsenal)
+  /**
+   * Only what this arsenal already holds is entitled, so the counter can show
+   * text for something bought earlier and never for something still on offer.
+   * That is `bookStore.js`'s rule, not an oversight: entitling an item you have
+   * merely been *offered* would let anyone enumerate the table by claiming
+   * flips, which is the scrape the whole design exists to prevent.
+   */
+  const book = useBookText(held.map((id) => equipmentKey(id)))
 
   const thirstOpen = reachesThirst({ value, cheated })
   // A cheated red joker counts as a thirteen, so the ordinary counter is built
@@ -105,6 +116,10 @@ export default function PhaseBarter({ week, arsenal, record, handSize, onFlip, o
                   >
                     {owned ? 'Bought' : e.affordable ? 'Buy' : 'Too dear'}
                   </Button>
+                  {/* The player's own copy of the book, when they have supplied
+                      one. Absent, this renders nothing and the row reads exactly
+                      as it always has. */}
+                  <BookText book={book} equipmentId={e.id} />
                 </li>
               )
             })}
@@ -114,7 +129,8 @@ export default function PhaseBarter({ week, arsenal, record, handSize, onFlip, o
           </ul>
           <p className="note">
             Effects are printed in the book at the page shown — this app records
-            what you own, not what it does.
+            what you own, not what it does. Text appears here for kit you have
+            already bought, never for what is merely on offer.
           </p>
         </Field>
       )}

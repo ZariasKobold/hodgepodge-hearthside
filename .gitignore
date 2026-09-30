@@ -20,6 +20,26 @@ public/register.json
 # this whole project stands on (CLAUDE.md §8).
 docs/*.pdf
 
+# The book's *text*, retyped. Same reasoning as the PDF above and the same
+# answer: a personal copy is permitted, distributing one is not, and this
+# repository is public. `scripts/book-template.mjs` writes the scaffold and
+# `src/lib/book.js` reads it at runtime; each player supplies their own from
+# the book they bought. Removing this line republishes the book, so it is not a
+# line to remove casually — and note that a public commit cannot be undone by a
+# later deletion, because the git history keeps it.
+public/book.json
+
+# The SQL `scripts/book-to-sql.mjs` emits to load that text into D1. It is the
+# book in the clear, in one file, ready to execute. Generate it, run it with
+# `wrangler d1 execute --file`, delete it.
+book.sql
+
+# The challenge questions and their PLAINTEXT answers, and the SQL generated
+# from them. The answers are fragments of the book, and a committed answer key
+# defeats the gate it exists to build. Hashes go to D1; these stay here.
+challenges.json
+challenges.sql
+
 # Production backups. NEVER committed — this repository is public and a D1 dump
 # is the whole database in the clear: other players' Discord ids, display names
 # and avatar URLs, every campaign document, and the `sessions` table, whose `id`

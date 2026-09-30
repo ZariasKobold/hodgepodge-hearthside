@@ -4,6 +4,9 @@ import { getEffect } from '../data/crewCards.js'
 import { factionLabel } from '../data/factions.js'
 import { sourceSlug, findEntry, findTrigger } from '../lib/rules.js'
 import { RulesState, TriggerBody, ActionAdvancements } from './RulesText.jsx'
+import BookText from './BookText.jsx'
+import { useBookText } from '../hooks/useBook.js'
+import { advancementKey, textFor } from '../lib/book.js'
 import { advancementsOn, gainedActionKey } from '../lib/advancement.js'
 import { PrintLegal } from './ui.jsx'
 
@@ -20,6 +23,17 @@ import { PrintLegal } from './ui.jsx'
  */
 export default function LeaderRecord({ leader, archetype, fileNumber, rules }) {
   const effect = getEffect(leader.crewCard.effect)
+  /**
+   * The book's text for the advancements this leader holds — and only those.
+   *
+   * The server entitles on what the arsenal actually has, so this asks for
+   * exactly the keys on screen. Empty when signed out or unearned, which is
+   * ordinary and renders as the app always did. See `lib/book.js`.
+   */
+  const advancementKeys = (leader.advancements || [])
+    .map((a) => advancementKey(a.tableId, a))
+    .filter(Boolean)
+  const book = useBookText(advancementKeys)
 
   const pickSlugs = useMemo(() => {
     const out = new Set()
@@ -170,10 +184,25 @@ export default function LeaderRecord({ leader, archetype, fileNumber, rules }) {
                 <div className="record__entry">
                   {g.name} <span>— {g.tableName}{g.page ? `, p.${g.page}` : ''}</span>
                 </div>
+                <BookText book={book} advancement={g.source} />
                 <ActionAdvancements advancements={earned} />
               </div>
             )
           })}
+          {/* Without a `book.json` a gained action shows its name and its page
+              and nothing else, and a player read that as the app having lost
+              the details: "Balanced Sword doesn't have any of the details, so I
+              totally missed adding that properly." It is a boundary, not a gap
+              — the text is the campaign book's — so the note says where it is
+              and how to have it here instead of leaving a blank to interpret. */}
+          {!gained.some((g) => textFor(book, advancementKey(g.source?.tableId, g.source))) && (
+            <p className="gap-note">
+              Gained actions are printed in the book at the page shown. This app
+              records what your leader has, not what it does — the text is
+              Wyrd's to publish, not ours. Sign in and it appears here for the
+              advancements this leader has actually earned.
+            </p>
+          )}
         </section>
       )}
 
@@ -181,13 +210,16 @@ export default function LeaderRecord({ leader, archetype, fileNumber, rules }) {
         <section className="record__section">
           <div className="record__section-k">Advancements</div>
           {loose.map((a, i) => (
-            <div className="record__entry" key={a.id || `${a.name}-${i}`}>
-              {a.name}
-              <span>
-                {' — '}{a.tableName}
-                {a.appliesTo ? `, on ${a.appliesTo.name}` : ''}
-                {a.page ? `, p.${a.page}` : ''}
-              </span>
+            <div key={a.id || `${a.name}-${i}`}>
+              <div className="record__entry">
+                {a.name}
+                <span>
+                  {' — '}{a.tableName}
+                  {a.appliesTo ? `, on ${a.appliesTo.name}` : ''}
+                  {a.page ? `, p.${a.page}` : ''}
+                </span>
+              </div>
+              <BookText book={book} advancement={a} />
             </div>
           ))}
         </section>

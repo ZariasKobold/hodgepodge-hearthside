@@ -23,6 +23,7 @@ import Campaign from './components/steps/Campaign.jsx'
 import Arsenal from './components/steps/Arsenal.jsx'
 import ArsenalSheet from './components/ArsenalSheet.jsx'
 import OutstandingBar from './components/OutstandingBar.jsx'
+import BookGate from './components/BookGate.jsx'
 import { outstandingFor, outstandingAcross } from './lib/outstanding.js'
 import './styles/app.css'
 
@@ -101,10 +102,11 @@ export default function App() {
      */
     campaignId: campaign?.id ?? null,
     signedIn: Boolean(auth.user),
+    userId: auth.user?.id ?? null,
   })
   const invite = useInviteRedemption({
     signedIn: Boolean(auth.user),
-    onJoined: () => membership.refresh(),
+    onJoined: (joinedId) => membership.joinedTable(joinedId),
   })
   // Rules text is fetched live and held only in memory (§4). One instance for
   // the whole tree so the loadout's hover lookups and the record's writeout
@@ -329,6 +331,11 @@ export default function App() {
           />
         )}
 
+        {/* Asked once per account, and only when a question is loaded and the
+            title is unproved. An offer rather than a wall — nothing else in the
+            app is gated on it. */}
+        {admitted && Boolean(auth.user) && <BookGate />}
+
         {!admitted && <SignInGate auth={auth} />}
 
         {admitted && view === 'library' && (
@@ -486,6 +493,8 @@ function InviteBanner({ invite, auth }) {
         <p className="note">
           They have to let you in before you can see the campaign, and before
           anyone there can see anything of yours. Nothing has been shared yet.
+          In the meantime, choose the nickname they will know you by under
+          Campaign → Players.
         </p>
         <button className="gate__link" onClick={invite.dismiss}>Dismiss</button>
       </div>

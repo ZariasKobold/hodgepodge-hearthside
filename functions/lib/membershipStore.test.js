@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   roleIn, createInvite, listInvites, revokeInvite, redeemInvite,
   listMembers, admitMember, removeMember, setMemberProfile,
-  linkCampaign, listSharedArsenals, listMemberships,
+  linkCampaign, unlinkCampaign, listSharedArsenals, listMemberships,
   mintToken, hashToken, MEMBER_PENDING, MEMBER_ACTIVE,
 } from './membershipStore.js'
 
@@ -128,7 +128,7 @@ describe('the five attacks CLAUDE.md requires refusing', () => {
     // module exports nothing that touches `arsenals` or `arsenal_models`.
     const writers = [
       createInvite, listInvites, revokeInvite, redeemInvite, listMembers,
-      admitMember, removeMember, setMemberProfile, linkCampaign,
+      admitMember, removeMember, setMemberProfile, linkCampaign, unlinkCampaign,
       listSharedArsenals, listMemberships,
     ]
     for (const fn of writers) {
@@ -509,7 +509,7 @@ describe('the module as a whole', () => {
     const fns = {
       roleIn, createInvite, listInvites, revokeInvite, redeemInvite,
       listMembers, admitMember, removeMember, setMemberProfile,
-      linkCampaign, listSharedArsenals, listMemberships,
+      linkCampaign, unlinkCampaign, listSharedArsenals, listMemberships,
     }
     for (const [name, fn] of Object.entries(fns)) {
       const first = fn.toString().match(/\(([^,)]*)/)?.[1]?.trim()
@@ -528,10 +528,160 @@ describe('the module as a whole', () => {
       () => removeMember('', 'c', 'u', fakeDB()),
       () => setMemberProfile('', 'c', {}, fakeDB()),
       () => linkCampaign('', 'c', 'h', fakeDB()),
+      () => unlinkCampaign('', 'h', fakeDB()),
       () => listSharedArsenals('', 'c', fakeDB()),
     ]
     for (const call of calls) {
       await expect(call()).rejects.toThrow(/without a user/)
     }
+  })
+})
+
+/* ── v0.28.0: the host has a name, and members can find their table ── */
+
+describe('the host’s nickname', () => {
+  it('is an upsert of the caller’s own row, marked as the host', async () => {
+    const db = fakeDB([asRole(OWNER, null)])
+    const result = await setMemberProfile(OWNER, HOST_CAMPAIGN, { nickname: 'Dalton', shareIdentity: false }, db)
+    expect(result).toEqual({ nickname: 'Dalton', shareIdentity: false })
+
+    const upsert = db.log.find((l) => l.sql.includes('INSERT INTO campaign_members'))
+    expect(upsert.sql).toContain('ON CONFLICT(campaign_id, user_id) DO UPDATE SET')
+    // Only nickname and sharing change on a conflict — never status or role.
+    expect(upsert.sql).not.toMatch(/DO UPDATE SET[^]*status/)
+    expect(upsert.binds.slice(0, 3)).toEqual([HOST_CAMPAIGN, OWNER, 'host'])
+    expect(upsert.binds.slice(4)).toEqual([MEMBER_ACTIVE, 'Dalton', 0])
+  })
+
+  it('never inserts a row for a member — they already have one', async () => {
+    const db = fakeDB([asRole(OWNER, MEMBER_ACTIVE)])
+    await setMemberProfile(MEMBER, HOST_CAMPAIGN, { nickname: 'Me' }, db)
+    expect(db.sqls().some((s) => s.includes('INSERT INTO campaign_members'))).toBe(false)
+  })
+
+  it('lets somebody still waiting name themselves, so the host knows who is asking', async () => {
+    const db = fakeDB([asRole(OWNER, MEMBER_PENDING)])
+    const result = await setMemberProfile(MEMBER, HOST_CAMPAIGN, { nickname: 'Mads' }, db)
+    expect(result.nickname).toBe('Mads')
+  })
+})
+
+describe('listMembers — the host, and who is bringing what', () => {
+  const rows = [
+    { user_id: OWNER, role: 'host', joined_at: 0, status: MEMBER_ACTIVE, nickname: 'Dalton', share_identity: 0, display_name: 'owner#1' },
+    { user_id: MEMBER, role: 'player', joined_at: 1, status: MEMBER_ACTIVE, nickname: 'Mads', share_identity: 0, display_name: 'mads#2' },
+  ]
+  const seated = [
+    { campaign_id: HOST_CAMPAIGN, user_id: OWNER, leader: JSON.stringify({ name: 'Hank' }) },
+    { campaign_id: 'cmp_mads', user_id: MEMBER, leader: JSON.stringify({ name: 'Lady Justice' }) },
+  ]
+  const setup = (owner, status) => fakeDB([
+    asRole(owner, status),
+    ['FROM campaign_members m JOIN users u', rows],
+    ['FROM campaigns c LEFT JOIN arsenals a', seated],
+  ])
+
+  it('returns the host apart from the members, by nickname', async () => {
+    const { host, members } = await listMembers(MEMBER, HOST_CAMPAIGN, setup(OWNER, MEMBER_ACTIVE))
+    expect(host.nickname).toBe('Dalton')
+    expect(host.role).toBe('host')
+    expect(members.map((m) => m.nickname)).toEqual(['Mads'])
+  })
+
+  it('names the leader each player brought', async () => {
+    const { host, members } = await listMembers(MEMBER, HOST_CAMPAIGN, setup(OWNER, MEMBER_ACTIVE))
+    expect(host.bringing).toEqual(['Hank'])
+    expect(members[0].bringing).toEqual(['Lady Justice'])
+  })
+
+  it('sends a member neither the host’s id nor anyone else’s', async () => {
+    const result = await listMembers(MEMBER, HOST_CAMPAIGN, setup(OWNER, MEMBER_ACTIVE))
+    const text = JSON.stringify(result)
+    expect(text).not.toContain(OWNER)
+    expect(text).not.toContain('owner#1')
+    // Your own id is yours.
+    expect(result.members[0].userId).toBe(MEMBER)
+  })
+
+  it('still has a host entry when the host never chose a nickname', async () => {
+    const db = fakeDB([
+      asRole(OWNER, MEMBER_ACTIVE),
+      ['FROM campaign_members m JOIN users u', [rows[1]]],
+      ['FROM campaigns c LEFT JOIN arsenals a', seated],
+    ])
+    const { host } = await listMembers(MEMBER, HOST_CAMPAIGN, db)
+    expect(host).toMatchObject({ nickname: '', role: 'host', isYou: false, bringing: ['Hank'] })
+  })
+
+  it('binds the campaign on the seating query, never a bare scan', async () => {
+    const db = setup(OWNER, MEMBER_ACTIVE)
+    await listMembers(MEMBER, HOST_CAMPAIGN, db)
+    const q = db.log.find((l) => l.sql.includes('FROM campaigns c LEFT JOIN arsenals a'))
+    expect(q.sql).toContain('WHERE c.id = ? OR c.member_of = ?')
+    expect(q.binds).toEqual([HOST_CAMPAIGN, HOST_CAMPAIGN])
+  })
+})
+
+describe('linking and unlinking', () => {
+  it('bringing a leader takes any other of yours off that table — yours only', async () => {
+    const db = fakeDB([asRole(OWNER, MEMBER_ACTIVE)])
+    await linkCampaign(MEMBER, 'cmp_second', HOST_CAMPAIGN, db)
+    const clear = db.log.find((l) => l.sql.includes('SET member_of = NULL'))
+    expect(clear.sql).toContain('WHERE owner_user_id = ? AND member_of = ? AND id != ?')
+    expect(clear.binds).toEqual([MEMBER, HOST_CAMPAIGN, 'cmp_second'])
+  })
+
+  it('clears nothing when the link itself was refused', async () => {
+    const db = fakeDB([
+      asRole(OWNER, MEMBER_ACTIVE),
+      ['UPDATE campaigns SET member_of = ? WHERE id', { meta: { changes: 0 } }],
+    ])
+    expect((await linkCampaign(MEMBER, 'not_mine', HOST_CAMPAIGN, db)).forbidden).toBe(true)
+    expect(db.sqls().some((s) => s.includes('SET member_of = NULL'))).toBe(false)
+  })
+
+  it('unlinking touches only the caller’s own campaigns', async () => {
+    const db = fakeDB()
+    await unlinkCampaign(MEMBER, HOST_CAMPAIGN, db)
+    expect(db.log).toHaveLength(1)
+    expect(db.log[0].sql).toContain('WHERE owner_user_id = ? AND member_of = ?')
+    expect(db.log[0].binds).toEqual([MEMBER, HOST_CAMPAIGN])
+  })
+})
+
+describe('listMemberships — finding the table you joined', () => {
+  const rows = [
+    { id: 'cmp_a', name: '', owner_user_id: OWNER, status: MEMBER_ACTIVE, host_nickname: 'Dalton', my_nickname: 'Mads', my_share: 0, member_count: 2 },
+    { id: 'cmp_b', name: '', owner_user_id: 'usr_other', status: MEMBER_PENDING, host_nickname: 'Secret', my_nickname: 'Mads', my_share: 1, member_count: 1 },
+  ]
+  const setup = () => fakeDB([
+    ['JOIN campaign_members m ON m.campaign_id', rows],
+    ['SELECT id, member_of FROM campaigns', [{ id: 'cmp_mine', member_of: 'cmp_a' }]],
+  ])
+
+  it('says which of your campaigns sits at each table', async () => {
+    const { memberships } = await listMemberships(MEMBER, setup())
+    expect(memberships[0].linkedCampaignIds).toEqual(['cmp_mine'])
+    expect(memberships[1].linkedCampaignIds).toEqual([])
+  })
+
+  it('tells somebody still waiting nothing about the host', async () => {
+    const { memberships } = await listMemberships(MEMBER, setup())
+    expect(memberships[0].hostNickname).toBe('Dalton')
+    expect(memberships[1].hostNickname).toBe('')
+    expect(JSON.stringify(memberships)).not.toContain('Secret')
+  })
+
+  it('hands back your own nickname and sharing choice', async () => {
+    const { memberships } = await listMemberships(MEMBER, setup())
+    expect(memberships[1]).toMatchObject({ nickname: 'Mads', sharesIdentity: true })
+  })
+
+  it('scopes the linked-campaign read to the caller', async () => {
+    const db = setup()
+    await listMemberships(MEMBER, db)
+    const q = db.log.find((l) => l.sql.includes('SELECT id, member_of FROM campaigns'))
+    expect(q.sql).toContain('WHERE owner_user_id = ?')
+    expect(q.binds).toEqual([MEMBER])
   })
 })

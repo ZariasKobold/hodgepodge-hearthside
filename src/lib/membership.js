@@ -75,6 +75,29 @@ export const saveProfile = (campaignId, { nickname, shareIdentity }) =>
 export const link = (hostCampaignId, campaignId) =>
   call(`/${hostCampaignId}/link`, { method: 'PUT', body: { campaignId } })
 
+export const unlink = (hostCampaignId) =>
+  call(`/${hostCampaignId}/link`, { method: 'DELETE' })
+
+/**
+ * Which table the Players tab should show for the open campaign.
+ *
+ * A player who joined somebody else's campaign still opens their *own*
+ * campaign — that is where their arsenal sits — and asking the server about it
+ * answers "you are the host of a table nobody else is at". The table they
+ * actually play at is the one their campaign is linked to. So: an explicit
+ * choice if it is still one of the options, else the table this campaign is
+ * linked to, else the campaign itself.
+ */
+export function resolveTable({ campaignId, memberships = [], chosen = null }) {
+  if (!campaignId) return null
+  const joined = memberships.filter((m) => !m.isOwner)
+  if (chosen && (chosen === campaignId || joined.some((m) => m.campaignId === chosen))) {
+    return chosen
+  }
+  const linked = joined.find((m) => (m.linkedCampaignIds || []).includes(campaignId))
+  return linked ? linked.campaignId : campaignId
+}
+
 /* ── the invite link ────────────────────────────────────────────── */
 
 /**

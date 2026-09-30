@@ -98,7 +98,6 @@ export default function Campaign({
 
       {tab === 'players' && (
         <Players
-          campaign={campaign}
           shelf={shelf}
           membership={membership}
           signedIn={signedIn}

@@ -4868,3 +4868,427 @@ there, not on the server, so nobody else can do it for her. Then decide the
 shape of reopening a finished aftermath: the owner asked for "ask the campaign
 owner for permission", and every player on the database is host of their own
 campaign, so that flow would be asking yourself.
+
+---
+
+### Session 43 — v0.24.1
+Date: 2026-09-08
+
+**fix: retract Session 42's premise — no data was ever lost**
+
+Session 42 is built on a measurement error, and this entry exists so nobody
+re-derives the wrong story from the code it left behind.
+
+`arsenals` was dumped at **10:08 MDT**. `campaigns` was dumped about **two hours
+later**. The player did her aftermath at **11:31–11:46 MDT**, in between. So the
+arsenal snapshot predated her work and the campaign snapshot followed it, and
+comparing the two showed a game record full of advancements against an arsenal
+that had none. That is not drift; that is two photographs of two tables taken
+two hours apart.
+
+Read properly at 21:11 MDT, `ars_mt4kvlyi0dptdb` is **version 7, complete and
+correct** — Gatling Gun, all three advancements, three experience boxes,
+`startingScripGranted: 2`, scrip 1. The arithmetic reconciles exactly:
+0 + 2 credited + 1 payday − 2 for the gun = 1. It was written at 11:46 MDT, the
+moment she finished, and has been right ever since. She confirmed the same from
+the other side: the scrip prompt appeared and she used it.
+
+**What was actually wrong with the process**, since the reasoning on top of the
+bad read was careful and that is exactly what made it convincing:
+
+- The arsenal was queried again later *for its version* and came back
+  `version 7`, up from the dump's `version 1`. **That number was on screen and
+  went unnoticed**, because it was being read for a different question.
+- The dump's own `doc.updatedAt` was six days old while the row's `updated_at`
+  was that morning. Those two disagreeing *is* the finding, and it was read as
+  corroboration instead.
+- `wrangler d1 execute` has no transaction across invocations. Any multi-table
+  question needs one query or a fresh pair — never two dumps taken apart.
+
+**What is kept, and on what footing:**
+
+- **`settleAfterPush` stays.** The race is real in the code — `runReconcile`
+  snapshots before it awaits, and the push loops wrote that snapshot back with
+  `keepTimestamp: true` and cleared the dirty flag — and four tests fail against
+  the v0.23.0 version. It is a race closed before it bit, not a post-mortem, and
+  it is now documented as such.
+- **The deterministic lift stays**, and was always independent: `migrateArsenal`
+  reached for `Date.now()`, `canonical` compares `createdAt`, and
+  `shelf.test.js:349` was genuinely flaky. Unrelated to the phantom.
+- **`lib/repair.js` and `RepairAftermath` stay, with a warning.** They were
+  built to undo a loss that had not happened and have never fired on a real
+  arsenal. They offer to move somebody's scrip, so a false positive would cause
+  the harm they were meant to undo — id-matching only, one-sided only, and the
+  arithmetic shown before anything moves. If it ever fires on a healthy arsenal
+  that is a detector bug, not a discovery.
+- **The read-only history and the section header stay**, and were never part of
+  this: they came from the player's own two requests and are unaffected.
+
+**feat: say why a gained action shows no stat line**
+
+Her actual outstanding complaint, and it is a boundary rather than a bug.
+"Balanced Sword doesn't have any of the details" — a tier-2 Action advancement
+records `{ value, name, page }` and nothing else, because the action's stat line
+and text are the campaign book's (§4, §8). `data/crewCards.js` set the precedent
+years ago: *"Names and constraints only — the effect text stays in your book."*
+
+Read as an app failure, though, and fairly: the card printed "Balanced Sword —
+Action, p.47" and stopped. The record now carries the same `.gap-note` the
+barter screen has, saying the app records what your leader has and not what it
+does. Turning a suspected bug into a stated limit is the cheapest fix available
+and the only one §4 allows.
+
+Files: `CLAUDE.md`, `docs/VERSION_HISTORY.md`, `package.json`,
+`src/components/LeaderRecord.jsx`
+RESOLVED: the false incident is retracted in both docs; a gained action explains
+itself.
+UNVERIFIED: nothing new. The reconcile race remains closed-but-unobserved, which
+is now what the documentation claims rather than more.
+NEXT: unchanged — the shape of reopening a finished aftermath, and item 0b's
+aftermath hand.
+
+---
+
+### Session 44 — v0.25.0
+Date: 2026-09-08
+
+**feat: the book's rules text, from the player's own copy**
+
+Owner decision: the advancement tables and the barter table should show their
+text, prompted by a player reporting that "Balanced Sword doesn't have any of
+the details". The mechanism is built and **the text is not in this repository**.
+
+Two things were raised once and the decision stands until the owner says
+otherwise:
+
+- **This is the paid book, not the free card library.** §4's display-only
+  exception (v0.5.0) covers text fetched live from BiggerHat, which already
+  republishes Wyrd's *free* card library under the same fan policy. *Index of
+  the Untold* is a product Wyrd sells; its copyright page permits personal
+  copies and bars distributing them, which is why `docs/*.pdf` is gitignored.
+  Retyping the book into a public repo is the same act as committing the PDF.
+- **A public commit cannot be un-published.** "If Wyrd asks, we remove it" works
+  for a website and not for git history, forks or scrapers. The asymmetry is
+  the reason to decide before pushing rather than after.
+
+So the text goes where `public/register.json` already goes: `public/book.json`,
+gitignored, supplied by each player from the book they bought.
+`scripts/book-template.mjs` writes the scaffold with all **340** keys in place,
+merging on re-run so nothing typed is ever lost. Without the file the app reads
+exactly as before, and the notes now say where the text is and how to have it —
+which was the actual complaint, since a bare "Balanced Sword — Action, p.47"
+reads as the app having lost something.
+
+**If the owner clears it with Wyrd, the whole change is one line of
+`.gitignore`.** Loader, keys and display sites all stay.
+
+**Key decisions and why:**
+
+- **Never persisted** (§4). Module-level cache that dies with the tab, like
+  `lib/rules.js`. It must not reach a campaign document, the export or D1.
+- **The key is table + value + name.** None is unique alone — "Skill Boost" is
+  printed three times on the attack table, value 9 on the action table carries
+  four options. A test asserts uniqueness across all 340 rows.
+- **It reads `value` *and* `tableValue`, and that was a real bug.** The scaffold
+  is generated from `data/advancements.js`, where the number is `value`; every
+  lookup happens against an advancement recorded on a leader, where the same
+  number is `tableValue`. Reading only `value` was perfect against the data file
+  and found nothing whatsoever on a real record. Caught in a browser, not by a
+  test — the fixture agreed with the mistake, for the third time this month.
+- **`loadBook` caches an answer, not an attempt.** The first cut latched an
+  `attempted` flag and returned `{}` for the rest of the tab, so a single
+  transient miss disabled the feature permanently. It did exactly that, on a
+  file that was served correctly a second later.
+- **A missing file is silence, never a hole.** `BookText` renders nothing at
+  all, so the previous design stays intact for a player without the book.
+
+Verified in a browser both ways, with placeholder strings rather than the book's
+text: filled, the text appears under "Balanced Sword — Action, p.47" and the
+explanatory note steps aside; emptied, the note returns and no `.book-text` node
+is rendered.
+
+Files: `src/lib/book.js` (new), `src/lib/book.test.js` (new, 11 tests),
+`src/hooks/useBook.js` (new), `src/components/BookText.jsx` (new),
+`scripts/book-template.mjs` (new), `src/components/LeaderRecord.jsx`,
+`src/components/aftermath/PhaseBarter.jsx`, `src/styles/app.css`, `.gitignore`,
+`CLAUDE.md`, `package.json`, `docs/VERSION_HISTORY.md`
+RESOLVED: a gained action can show what it does, for a player who owns the book;
+and it explains itself for one who does not.
+UNVERIFIED: the barter counter's `BookText` was wired but not driven in a
+browser — the record path was. Equipment on the arsenal sheet has no `BookText`
+yet, nor do injuries, though both have keys in the scaffold.
+NEXT: unchanged — the shape of reopening a finished aftermath, and item 0b's
+aftermath hand. If Wyrd clears the text, flip the `.gitignore` line.
+
+---
+
+### Session 45 — v0.25.1
+Date: 2026-09-08
+
+**fix: `.gitignore` was only half the guard — `public/` is served**
+
+Owner, on the v0.25.0 design: *"it's a good idea not to make any of those items
+somewhere easy for people or AIs to scrape."* Agreed, and acting on it exposed a
+hole in what had just been built.
+
+Everything in `public/` is copied into `dist/` and put at a public URL by
+Cloudflare Pages — that is how the manifest and the art get there, and CLAUDE.md
+already lists the 1.9 MB Hank master as a known issue for exactly this reason:
+nothing requests it and Cloudflare serves it anyway.
+
+So a filled `public/book.json` that ever reached a deploy would be **the whole
+of the book's rules text at one unauthenticated URL, in JSON, in a single GET**.
+That is a *more* scrapeable shape than committing it would have been: no clone,
+no search, no crawl of a repository — one request. Putting the file in `public/`
+was the right call for how Vite serves static assets and the wrong call for the
+thing being protected, and `.gitignore` does not cover it: it stops the file
+reaching the repository and therefore Cloudflare's build, but not `git add -f`,
+not somebody deleting that line, and not a local build uploaded by hand.
+
+`npm run build` now runs `scripts/check-no-book-text.mjs` first and fails if the
+file holds any text at all. The empty scaffold passes, because it carries none.
+Verified both ways: the build exits 1 with one filled entry and 0 once the
+scaffold is emptied.
+
+**The override is named.** `ALLOW_BOOK_TEXT=1 npm run build` — an explicit act
+someone has to type and can be asked about, rather than the absence of a check.
+If Wyrd clears publication, that flag and the `.gitignore` line are the whole
+change.
+
+**The consequence, and it is a real limitation.** The text now works in
+`npm run dev` and is never on the deployed site — so it is readable only by the
+person who typed it. **Madeline cannot use it**, and neither can anyone else on
+hodgepodgehearthside.com. Serving other players their own text without it
+sitting on a server means loading a file they pick, in their own browser, held
+on their own device — which is a §4 amendment (the rule names localStorage
+explicitly) and is the owner's call to make, the way the v0.5.0 display-only
+exception was.
+
+Files: `scripts/check-no-book-text.mjs` (new), `package.json`, `CLAUDE.md`,
+`docs/VERSION_HISTORY.md`
+RESOLVED: the book's text cannot be deployed by accident.
+UNVERIFIED: nothing new.
+NEXT: decide whether a player may load their own book file into their own
+browser (§4 amendment). Until then v0.25.0's display is a local-dev feature.
+
+---
+
+### Session 46 — v0.26.0
+Date: 2026-09-09
+
+**feat: the book's text in D1, entitled by what your leader actually holds**
+
+Owner: *"Can we put the text into a secret, only to be accessed by logged in
+members, and only reveal what is relevant to their situation?"* Yes to all three,
+with one correction and one sharpening.
+
+**The correction: a Cloudflare secret cannot hold it.** Secrets are a few KB
+each; 340 entries of prose is far more. It is D1 — `migrations/0007_book_text.sql`,
+`functions/lib/bookStore.js`, `POST /api/book`.
+
+**The sharpening: "relevant to their situation" is the security property, not a
+nicety.** Gating on "is signed in" alone would be weak — signing in costs a
+Discord account, and one authenticated request could then walk all 340 keys.
+Entitling on *what the caller's own arsenals hold* means collecting the book
+requires earning every advancement and buying every item across many real
+campaign weeks. That is not a scrape, and it is the reason this is worth
+building rather than putting a JSON file behind a login.
+
+**Key decisions and why:**
+
+- **The request is a filter, never a grant.** The entitled set is computed from
+  the caller's own rows; asking for everything returns the handful you have
+  earned. The response never distinguishes "not yours" from "does not exist",
+  because which keys exist is itself a fact about the book.
+- **No write endpoint at all.** Rows load by hand from
+  `scripts/book-to-sql.mjs` output via `wrangler d1 execute --file`, which is
+  atomic. A table with no write surface cannot be tampered with through the app,
+  and loading it stays a deliberate act with the book open.
+- **POST for a read.** The key list is long, and a GET would put fragments of
+  the book into browser history, proxy logs and referrers. `Cache-Control:
+  no-store, private`; `/api/` is already uncacheable by the service worker (§4).
+- **`book_text` has no `owner_user_id`,** being shared reference data — so the
+  structural guard every other store relies on cannot apply, and the entitlement
+  check stands in its place. `bookStore.test.js` is therefore as important as
+  `campaignStore.test.js`: 12 tests, including that a corrupt document entitles
+  nothing without throwing, that the key cap holds, and that the SQL itself only
+  ever names entitled keys.
+- **The barter counter loses something, on purpose.** Text appears for kit
+  already bought and never for what is merely on offer: an offered item is not
+  held, and entitling it would let anyone enumerate the table by claiming flips.
+  The note on screen says so rather than looking broken.
+- **`value` and `tableValue` again.** The key builder is mirrored across the
+  `src/` ↔ `functions/` line, which §6 forbids importing across. Both read both
+  spellings, and both say so — a divergence there means the server entitles
+  nothing and the text silently stops appearing.
+
+Proven over real HTTP with `wrangler pages dev` against a local D1 and forged
+sessions: unauthenticated 401, wrong method 405, cross-origin 403. Then two
+players asked for the *same* three keys and each got back only the ones their
+own leader holds — the third row existed in the table and was withheld from
+both. Placeholder strings throughout, not the book's text.
+
+**It is still distribution, and that was said once and stands.** Sign-in is
+already required to play (§12b), so this buys anonymous access — no crawlers, no
+indexing, no drive-by scrape — rather than a smaller audience. If Wyrd asks, the
+answer is `DELETE FROM book_text`, one statement.
+
+Files: `migrations/0007_book_text.sql` (new), `functions/lib/bookStore.js` (new),
+`functions/lib/bookStore.test.js` (new, 12 tests), `functions/api/book.js` (new),
+`scripts/book-to-sql.mjs` (new), `src/lib/book.js`, `src/lib/book.test.js`,
+`src/hooks/useBook.js`, `src/components/LeaderRecord.jsx`,
+`src/components/aftermath/PhaseBarter.jsx`, `.gitignore`, `CLAUDE.md`,
+`package.json`, `docs/VERSION_HISTORY.md`
+RESOLVED: the text can reach players without reaching anyone else.
+UNVERIFIED: migration 0007 has not been applied to **remote** — do that before
+deploying, or `/api/book` 500s on a missing table. No text has been loaded
+anywhere; the table is empty and the app behaves exactly as it did.
+NEXT: apply 0007 remote, load the text, and check it on a real device. Then the
+shape of reopening a finished aftermath.
+
+---
+
+### Session 47 — v0.27.0
+Date: 2026-09-09
+
+**feat: prove you own the book, once**
+
+Owner asked whether purchase could be proved. **It cannot be verified** — Wyrd
+has no purchase API, no OAuth, no entitlement endpoint, and PDF storefronts do
+not expose third-party ownership checks either. So this demonstrates ownership
+rather than verifying it: a question only somebody holding the book can answer,
+asked once per account per title.
+
+**Key decisions and why:**
+
+- **A fair question's answer is not in this repository.** `src/data/` publishes
+  every name, value, cost, page and suit, so "what is the Gatling Gun's barter
+  rating?" proves nothing — it is one `git clone` away. What is *not* published
+  is the prose and the stat lines, and The Silent Catalogue alone carries 134
+  equipment stat blocks (Rg/Skl/Rst/TN/Dmg) that appear nowhere in
+  `src/data/equipment.js`. Those make the questions.
+- **Answers are hashed at authoring time**, through the same `normaliseAnswer`
+  + `hashAnswer` the server uses, so plaintext never enters D1 or the repo and
+  `book_challenges` cannot be mined for the content it protects.
+  `challenges.json` and `challenges.sql` are gitignored beside `book.sql`.
+- **The attempt limiter is half the gate.** A stat line is a small number, so
+  unlimited attempts would make the challenge a formality. Eight failures per
+  user per title, then fifteen minutes — and a *correct* answer is refused
+  during a lockout, because otherwise the limiter only slows down the people who
+  were going to fail anyway. Success clears the counter, so two fumbles and a
+  win does not leave somebody one slip from a lockout.
+- **Asked once, decided by the server.** A proved title returns `null`, so there
+  is no dismissal to remember and no client state that can disagree with the
+  account. An empty `book_challenges` also returns `null`, so a deployment with
+  no questions loaded shows no gate rather than an unanswerable one.
+- **Two gates, neither implying the other.** `book_access` asks *may you read
+  this book*; the entitled set asks *which rows are yours*. Proving ownership
+  does not hand over all 340 rows, and earning an advancement does not entitle
+  you to a book you have not shown. `bookAccess.test.js` asserts both directions.
+- **Answering reloads the page.** Every key already asked about this session was
+  answered under the old permissions and cached as "no text", and `useBookText`
+  keys its effect on the keys, which have not changed — so clearing the cache
+  alone leaves every record blank with no way to refresh, which reads as the
+  unlock having failed. A reload is heavy and correct: this happens once per
+  account and everything autosaves.
+- **It is an offer, never a wall.** Nothing else in the app is gated on it.
+
+**`book_text.title` arrived in the same migration**, while the table was still
+empty. "I own Index of the Untold but not The Silent Catalogue" is answerable
+now; retrofitting it later would have meant guessing which book each row came
+from.
+
+**And the Catalogue itself, scoped by reading it rather than guessing.** It is a
+40-page reference companion: it duplicates tables the app already has (Equipment,
+Those Who Thirst, Back-Alley Doctor, Injury, Lucky Miss, the advancement tables)
+and adds three things it does not — **Cooperative Equipment**, **Cooperative Mode
+Tracking**, and **Weekly Events** (~10 flip-driven entries), the last of which
+CLAUDE.md already lists as an unbuilt optional rule. `docs/*.pdf` already covered
+the file; verified it has never been committed, in any branch.
+
+Proven over HTTP with `wrangler pages dev` against a local D1 and forged
+sessions: text withheld before proving, the challenge served without its hash, a
+wrong answer counted down to 7 remaining, `" 6. "` accepted for `6`, the two
+entitled rows released afterwards, `null` on the second ask, and a second player
+who had proved nothing still refused. Placeholder strings throughout.
+
+Files: `migrations/0008_book_access.sql` (new), `functions/lib/bookStore.js`,
+`functions/lib/bookAccess.test.js` (new, 18 tests),
+`functions/lib/bookStore.test.js`, `functions/api/book.js`,
+`scripts/book-challenges.mjs` (new), `src/lib/book.js`,
+`src/components/BookGate.jsx` (new), `src/App.jsx`, `src/styles/app.css`,
+`.gitignore`, `CLAUDE.md`, `package.json`, `docs/VERSION_HISTORY.md`
+RESOLVED: ownership can be demonstrated, once, per title.
+UNVERIFIED: the gate has not been driven in a browser — only over HTTP. No
+questions have been written; `book_challenges` is empty, so no gate shows.
+Migrations 0007 and 0008 are **not applied to remote**.
+NEXT: apply 0007 and 0008 remote, write a few challenges, load the text. Then
+the shape of reopening a finished aftermath, and Weekly Events now that there is
+a source for them.
+
+---
+
+### Session 48 — v0.28.0
+Date: 2026-09-29
+
+**feat: a member can see the campaign they joined, and everyone has a nickname**
+
+Owner report: the Players tab did not show joined players their campaign, did
+not show everyone's arsenal under the name they chose, and offered no nickname.
+All three were one bug and one gap.
+
+**The bug: a member was never shown the campaign they joined.** Since v3 a
+member opens their *own* arsenal, which sits in a campaign of their *own*,
+linked to the host's by `campaigns.member_of`. `useMembership` asked the server
+only about the open campaign, and `roleIn` truthfully answered "owner" — so
+every member was shown as the host of an empty table, with an Invite panel and
+"This campaign is yours alone". The member-only screens (`MyProfile`,
+`BringALeader`) were gated on `isMember && !isHost` and never rendered for
+anybody. That is why every `member_of` on production is `NULL`: the one control
+that sets it was unreachable.
+
+**The gap: the host had no nickname.** The host owns the campaign and has no
+`campaign_members` row, and `setMemberProfile` was a bare `UPDATE` — so the host
+could not name themselves, and appeared as "unnamed player" to everyone.
+
+**Key decisions and why:**
+
+- **`resolveTable` picks the table, in `lib/membership.js` and tested.** An
+  explicit choice if it is still one of your tables, else the table this
+  campaign is linked to, else the campaign itself. `listMemberships` gained
+  `linkedCampaignIds` (one extra statement, scoped by owner) so the client can
+  answer that without reading anybody's campaign row.
+- **A table picker, shown only when there is a choice.** A host who has never
+  joined another table sees the page as before. Each joined table says whether
+  your leader is there, because an admitted member with no leader linked is
+  invisible to everyone and had no way to know.
+- **The host's nickname is an upsert of their own row**, `role 'host'`,
+  `status 'active'`. `roleIn` answers "owner" before it reads status, so the row
+  grants nothing. On conflict it updates only nickname and sharing — asserted.
+- **`listMembers` returns `host` apart from `members`**, and every entry carries
+  `bringing` — leader names joined by user id on the server, so the list reads
+  "Mads · bringing Lady Justice" without an id crossing. The host's id is never
+  sent to a member.
+- **Somebody still waiting can set a nickname**, so the host knows who is at the
+  door. `listMemberships` tells them nothing about the host until admitted —
+  gate two applies to the host's name too.
+- **Withdraw never worked.** It sent a null campaign id through `linkCampaign`,
+  matched no row and got a 404. It is `DELETE /:id/link` → `unlinkCampaign` now,
+  scoped to the caller's own rows.
+- **"Bring this one instead" left the first linked**, so both sat in everyone's
+  view. `linkCampaign` clears the caller's other campaigns at that table, after
+  the write that matters.
+- **Leaving is on the page.** `removeMember` already let a member remove
+  themselves; nothing called it. Confirmed before it runs.
+
+**Verified** over real HTTP against a local D1 with forged sessions, then in the
+browser as both accounts: the member landed on the host's table, saw both
+players by nickname with the leader each brought, both arsenals, and saved a new
+nickname that the host's view then showed. No schema change; no migration.
+
+21 new tests (15 membership store, 6 `resolveTable`). 694 total.
+
+NEXT: apply 0007/0008 remote (still outstanding from v0.27.0). Then check with a
+real member on production that they can find the host's table and bring a
+leader — nothing on production has ever been linked. **§5's third trigger fired
+(a change under `functions/`), and Session 50 is the ten-session audit.**

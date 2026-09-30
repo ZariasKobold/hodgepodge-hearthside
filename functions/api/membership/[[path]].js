@@ -2,7 +2,7 @@ import { currentUser, json, sameOrigin } from '../../lib/auth.js'
 import {
   createInvite, listInvites, revokeInvite, redeemInvite,
   listMembers, admitMember, removeMember, setMemberProfile,
-  linkCampaign, listSharedArsenals, listMemberships,
+  linkCampaign, unlinkCampaign, listSharedArsenals, listMemberships,
 } from '../../lib/membershipStore.js'
 
 /**
@@ -25,6 +25,7 @@ import {
  *   DELETE /api/membership/:id/members/:userId      remove, or leave
  *   PUT    /api/membership/:id/profile              your nickname + sharing
  *   PUT    /api/membership/:id/link                 { campaignId } you bring
+ *   DELETE /api/membership/:id/link                 take yours back off
  *
  * Every handler passes `user.id` from the session. Nothing takes an actor from
  * the request body, and the store refuses to run without a subject at all.
@@ -142,6 +143,11 @@ export async function onRequest(context) {
       const result = await linkCampaign(user.id, body.campaignId, campaignId, env)
       if (result.error) return json({ message: result.error }, 400)
       return result.forbidden ? notFound() : json(result)
+    }
+
+    /* DELETE /api/membership/:id/link */
+    if (method === 'DELETE' && seg[1] === 'link' && seg.length === 2) {
+      return json(await unlinkCampaign(user.id, campaignId, env))
     }
 
     return json({ message: `${method} is not supported here.` }, 405)

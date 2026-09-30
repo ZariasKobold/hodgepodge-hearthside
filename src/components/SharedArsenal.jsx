@@ -27,7 +27,8 @@ export default function SharedArsenal({ arsenal }) {
   const total = arsenalTotal(live)
   const activeInjuries = injuries.filter((i) => !i.removedAt)
 
-  const name = member.nickname || (member.isYou ? 'You' : 'unnamed player')
+  const name = member.nickname
+    || (member.isYou ? 'You' : arsenal.isHost ? 'The host' : 'unnamed player')
 
   return (
     <article className={`shared${member.isYou ? ' shared--mine' : ''}`}>

@@ -1,10 +1,20 @@
 import { useState } from 'react'
-import { Label, Field, Button, Input } from '../ui.jsx'
+import { Label, Field, Button, Input, Chip } from '../ui.jsx'
 import { inviteLink } from '../../lib/membership.js'
 import SharedArsenal from '../SharedArsenal.jsx'
 
 /**
  * Who else is in this campaign, and what everyone has.
+ *
+ * ## Which campaign this page is about
+ *
+ * Not always the open one. A player who joined someone else's campaign keeps
+ * their arsenal in a campaign of their own, linked to the host's, and this page
+ * used to ask only about that private one — so every member was shown as the
+ * host of an empty table, with no way to see the campaign they had joined, set
+ * a nickname in it, or bring a leader to it. `useMembership` now works out the
+ * table, and `TablePicker` lets a player who sits at more than one move
+ * between them.
  *
  * ## Why arsenals are shared at all
  *
@@ -17,27 +27,24 @@ import SharedArsenal from '../SharedArsenal.jsx'
  *
  * Your Discord name and avatar, unless you say so, per campaign, here. The
  * default is the private one because a privacy default that leaks is not a
- * setting. What crosses instead is a nickname you choose.
- *
- * That is the whole reason this app issues invites rather than join codes: a
- * bare code is a capability URL, anyone holding it is in, and being in used to
- * mean seeing everyone's Discord identity. Now being in means seeing
- * nicknames, and identity is each player's to give.
+ * setting. What crosses instead is a nickname you choose — the host included,
+ * who until v0.28.0 had no way to choose one and appeared to everyone as an
+ * unnamed player.
  *
  * ## Two gates
  *
  * A link puts someone in the pending list; only the host admits them. So a
  * forwarded link costs the host a decision, not a leak.
  */
-export default function Players({ campaign, shelf, membership, signedIn }) {
+export default function Players({ shelf, membership, signedIn }) {
   const {
-    members, arsenals, invites, isHost, isMember, loading, error, freshInvite, knownToServer,
+    members, host, me, arsenals, invites, isHost, isMember, isPending,
+    loading, error, freshInvite, knownToServer, joined, table,
   } = membership
 
   const [note, setNote] = useState('')
   const [copied, setCopied] = useState(false)
 
-  const me = members.find((m) => m.isYou) || null
   const pending = members.filter((m) => m.status === 'pending')
   const active = members.filter((m) => m.status === 'active')
 
@@ -50,10 +57,35 @@ export default function Players({ campaign, shelf, membership, signedIn }) {
     )
   }
 
+  const hostName = tableName(table)
+
   return (
     <>
+      <TablePicker membership={membership} />
+
       {error && <p className="note note--warn">{error}</p>}
       {loading && <p className="note">Reading the campaign…</p>}
+
+      {/* ── still at the door ───────────────────────────────────── */}
+      {isPending && (
+        <>
+          <section className="panel panel--attention">
+            <Label>Waiting to be let in</Label>
+            <p className="note">
+              You have used an invite to {hostName}. The host has to admit you
+              before you can see who else is playing — and before anyone there
+              can see anything of yours.
+            </p>
+          </section>
+          <MyProfile
+            key={`${membership.tableId}:${me ? 1 : 0}`}
+            me={me}
+            membership={membership}
+            intro="Choose it now and the host will know who is asking to join."
+          />
+          <LeaveTable membership={membership} label="Withdraw my request" />
+        </>
+      )}
 
       {/* ── the host's door ─────────────────────────────────────── */}
       {isHost && (
@@ -157,49 +189,47 @@ export default function Players({ campaign, shelf, membership, signedIn }) {
         </section>
       )}
 
-      {/* ── your own entry ──────────────────────────────────────── */}
-      {isMember && !isHost && <MyProfile me={me} membership={membership} />}
-
-      {/* ── who is in ───────────────────────────────────────────── */}
+      {/* ── who is at the table ─────────────────────────────────── */}
       {isMember && (
         <section className="panel">
-          <Label>In this campaign</Label>
-          {active.length === 0 ? (
+          <div className="slot__head">
+            <Label>At this table</Label>
+            <span className="tally">{active.length + 1} playing</span>
+          </div>
+          <ul className="hire__list">
+            {host && <PlayerRow player={host} isHostRow />}
+            {active.map((m) => (
+              <PlayerRow
+                key={m.userId || m.nickname}
+                player={m}
+                onRemove={isHost && m.userId ? () => membership.remove(m.userId) : null}
+              />
+            ))}
+          </ul>
+          {active.length === 0 && (
             <p className="note">
               Nobody else yet.{' '}
               {isHost ? 'Send a link above.' : 'The host has not admitted anyone else.'}
             </p>
-          ) : (
-            <ul className="hire__list">
-              {active.map((m) => (
-                <li key={m.userId || m.nickname}>
-                  <span>
-                    {m.nickname || 'unnamed player'}
-                    {m.isYou && <span className="hire__adj"> (you)</span>}
-                  </span>
-                  <span className="hire__paid">
-                    {m.sharesIdentity && m.displayName
-                      ? m.displayName
-                      : 'identity not shared'}
-                    {isHost && m.userId && (
-                      <>
-                        {' · '}
-                        <button className="gate__link" onClick={() => membership.remove(m.userId)}>
-                          remove
-                        </button>
-                      </>
-                    )}
-                  </span>
-                </li>
-              ))}
-            </ul>
           )}
         </section>
       )}
 
+      {/* ── your own entry — host and member alike ──────────────── */}
+      {isMember && (
+        <MyProfile
+          key={`${membership.tableId}:${me ? 1 : 0}`}
+          me={me}
+          membership={membership}
+          intro={isHost
+            ? 'You are the host, and this is the name your players will see beside your arsenal.'
+            : null}
+        />
+      )}
+
       {/* ── bringing a leader ───────────────────────────────────── */}
       {isMember && !isHost && (
-        <BringALeader campaign={campaign} shelf={shelf} arsenals={arsenals} membership={membership} />
+        <BringALeader shelf={shelf} arsenals={arsenals} joined={joined} membership={membership} />
       )}
 
       {/* ── the arsenals ────────────────────────────────────────── */}
@@ -207,7 +237,7 @@ export default function Players({ campaign, shelf, membership, signedIn }) {
         <section style={{ marginTop: 28 }}>
           <div className="slot__head">
             <Label>Everyone's arsenal</Label>
-            <span className="tally">{arsenals.length} in the campaign</span>
+            <span className="tally">{arsenals.length} at the table</span>
           </div>
           <p className="note">
             Read-only, and public by the rules — max encounter size is the
@@ -218,21 +248,20 @@ export default function Players({ campaign, shelf, membership, signedIn }) {
         </section>
       )}
 
+      {isMember && !isHost && <LeaveTable membership={membership} label={`Leave ${hostName}`} />}
+
       {/* A campaign the account has never seen cannot have members, and saying
-          "nobody has been invited" about one reads as the invite having failed.
-          Since the sync pause this is the ordinary state of anything built on
-          this device. */}
-      {!isMember && !loading && knownToServer === false && (
+          "nobody has been invited" about one reads as the invite having failed. */}
+      {!isMember && !isPending && !loading && knownToServer === false && (
         <div className="empty">
           <strong>This campaign has not reached your account yet.</strong>{' '}
-          Sending work up is switched off while the sync rebuild finishes, so it
-          exists in this browser only — and a campaign the account has never seen
-          cannot have anyone invited to it. Invitations will work again once
-          syncing resumes.
+          It exists in this browser only until it syncs — and a campaign the
+          account has never seen cannot have anyone invited to it. Give it a
+          moment online and look again.
         </div>
       )}
 
-      {!isMember && !loading && knownToServer !== false && (
+      {!isMember && !isPending && !loading && knownToServer !== false && (
         <div className="empty">
           This campaign is yours alone. Nobody has been invited to it, and
           nothing about it is visible to anyone else.
@@ -242,26 +271,98 @@ export default function Players({ campaign, shelf, membership, signedIn }) {
   )
 }
 
+/** How to refer to a table you joined, without inventing a name for it. */
+function tableName(table) {
+  if (!table) return 'this campaign'
+  if (table.hostNickname) return `${table.hostNickname}'s campaign`
+  if (table.name) return table.name
+  return 'the campaign you joined'
+}
+
+/**
+ * Your own campaign, and every campaign you have joined.
+ *
+ * Hidden when there is nothing to choose between — a host who has never joined
+ * anyone else's table sees the page exactly as before. When it shows, a joined
+ * table you have not brought a leader to says so, because an admitted member
+ * with no leader linked is invisible to everyone else and has no way to know.
+ */
+function TablePicker({ membership }) {
+  const { joined, tableId, ownCampaignId } = membership
+  if (joined.length === 0) return null
+
+  return (
+    <section className="panel">
+      <Label>Your campaigns</Label>
+      <div className="chips">
+        <Chip on={tableId === ownCampaignId} onClick={() => membership.viewTable(ownCampaignId)}>
+          Your own table
+        </Chip>
+        {joined.map((t) => (
+          <Chip key={t.campaignId} on={tableId === t.campaignId} onClick={() => membership.viewTable(t.campaignId)}>
+            {tableName(t)}
+            <span className="hire__adj">
+              {t.status === 'pending'
+                ? ' · waiting'
+                : t.linkedCampaignIds?.length > 0 ? ' · your leader is here' : ' · no leader yet'}
+            </span>
+          </Chip>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+/** One person at the table: their chosen name, and the leader they brought. */
+function PlayerRow({ player, isHostRow = false, onRemove = null }) {
+  const bringing = player.bringing || []
+  return (
+    <li>
+      <span>
+        {player.nickname || (isHostRow ? 'The host' : 'unnamed player')}
+        {player.isYou && <span className="hire__adj"> (you)</span>}
+        {isHostRow && <span className="hire__adj"> · host</span>}
+        {player.sharesIdentity && player.displayName && (
+          <span className="hire__adj"> · {player.displayName}</span>
+        )}
+      </span>
+      <span className="hire__paid">
+        {bringing.length > 0 ? `bringing ${bringing.join(', ')}` : 'no leader brought yet'}
+        {onRemove && (
+          <>
+            {' · '}
+            <button className="gate__link" onClick={onRemove}>remove</button>
+          </>
+        )}
+      </span>
+    </li>
+  )
+}
+
 /**
  * Your nickname, and the decision about your Discord identity.
  *
  * Both are per-campaign rather than per-account, because the answer legitimately
  * differs: a table of old friends is not a table of strangers from a forum.
+ * Shown to the host too — they had no row to write one into until v0.28.0.
  */
-function MyProfile({ me, membership }) {
+function MyProfile({ me, membership, intro = null }) {
   const [nickname, setNickname] = useState(me?.nickname || '')
   const [share, setShare] = useState(Boolean(me?.sharesIdentity))
   const [saved, setSaved] = useState(false)
+  const [saving, setSaving] = useState(false)
 
   return (
     <section className="panel">
-      <Label>How you appear to the others</Label>
+      <Label>Your nickname in this campaign</Label>
+      {intro && <p className="note">{intro}</p>}
       <Field>
         <Input
           value={nickname}
           onChange={(e) => { setNickname(e.target.value); setSaved(false) }}
           placeholder="A name for this campaign"
           maxLength={40}
+          aria-label="Your nickname in this campaign"
         />
         <p className="note">
           This is what the other players see. It does not have to be your real
@@ -284,48 +385,62 @@ function MyProfile({ me, membership }) {
       </p>
 
       <Button
+        disabled={saving}
         onClick={async () => {
-          await membership.saveProfile({ nickname, shareIdentity: share })
-          setSaved(true)
+          setSaving(true)
+          const result = await membership.saveProfile({ nickname: nickname.trim(), shareIdentity: share })
+          setSaving(false)
+          if (result) setSaved(true)
         }}
       >
-        {saved ? 'Saved' : 'Save'}
+        {saving ? 'Saving…' : saved ? 'Saved' : 'Save'}
       </Button>
     </section>
   )
 }
 
 /**
- * Which of your leaders you are bringing to this campaign.
+ * Which of your leaders you are bringing to this table.
  *
  * Explicit rather than automatic, because the shelf holds several and only one
  * belongs here — and because linking is what puts your arsenal in front of
  * other people. That should be a thing you did, not a thing that happened.
  */
-function BringALeader({ campaign, shelf, arsenals, membership }) {
+function BringALeader({ shelf, arsenals, joined, membership }) {
   const mine = arsenals.find((a) => a.isMine)
+  const { tableId } = membership
   // Shelf entries are { arsenal, campaign } since v3. Only a named leader that
-  // is actually sitting at a table can be brought — `membership.link` names a
-  // campaign row, which an unseated arsenal does not have.
-  const candidates = shelf.filter((e) => e.arsenal?.leader?.name && e.campaign)
+  // is actually sitting at a campaign can be brought — `membership.link` names
+  // a campaign row, which an unseated arsenal does not have.
+  const candidates = shelf.filter((e) =>
+    e.arsenal?.leader?.name && e.campaign && e.campaign.id !== tableId
+  )
+  // A leader already at another table you joined moves if you bring it here.
+  const elsewhere = (campaignId) =>
+    joined.find((t) => t.campaignId !== tableId && (t.linkedCampaignIds || []).includes(campaignId))
+
+  const label = (e) => {
+    const other = elsewhere(e.campaign.id)
+    return other ? ` (moves it from ${tableName(other)})` : ''
+  }
 
   if (mine) {
+    const others = candidates.filter((e) => e.campaign.id !== mine.campaignId)
     return (
       <section className="panel">
         <Label>You are bringing</Label>
         <p className="note">
           <strong>{mine.leader?.name || 'your leader'}</strong> — the others can
-          see this arsenal. To bring a different one, link it below.
+          see this arsenal.
+          {others.length > 0 && ' To bring a different one instead, choose it below.'}
         </p>
         <div className="crew__bar">
-          {candidates
-            .filter((e) => e.campaign.id !== campaign.id)
-            .map((e) => (
-              <Button key={e.arsenal.id} ghost onClick={() => membership.link(e.campaign.id)}>
-                Bring {e.arsenal.leader.name} instead
-              </Button>
-            ))}
-          <Button ghost onClick={() => membership.link(null)}>
+          {others.map((e) => (
+            <Button key={e.arsenal.id} ghost onClick={() => membership.link(e.campaign.id)}>
+              Bring {e.arsenal.leader.name} instead{label(e)}
+            </Button>
+          ))}
+          <Button ghost onClick={membership.withdraw}>
             Withdraw my arsenal
           </Button>
         </div>
@@ -347,9 +462,33 @@ function BringALeader({ campaign, shelf, arsenals, membership }) {
         )}
         {candidates.map((e) => (
           <Button key={e.arsenal.id} ghost onClick={() => membership.link(e.campaign.id)}>
-            Bring {e.arsenal.leader.name}
+            Bring {e.arsenal.leader.name}{label(e)}
           </Button>
         ))}
+      </div>
+    </section>
+  )
+}
+
+/** Leave a table you joined, or withdraw a request still waiting. Asks first. */
+function LeaveTable({ membership, label }) {
+  const [confirming, setConfirming] = useState(false)
+  if (!confirming) {
+    return (
+      <p className="note" style={{ marginTop: 20 }}>
+        <button className="gate__link" onClick={() => setConfirming(true)}>{label}</button>
+      </p>
+    )
+  }
+  return (
+    <section className="panel">
+      <p className="note">
+        Your arsenal leaves this table and the others stop seeing it. Nothing of
+        yours is deleted — but getting back in needs a fresh invite from the host.
+      </p>
+      <div className="crew__bar">
+        <Button onClick={() => { membership.leave(); setConfirming(false) }}>{label}</Button>
+        <Button ghost onClick={() => setConfirming(false)}>Stay</Button>
       </div>
     </section>
   )
