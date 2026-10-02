@@ -13,6 +13,7 @@ import CrewCards from '../CrewCards.jsx'
 import UnplacedAdvancements from '../UnplacedAdvancements.jsx'
 import RepairAftermath from '../RepairAftermath.jsx'
 import KeptTriggerRepair from '../KeptTriggerRepair.jsx'
+import TotemCard from '../TotemCard.jsx'
 
 /**
  * Everything this leader has, in one place.
@@ -28,7 +29,7 @@ import KeptTriggerRepair from '../KeptTriggerRepair.jsx'
  */
 export default function Arsenal({
   campaign, arsenal, leader, archetype, week, rules, fileNumber,
-  onEditLeader, onHire, onSheet, onPlaceAdvancement, onRepairDrift, onSetTrigger,
+  onEditLeader, onHire, onSheet, onPlaceAdvancement, onRepairDrift, onSetTrigger, onSetTotem,
 }) {
   const [imaging, setImaging] = useState(null)
   /** Which action each unplaced advancement is about to be given. */
@@ -174,20 +175,7 @@ export default function Arsenal({
         <div style={{ marginTop: 10 }}>
           <Label>Totem</Label>
           {arsenal.totem ? (
-            <div className="pick" style={{ borderColor: 'var(--brass)', background: 'var(--panel)' }}>
-              <span className="pick__meta" style={{ fontSize: 13, color: 'var(--text)' }}>
-                {arsenal.totem.name}
-              </span>
-              <span style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                {arsenal.totem.advancements?.length > 0 && (
-                  <span className="pick__meta">
-                    {arsenal.totem.advancements.length} advancement
-                    {arsenal.totem.advancements.length === 1 ? '' : 's'}
-                  </span>
-                )}
-                <span className="pick__meta">free · 0ss</span>
-              </span>
-            </div>
+            <TotemCard totem={arsenal.totem} onSetTotem={onSetTotem} />
           ) : (
             <div className="empty">
               No totem. There is no way to hire one — a totem comes from the

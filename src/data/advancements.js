@@ -363,23 +363,83 @@ const ABILITY = [
  * Totems, pp. 52–53. Stat lines are facts of the same kind as the archetype
  * stats in `archetypes.js` — a Df is not rules text — so they are kept, and
  * the sheet's totem card can finally be filled in.
+ *
+ * **Their starting abilities and actions, by name** (v0.29.3). Until then a
+ * totem was a name and four numbers, and a player who gained one reported
+ * that it "has absolutely zero actions and abilities. It just... exists." The
+ * names are identifiers, kept exactly as the leader's picks keep theirs (§4).
+ * Each action carries `kind`, `stat` and `resistedBy` on the same footing
+ * as the tier-2 Action table, so a tier-1 advancement given to the totem can
+ * be judged against the action it goes on. A printed "-" is `stat: null`, not
+ * 0. Read off pp. 52–53 with `pdftotext -raw`, which keeps each cell together.
+ *
+ * Gearwright's Improvised Mechanics is printed under Heavy Wrench in the
+ * attack column, in a trigger's "suit Name:" form, so it is that action's
+ * trigger. The Mini-Master's action is the player's choice
+ * (`chooseAction`), so it is stored on the totem as `chosenAction`.
  */
 const TOTEM = [
-  { value: 1, name: 'Backwoods Bootlegger', stats: { df: 5, wp: 5, sp: 6, health: 9 }, page: 52 },
-  { value: 2, name: 'Cursemonger', stats: { df: 6, wp: 6, sp: 6, health: 9 }, page: 52 },
-  { value: 3, name: 'Shadowrunner', stats: { df: 5, wp: 5, sp: 7, health: 9 }, page: 52 },
-  { value: 4, name: 'Gearwright', stats: { df: 5, wp: 5, sp: 6, health: 9 }, page: 52 },
-  { value: 5, name: 'Demolitionist', stats: { df: 5, wp: 5, sp: 6, health: 9 }, page: 52 },
-  { value: 6, name: 'Logistics Officer', stats: { df: 5, wp: 5, sp: 6, health: 9 }, page: 52 },
-  { value: 7, name: 'Chance Taker', stats: { df: 6, wp: 5, sp: 6, health: 9 }, page: 52 },
-  { value: 8, name: 'Night Marketeer', stats: { df: 5, wp: 5, sp: 6, health: 9 }, page: 52 },
-  { value: 9, name: 'Gravehand', stats: { df: 5, wp: 5, sp: 6, health: 9 }, page: 53 },
-  { value: 10, name: 'Willing Vessel', stats: { df: 4, wp: 5, sp: 6, health: 10 }, page: 53 },
-  { value: 11, name: 'Ringmaster', stats: { df: 5, wp: 6, sp: 6, health: 9 }, page: 53 },
-  { value: 12, name: 'Mad Surgeon', stats: { df: 5, wp: 4, sp: 6, health: 9 }, page: 53 },
-  { value: 13, name: 'Raging Colossus', stats: { df: 5, wp: 5, sp: 6, health: 9 }, page: 53 },
-  { value: BLACK_JOKER, name: 'Sniveling Coward', stats: { df: 4, wp: 4, sp: 6, health: 6 }, page: 53 },
-  { value: RED_JOKER, name: 'Mini-Master', stats: { df: 5, wp: 5, sp: 6, health: 9 }, page: 53 },
+  { value: 1, name: 'Backwoods Bootlegger', stats: { df: 5, wp: 5, sp: 6, health: 9 }, page: 52,
+    abilities: [],
+    actions: [{ name: 'Panic Response', kind: 'attack', stat: 5, resistedBy: 'Df' }, { name: 'Satisfied Customer', kind: 'tactical', stat: 0, resistedBy: null }],
+  },
+  { value: 2, name: 'Cursemonger', stats: { df: 6, wp: 6, sp: 6, health: 9 }, page: 52,
+    abilities: ['Beneficial Curses'],
+    actions: [{ name: 'Shared Curse', kind: 'attack', stat: 5, resistedBy: 'Df' }],
+  },
+  { value: 3, name: 'Shadowrunner', stats: { df: 5, wp: 5, sp: 7, health: 9 }, page: 52,
+    abilities: [],
+    actions: [{ name: 'Shove', kind: 'attack', stat: 5, resistedBy: 'Df' }, { name: 'Leap', kind: 'tactical', stat: 0, resistedBy: null }],
+  },
+  { value: 4, name: 'Gearwright', stats: { df: 5, wp: 5, sp: 6, health: 9 }, page: 52,
+    abilities: ['Construct Savant'],
+    actions: [{ name: 'Heavy Wrench', kind: 'attack', stat: 5, resistedBy: 'Df', triggers: ['Improvised Mechanics'] }],
+  },
+  { value: 5, name: 'Demolitionist', stats: { df: 5, wp: 5, sp: 6, health: 9 }, page: 52,
+    abilities: [],
+    actions: [{ name: 'Combat Knife', kind: 'attack', stat: 5, resistedBy: 'Df' }, { name: 'Blow Charge', kind: 'tactical', stat: 0, resistedBy: null }],
+  },
+  { value: 6, name: 'Logistics Officer', stats: { df: 5, wp: 5, sp: 6, health: 9 }, page: 52,
+    abilities: [],
+    actions: [{ name: 'Sword', kind: 'attack', stat: 5, resistedBy: 'Df' }, { name: 'Expanding Influence', kind: 'tactical', stat: 0, resistedBy: null }],
+  },
+  { value: 7, name: 'Chance Taker', stats: { df: 6, wp: 5, sp: 6, health: 9 }, page: 52,
+    abilities: ['Lucky Draw'],
+    actions: [{ name: 'Lucky Guess', kind: 'attack', stat: 6, resistedBy: 'Df' }, { name: 'Trust to Luck', kind: 'tactical', stat: null, resistedBy: null }],
+  },
+  { value: 8, name: 'Night Marketeer', stats: { df: 5, wp: 5, sp: 6, health: 9 }, page: 52,
+    abilities: [],
+    actions: [{ name: 'Lucky Break', kind: 'attack', stat: 5, resistedBy: 'Df' }, { name: 'Jury Rig', kind: 'tactical', stat: null, resistedBy: null }],
+  },
+  { value: 9, name: 'Gravehand', stats: { df: 5, wp: 5, sp: 6, health: 9 }, page: 53,
+    abilities: [],
+    actions: [{ name: 'Grave’s Curse', kind: 'attack', stat: 5, resistedBy: 'Df' }, { name: 'Command Corpse', kind: 'tactical', stat: 0, resistedBy: null }],
+  },
+  { value: 10, name: 'Willing Vessel', stats: { df: 4, wp: 5, sp: 6, health: 10 }, page: 53,
+    abilities: ['Tempting Fate'],
+    actions: [{ name: 'Bloodsuck', kind: 'attack', stat: 5, resistedBy: 'Df' }, { name: 'Insatiable Maw', kind: 'tactical', stat: 0, resistedBy: null }],
+  },
+  { value: 11, name: 'Ringmaster', stats: { df: 5, wp: 6, sp: 6, health: 9 }, page: 53,
+    abilities: [],
+    actions: [{ name: 'Dismissive Wave', kind: 'attack', stat: 5, resistedBy: 'Wp' }, { name: 'Lure', kind: 'attack', stat: 6, resistedBy: 'Wp' }],
+  },
+  { value: 12, name: 'Mad Surgeon', stats: { df: 5, wp: 4, sp: 6, health: 9 }, page: 53,
+    abilities: [],
+    actions: [{ name: 'Dirty Knife', kind: 'attack', stat: 5, resistedBy: 'Df' }, { name: 'Healing Energy', kind: 'tactical', stat: 0, resistedBy: null }],
+  },
+  { value: 13, name: 'Raging Colossus', stats: { df: 5, wp: 5, sp: 6, health: 9 }, page: 53,
+    abilities: [],
+    actions: [{ name: 'Huge Fist', kind: 'attack', stat: 5, resistedBy: 'Df' }, { name: 'Tenacity', kind: 'tactical', stat: null, resistedBy: null }],
+  },
+  { value: BLACK_JOKER, name: 'Sniveling Coward', stats: { df: 4, wp: 4, sp: 6, health: 6 }, page: 53,
+    abilities: ['Fight Another Day'],
+    actions: [{ name: 'False Bravado', kind: 'attack', stat: 5, resistedBy: 'Df' }],
+  },
+  { value: RED_JOKER, name: 'Mini-Master', stats: { df: 5, wp: 5, sp: 6, health: 9 }, page: 53,
+    abilities: [],
+    actions: [],
+    chooseAction: true,
+  },
 ]
 
 const SUMMONING = [

@@ -1611,3 +1611,8 @@ body::after {
 }
 .book-gate__row input { flex: 1 1 220px; min-width: 0; }
 @media print { .book-gate { display: none; } }
+
+/* The totem's card on the Arsenal view (v0.29.3) */
+.totem-card__body { margin-top: 8px; }
+.totem-card__group { margin-top: 8px; }
+.totem-card__list { margin: 2px 0 0; padding-left: 18px; color: var(--text); font-size: 14px; }

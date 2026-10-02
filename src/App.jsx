@@ -367,6 +367,7 @@ export default function App() {
             onPlaceAdvancement={placeAdvancementAt}
             onRepairDrift={repairAftermathDrift}
             onSetTrigger={(trigger) => set({ trigger })}
+            onSetTotem={setTotem}
           />
         )}
 

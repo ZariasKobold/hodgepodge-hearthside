@@ -5536,3 +5536,48 @@ Scrip unchanged, injury on the new model's id, Coffee at cc 0.
 3 more tests, 730 total. Files added: `src/lib/shape/arsenal.js` + test,
 `src/hooks/useCampaign.js`, `src/components/DefectorJoin.jsx` (new),
 `src/components/steps/Campaign.jsx`, `src/App.jsx`, `src/styles/app.css`.
+
+#### v0.29.3 — a totem can do things
+
+The same player: her totem "has absolutely zero actions and abilities. It
+just... exists." True. `data/advancements.js` kept each totem's stats off
+pp. 52–53 and nothing else, and the Arsenal view showed a name and an
+advancement count. The sheet's totem actions table was hard-coded empty.
+
+- **The totem table now names what each totem can do.** Abilities, and actions
+  with `kind` / `stat` / `resistedBy`, on the same footing as the Action
+  table (§4: names and numbers, never text). They were read with
+  `pdftotext -raw`, because `-layout` interleaves the three columns. A "-" Skl
+  is `null`. Gearwright's Improvised Mechanics is printed under Heavy Wrench
+  in trigger form, so it is recorded as that action's trigger. That is a
+  reading of the layout and has not been confirmed with a player.
+- **`totemPicks` derives them and never stores them.** A copy on the totem would
+  be a second transcription to keep in step. The Mini-Master's chosen action
+  (p. 53, "one action on a master that shares a keyword") is the one part that
+  is the player's, so it alone is stored, as `totem.chosenAction`.
+- **`picksOf(holder)`** stands in for `holder.picks` inside `advancement.js`.
+  So `targetsFor`, `placementProblem` and the repairs treat a totem's printed
+  actions as its picks. Before, every advancement given to a totem fell
+  through to a written-in name nothing could check. A printed action carries
+  `base` (its Skl and resist), the way a gained one does, so a Skill Boost on
+  a totem is judged against its real Skl.
+- **Older written-in placements still land.** `advancementsOn` matches a
+  key-less written target to a printed totem action of the same name, so an
+  advancement placed by hand before today shows under the right action
+  without a migration. A written-in name that is the totem's action of the
+  *other* kind is now caught, by the rule v0.29.0 already applied to leaders.
+- **`TotemCard`** on the Arsenal view lists stats, abilities, actions with Skl
+  and resist, printed and earned triggers, and actions gained by advancement,
+  and points to the page. The sheet prints the same in its totem actions table
+  and keeps every advancement not shown under an action in the abilities
+  lines, so nothing earned drops off the card.
+
+Verified in a browser on a seeded Gravehand carrying a written-in "Draw Out
+Secrets" on Grave's Curse. The card listed Grave's Curse (Skl 5 vs Df) with
+the trigger under it, and Command Corpse. The sheet printed both rows with the
+trigger under Grave's Curse.
+
+10 new tests (`src/lib/totem.test.js`), 740 total. Files:
+`src/data/advancements.js`, `src/lib/advancement.js`, `src/lib/totem.test.js`
+(new), `src/components/TotemCard.jsx` (new), `src/components/steps/Arsenal.jsx`,
+`src/components/ArsenalSheet.jsx`, `src/App.jsx`, `src/styles/app.css`.

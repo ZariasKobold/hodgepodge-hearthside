@@ -129,6 +129,71 @@ export function gainedActions(holder) {
     })
 }
 
+/**
+ * The row of the totem table this totem came from, or null.
+ *
+ * By flip value first, which is what the aftermath records, then by name for a
+ * totem written before `tableValue` was kept.
+ */
+export function totemRow(totem) {
+  if (!totem) return null
+  const rows = findTable('totem')?.entries || []
+  return rows.find((r) => totem.tableValue != null && r.value === totem.tableValue)
+    || rows.find((r) => r.name === totem.name)
+    || null
+}
+
+/**
+ * A totem's starting actions and abilities, shaped like a leader's picks.
+ *
+ * A leader's picks are what the player chose at creation. A totem's are printed
+ * on its row of the totem table (pp. 52–53), so they are **derived on every
+ * read** and never written onto the totem. Copying them would leave two
+ * answers to keep in step. The Mini-Master's one action is the player's
+ * choice, and that choice is the only part that is stored (`chosenAction`).
+ *
+ * Each carries `base`, its printed Skl and resist, which stands in for the
+ * register card a leader's pick would be judged against.
+ */
+export function totemPicks(totem) {
+  const row = totemRow(totem)
+  const out = { attack: [], tactical: [], ability: [] }
+  if (!row) return out
+  const actions = [...(row.actions || [])]
+  const chosen = totem.chosenAction
+  if (row.chooseAction && chosen?.name && (chosen.kind === 'attack' || chosen.kind === 'tactical')) {
+    actions.push({ name: chosen.name, kind: chosen.kind, stat: null, resistedBy: null, chosen: true })
+  }
+  for (const a of actions) {
+    out[a.kind].push({
+      key: `totem::${a.kind}::${a.name}`,
+      name: a.name,
+      model: null,
+      printed: true,
+      chosen: Boolean(a.chosen),
+      triggers: a.triggers || [],
+      // Unknown for the Mini-Master's choice: it is a master's action, whose
+      // card this app does not hold.
+      base: a.chosen ? null : { stat: a.stat, resistedBy: a.resistedBy },
+    })
+  }
+  for (const name of row.abilities || []) {
+    out.ability.push({ key: `totem::ability::${name}`, name, model: null, printed: true, triggers: [] })
+  }
+  return out
+}
+
+/**
+ * The actions an advancement can be placed on: a leader's picks, or a totem's
+ * printed starting actions. Until v0.29.3 a totem had no picks at all, so every
+ * advancement given to one fell through to a written-in name that nothing
+ * could check.
+ */
+function picksOf(holder) {
+  if (holder?.picks) return holder.picks
+  return totemPicks(holder)
+}
+
 /** "an attack action", "a tactical action" — for sentences a player reads. */
 function aKind(slot) {
   return slot === 'attack' ? 'an attack action' : slot === 'tactical' ? 'a tactical action' : 'an ability'
@@ -170,8 +235,8 @@ export function placementProblem(holder, adv) {
   if (target.written || !target.key) {
     const norm = (s) => String(s || '').trim().toLowerCase()
     const other = ['attack', 'tactical'].find((s) => s !== want
-      && (holder?.picks?.[s] || []).some((p) => norm(p.name) === norm(target.name))
-      && !(holder?.picks?.[want] || []).some((p) => norm(p.name) === norm(target.name)))
+      && (picksOf(holder)[s] || []).some((p) => norm(p.name) === norm(target.name))
+      && !(picksOf(holder)[want] || []).some((p) => norm(p.name) === norm(target.name)))
     return other
       ? {
           kind: 'wrong-kind',
@@ -180,7 +245,7 @@ export function placementProblem(holder, adv) {
       : null
   }
 
-  const inSlot = (slot) => (holder?.picks?.[slot] || []).some((p) => p.key === target.key)
+  const inSlot = (slot) => (picksOf(holder)[slot] || []).some((p) => p.key === target.key)
   if (inSlot(want)) return null
 
   const gained = gainedActions(holder).find((g) => g.key === target.key)
@@ -222,12 +287,14 @@ export function placementProblem(holder, adv) {
 export function targetsFor(holder, table, entry, actionFor = () => null) {
   if (!needsTarget(table)) return []
 
-  const picks = (holder?.picks?.[table.targetSlot] || []).map((p) => ({
+  const picks = (picksOf(holder)[table.targetSlot] || []).map((p) => ({
     key: p.key,
     name: p.name,
     slot: table.targetSlot,
     model: p.model || null,
     gained: false,
+    printed: Boolean(p.printed),
+    base: p.base,
   }))
 
   // A gained action of the other kind is not a target at all — offering it
@@ -248,7 +315,8 @@ export function targetsFor(holder, table, entry, actionFor = () => null) {
      * through.
      */
     // A gained action's printed stat line stands in for a register card.
-    const base = target.gained ? target.base : actionFor(target)
+    // So does a totem's, printed on its row of the totem table.
+    const base = target.gained || target.printed ? target.base : actionFor(target)
     const { action, stat, statChanged } = advancedAction(base, advancementsOn(holder, target.key))
     return {
       ...target,
@@ -396,7 +464,13 @@ export function repairReason(holder, adv) {
 /** The advancements this holder has attached to one action. */
 export function advancementsOn(holder, key) {
   if (!key) return []
-  return (holder?.advancements || []).filter((a) => a.appliesTo?.key === key)
+  // Before v0.29.3 a totem's actions could not be listed, so its advancements
+  // were placed by a written-in name. Those still belong on the printed action
+  // of that name.
+  const printed = key.startsWith('totem::') ? key.split('::').slice(2).join('::') : null
+  const norm = (n) => String(n || '').trim().toLowerCase()
+  return (holder?.advancements || []).filter((a) => a.appliesTo?.key === key
+    || (printed && !a.appliesTo?.key && a.appliesTo?.name && norm(a.appliesTo.name) === norm(printed)))
 }
 
 /**

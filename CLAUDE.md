@@ -1,10 +1,10 @@
 # CLAUDE.md — Hodgepodge Hearthside project context
 
-<!-- HH v0.29.2 | Last updated: 2026-10-01 -->
+<!-- HH v0.29.3 | Last updated: 2026-10-01 -->
 
 ---
 
-## Current Version: 0.29.2
+## Current Version: 0.29.3
 
 ## Last Updated: 2026-10-01
 
@@ -164,6 +164,19 @@ its equipment, adds it for no scrip, and gives it this crew's keywords.
 `defected: true` keeps it out of `hiresInWeek`, so it neither takes the
 first-hire discount nor counts as the week's hire. It is typed, not picked,
 because a defector is usually outside this crew's register pool.
+
+**A totem can do things — v0.29.3.** She also reported her totem "has
+absolutely zero actions and abilities. It just... exists." The totem table rows
+held stats only. They now carry each totem's starting abilities and actions by
+name (`kind`, `stat`, `resistedBy`, as the Action table does), read with
+`pdftotext -raw` from pp. 52–53. `totemPicks` derives them on every read and
+never writes them to the totem. `picksOf` lets every placement check treat
+them as a totem's picks, so a tier-1 advancement given to a totem is offered its
+real actions. An older advancement placed by a written-in name sits on the
+printed action of that name (`advancementsOn`). `TotemCard` shows them on the
+Arsenal view and the sheet prints them. The Mini-Master's action is written in
+and stored as `totem.chosenAction`. **Unsure:** Gearwright's Improvised
+Mechanics is read as Heavy Wrench's trigger, from where it is printed.
 
 - **Tier-1 on the wrong kind of action** (p. 31). Gained tier-2 actions now
   carry `kind` / `stat` / `resistedBy`, read by script from pp. 44–49 (73 rows:
@@ -1503,10 +1516,11 @@ conflict; neither is the same as two devices disagreeing.
   second sub-tab — one place, because the evening runs hire, play, aftermath,
   hire again, and splitting them across the top navigation would read as two
   separate places.
-- **The arsenal sheet's blanks are down to two, and both are deliberate.** The
-  equipment half of the campaign rating counts kit *hired for a game*, which has
-  no value between games (the sheet prints "N + kit hired"); and the totem's
-  actions come off a card §4 does not let this app store. Everything else —
+- **The arsenal sheet's one deliberate blank** is the equipment half of the
+  campaign rating, which counts kit *hired for a game* and has no value between
+  games (the sheet prints "N + kit hired"). The totem's actions were the second
+  blank until v0.29.3: they are on its row of the totem table, and now print by
+  name with Skl and resist. Everything else —
   games won, equipment, per-model injuries, the experience track, the totem's
   identity and stats — is filled as of v0.16.0.
 - **Peons are never flagged.** `createModel` carries `peon`, phase 6 honours it,

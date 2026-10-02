@@ -11,7 +11,7 @@ import {
 import { EXPERIENCE_TRACK } from '../data/advancements.js'
 import { sourceSlug, findEntry, actionColumns } from '../lib/rules.js'
 import {
-  advancementsOn, advancedAction, gainedActionKey, SUIT_LABEL,
+  advancementsOn, advancedAction, gainedActionKey, SUIT_LABEL, totemPicks,
 } from '../lib/advancement.js'
 import { PrintLegal } from './ui.jsx'
 
@@ -42,8 +42,10 @@ import { PrintLegal } from './ui.jsx'
  * games won, crew rating, equipment, per-model injuries, the experience track
  * and the totem — are filled now that something produces them. What is still
  * left to the pencil is deliberate: the equipment half of the campaign rating,
- * which counts kit *hired for a game* and so has no value between games, and
- * the totem's actions, which come off a card this app does not store (§4).
+ * which counts kit *hired for a game* and so has no value between games. The
+ * totem's actions were the second blank until v0.29.3; their names, Skl and
+ * resist are now read off its row of the totem table, and only Rg, TN and Dmg
+ * are left to the pencil.
  */
 
 const EQUIPMENT_SLOTS = 10
@@ -203,6 +205,45 @@ export default function ArsenalSheet({ arsenal, leader, archetype, campaign, rul
   const boxesChecked = leader.experience?.boxesChecked || 0
   const leaderAdvancements = leader.advancements || []
   const totemAdvancements = totem?.advancements || []
+
+  /* The totem's own actions, printed on its row of the totem table (pp. 52–53)
+     and empty on this card until v0.29.3. Skl and resist are book data; the
+     other columns are left for the player, like a leader's with the register
+     down. Its printed trigger leads its earned ones. */
+  const totemOwn = totem ? totemPicks(totem) : { attack: [], tactical: [], ability: [] }
+  const totemRows = []
+  if (totem) {
+    for (const pick of [...totemOwn.attack, ...totemOwn.tactical]) {
+      const { stat, statChanged, triggers } = advancedAction(pick.base, advancementsOn(totem, pick.key))
+      totemRows.push({
+        key: pick.key,
+        name: pick.name,
+        rg: '', skl: stat != null ? String(stat) : '', rst: pick.base?.resistedBy || '', tn: '', dmg: '',
+        advanced: statChanged,
+        earned: [...pick.triggers.map((name) => ({ name })), ...triggers],
+      })
+    }
+    for (const adv of totemAdvancements) {
+      if (adv.tableId !== 'action') continue
+      const { stat, statChanged, triggers } = advancedAction(null, advancementsOn(totem, gainedActionKey(adv)))
+      totemRows.push({
+        key: gainedActionKey(adv), name: adv.name,
+        rg: '', skl: statChanged ? String(stat) : '', rst: '', tn: '', dmg: '',
+        advanced: statChanged, earned: triggers,
+      })
+    }
+  }
+  // Tier-1 rows already print under the action they modify.
+  const totemAbilityLines = [
+    ...totemOwn.ability.map((a) => a.name),
+    // Anything not already printed under one of the actions above: an
+    // unplaced tier-1 row, or one written onto an action the totem does not
+    // print, so nothing earned drops off the card.
+    ...totemAdvancements
+      .filter((a) => a.tableId !== 'action'
+        && !totemRows.some((r) => advancementsOn(totem, r.key).includes(a)))
+      .map((a) => `${a.name} — ${a.tableName}${a.appliesTo?.name ? `, on ${a.appliesTo.name}` : ''}`),
+  ]
 
   // Injuries print against the model carrying them, which is what the official
   // sheet's second column beside each crew line is for.
@@ -426,10 +467,8 @@ export default function ArsenalSheet({ arsenal, leader, archetype, campaign, rul
             </div>
             <h3 className="sheet__h3">Abilities</h3>
             <Ruled
-              n={Math.max(6, totemAdvancements.length)}
-              values={totemAdvancements.map(
-                (a) => `${a.name} — ${a.tableName}${a.appliesTo ? `, on ${a.appliesTo.name}` : ''}`
-              )}
+              n={Math.max(6, totemAbilityLines.length)}
+              values={totemAbilityLines}
               numbered={false}
             />
             {totem && (
@@ -444,7 +483,7 @@ export default function ArsenalSheet({ arsenal, leader, archetype, campaign, rul
           </section>
           <section>
             <h3 className="sheet__h3">Actions</h3>
-            <ActionsTable rows={[]} />
+            <ActionsTable rows={totemRows} />
           </section>
         </div>
 
