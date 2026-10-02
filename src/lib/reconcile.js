@@ -25,21 +25,16 @@ function settles(a, b) {
 /**
  * Mark a pushed document settled — unless the player moved on underneath it.
  *
- * **The lost update that reached production on 2026-09-08.** Every local
- * document is read into a snapshot at the top of `runReconcile`, before the two
- * listings are even awaited. The push loops then wrote that snapshot back over
- * local storage with `keepTimestamp: true` and cleared the dirty flag. An
- * aftermath is slow, thinking work — minutes of it — so a reconcile that
- * started before the barter is still in the air during the advance, and its
- * write reverted the arsenal to the snapshot, dragged `updatedAt` *backwards*
- * so no later comparison could see anything odd, and marked it clean so the
- * real edit was never pushed again. A player lost a Gatling Gun, three
- * advancements and three experience boxes, and nothing anywhere said so.
- *
- * The campaign document survived the identical race only because it is written
- * on every phase patch — a clobber there is overwritten again seconds later.
- * The arsenal is written only when an arsenal effect lands, so nothing repaired
- * it. That asymmetry is why this looked like an aftermath bug for a week.
+ * **The race this closes is real in the code and has never been observed.**
+ * v0.24.0 blamed it for a lost Gatling Gun; v0.24.1 retracted that as a
+ * measurement error (two table dumps taken two hours apart — see CLAUDE.md).
+ * What remains true: every local document is read into a snapshot at the top
+ * of `runReconcile`, before the listings are awaited, and the push loops used
+ * to write that snapshot back with `keepTimestamp: true` and clear the dirty
+ * flag. An aftermath is minutes of thinking, so a reconcile started before the
+ * barter can still be in the air during the advance — and that write would
+ * revert the arsenal, drag `updatedAt` backwards, and mark it clean so the
+ * real edit was never pushed again. Four tests fail against that version.
  *
  * So: compare what was sent against what is on the disk *now*. Equal, and this
  * is the ordinary case — stamp the owner and settle it. Different, and the
@@ -54,6 +49,30 @@ function settles(a, b) {
 function settleAfterPush(sent, { load, save, mark, userId }) {
   if (!settles(load(sent.id), sent)) return false
   save(stampOwner(sent, userId), { keepTimestamp: true })
+  mark(sent.id, false)
+  return true
+}
+
+/**
+ * The same rule for the push that runs on every save (audit v0.28.1, H1).
+ *
+ * `useSync`'s `mirror` and `mirrorArsenal` push each save as it happens, with
+ * no debounce, so a burst of edits faster than one round trip overlaps. They
+ * used to clear the dirty flag on every success — including the success of an
+ * *earlier* save arriving after a later one was already on the disk:
+ *
+ *   save A → PUT A (base v) · save AB → PUT AB (base v)
+ *   A accepted → v+1, marked clean   ← while AB sits unsent on the disk
+ *   AB refused (base v) → reconcile sees clean, at base v+1 → does nothing
+ *
+ * and AB never reached the account. So: clean only if what is on the disk is
+ * still what was sent. Nothing is written — the mirror already saved it — and
+ * the version is remembered by the caller either way, because it is the
+ * account's answer about the copy that was sent and any newer copy descends
+ * from exactly that.
+ */
+export function settleMirrored(sent, { load, mark }) {
+  if (!sent?.id || !settles(load(sent.id), sent)) return false
   mark(sent.id, false)
   return true
 }

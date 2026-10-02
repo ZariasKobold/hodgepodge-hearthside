@@ -227,9 +227,16 @@ describe('unplaced advancements', () => {
       startingScripGranted: 0,
       leader: {
         ...base.leader,
+        // The action has to be one this leader really holds. A placeholder key
+        // reads, correctly, as an advancement attached to nothing (v0.29.0).
+        picks: {
+          attack: [{ key: 'bokor::attack::Breath of Fire', name: 'Breath of Fire', model: 'Bokor' }],
+          tactical: [],
+          ability: [],
+        },
         advancements: [{
           id: 'adv_1', tableId: 'attack', name: 'Cruel Lessons', to: 'leader',
-          appliesTo: { key: 'k', name: 'Breath of Fire' },
+          appliesTo: { key: 'bokor::attack::Breath of Fire', name: 'Breath of Fire' },
         }],
       },
     })

@@ -100,19 +100,109 @@ export function gainedActionKey(entry) {
   return `adv::${entry?.id || entry?.name || ''}`
 }
 
-/** Actions this holder gained from the tier-2 Action table, as pick-alikes. */
+/**
+ * Actions this holder gained from the tier-2 Action table, as pick-alikes.
+ *
+ * `slot` comes off the book's stat line (`kind` in `data/advancements.js`), so
+ * a gained Balanced Sword is an attack action and a gained Leap a tactical one.
+ * Until v0.29.0 every gained action had `slot: null` and was offered to *both*
+ * tier-1 tables, which is how an attack trigger could land on a tactical action
+ * with nothing able to say it was wrong. It is still null for the joker's free
+ * choice, which is whatever the player named, and for any row the app cannot
+ * match back to the book — an unknown is offered, never hidden (§6).
+ */
 export function gainedActions(holder) {
   return (holder?.advancements || [])
     .filter((a) => a.tableId === 'action')
-    .map((a) => ({
-      key: gainedActionKey(a),
-      name: a.name,
-      /** No slot: the book's tier-2 table does not say which of these are
-          attack actions and which are tactical, and this app does not guess. */
-      slot: null,
-      gained: true,
-      page: a.page ?? null,
-    }))
+    .map((a) => {
+      const row = rowFor(a)
+      return {
+        key: gainedActionKey(a),
+        name: a.name,
+        slot: row?.kind ?? null,
+        gained: true,
+        page: a.page ?? null,
+        /** The printed Skl and resist, so a Skl boost can be judged against a
+            gained action exactly as it is against a picked one. */
+        base: row?.kind ? { stat: row.stat, resistedBy: row.resistedBy } : null,
+      }
+    })
+}
+
+/** "an attack action", "a tactical action" — for sentences a player reads. */
+function aKind(slot) {
+  return slot === 'attack' ? 'an attack action' : slot === 'tactical' ? 'a tactical action' : 'an ability'
+}
+
+/**
+ * Why this placed advancement cannot stand where it is, or null if it can.
+ *
+ * p. 31 names one rule a record can break: the Attack Modification table goes
+ * on "one attack action", the Tactical table on "one tactical action". So:
+ *
+ * - **wrong kind** — the target is a picked action from the other slot, or a
+ *   gained action whose printed stat line makes it the other kind;
+ * - **gone** — the target is no longer on the leader at all, because the pick
+ *   it was placed on has since been changed. The modifier is then attached to
+ *   nothing, which is the same fault the v0.22.3 repair existed to fix.
+ *
+ * A written-in target and a gained action of unknown kind are **not** problems:
+ * they name something the app cannot see, which is an answer, not a mistake.
+ * Being wrong in the direction of flagging a healthy leader would put a false
+ * alarm in front of every player, so only what the book and the record prove
+ * is reported.
+ */
+export function placementProblem(holder, adv) {
+  const table = findTable(adv?.tableId)
+  if (!needsTarget(table) || !adv?.appliesTo?.name) return null
+  const target = adv.appliesTo
+  const want = table.targetSlot
+
+  /**
+   * A written-in target names something the app cannot list — usually a
+   * totem's action, which comes off a card this app does not store. It is
+   * taken on trust, with one exception the app *can* prove: the name of one of
+   * this leader's own actions of the other kind. A Lucky Upstart has no
+   * tactical slot at all, so a Tactical Modification there falls through to
+   * the written field, and typing the attack action's name puts a tactical
+   * trigger on an attack.
+   */
+  if (target.written || !target.key) {
+    const norm = (s) => String(s || '').trim().toLowerCase()
+    const other = ['attack', 'tactical'].find((s) => s !== want
+      && (holder?.picks?.[s] || []).some((p) => norm(p.name) === norm(target.name))
+      && !(holder?.picks?.[want] || []).some((p) => norm(p.name) === norm(target.name)))
+    return other
+      ? {
+          kind: 'wrong-kind',
+          why: `${target.name} is ${aKind(other)}, and ${table.name} can only go on ${aKind(want)} (p. 31)`,
+        }
+      : null
+  }
+
+  const inSlot = (slot) => (holder?.picks?.[slot] || []).some((p) => p.key === target.key)
+  if (inSlot(want)) return null
+
+  const gained = gainedActions(holder).find((g) => g.key === target.key)
+  if (gained) {
+    if (!gained.slot || gained.slot === want) return null
+    return {
+      kind: 'wrong-kind',
+      why: `${target.name} is ${aKind(gained.slot)}, and ${table.name} can only go on ${aKind(want)} (p. 31)`,
+    }
+  }
+
+  const other = ['attack', 'tactical', 'ability'].find((s) => s !== want && inSlot(s))
+  if (other) {
+    return {
+      kind: 'wrong-kind',
+      why: `${target.name} is ${aKind(other)}, and ${table.name} can only go on ${aKind(want)} (p. 31)`,
+    }
+  }
+  return {
+    kind: 'gone',
+    why: `${target.name} is no longer one of this leader's actions, so this is attached to nothing`,
+  }
 }
 
 /**
@@ -140,7 +230,12 @@ export function targetsFor(holder, table, entry, actionFor = () => null) {
     gained: false,
   }))
 
-  return [...picks, ...gainedActions(holder)].map((target) => {
+  // A gained action of the other kind is not a target at all — offering it
+  // disabled would suggest some row of this table could go on it, and none
+  // can. One of unknown kind stays, marked unknown.
+  const gained = gainedActions(holder).filter((g) => !g.slot || g.slot === table.targetSlot)
+
+  return [...picks, ...gained].map((target) => {
     /**
      * The action **as this leader's earlier advancements left it**, not as the
      * register prints it.
@@ -152,14 +247,16 @@ export function targetsFor(holder, table, entry, actionFor = () => null) {
      * case, which is exactly what the repair path on the arsenal view walks
      * through.
      */
-    const base = target.gained ? null : actionFor(target)
+    // A gained action's printed stat line stands in for a register card.
+    const base = target.gained ? target.base : actionFor(target)
     const { action, stat, statChanged } = advancedAction(base, advancementsOn(holder, target.key))
     return {
       ...target,
       ...verdict(entry, {
         // A boost's `statTo` is absolute, so a gained action with one on it has
-        // a Skl the app knows even with no card behind it.
-        stat: action ? Number(action.stat) : statChanged ? stat : null,
+        // a Skl the app knows even with no card behind it. A printed "-" is
+        // no Skl at all, and must not become 0.
+        stat: action && action.stat != null && action.stat !== '' ? Number(action.stat) : statChanged ? stat : null,
         resistedBy: action?.resistedBy ?? null,
         hasCard: Boolean(action),
       }, target),
@@ -173,7 +270,7 @@ function verdict(entry, state, target) {
   // A trigger or a signature modifier goes on any action of the right kind, so
   // the only question left is whether the app knows what kind this is.
   if (!entry.statFrom) {
-    return target.gained
+    return target.gained && !target.slot
       ? { eligible: null, why: 'gained by advancement — check it is the right kind of action' }
       : { eligible: true, why: '' }
   }
@@ -260,8 +357,40 @@ export function rowIsGuessed(adv) {
 export function advancementsToRepair(holder) {
   return (holder?.advancements || []).filter((a) => {
     if (!needsTarget(findTable(a.tableId))) return false
-    return !a.appliesTo?.name || rowIsGuessed(a)
+    return !a.appliesTo?.name || rowIsGuessed(a) || Boolean(placementProblem(holder, a))
   })
+}
+
+/**
+ * Advancements that are placed legally and can still be moved (v0.29.1).
+ *
+ * A legal placement is not necessarily the one the player meant. A player asked
+ * to move Reposition from Intuition to Lost in the Hunt — both tactical, so
+ * nothing was wrong as far as the book goes and the repair panel never offered
+ * it. A finished aftermath is closed, so there was no way back in. These are
+ * the rows that are not already on `advancementsToRepair`, so one advancement
+ * is never offered twice.
+ */
+export function movableAdvancements(holder) {
+  const repair = new Set(advancementsToRepair(holder))
+  return (holder?.advancements || []).filter((a) =>
+    needsTarget(findTable(a.tableId)) && Boolean(a.appliesTo?.name) && !repair.has(a))
+}
+
+/**
+ * Why this advancement is on the repair list, in the player's words.
+ *
+ * Three different reasons land a row on one panel, and a player looking at it
+ * deserves to know which: a leader who is told "check this" about an
+ * advancement they placed correctly last week, with no reason given, will
+ * reasonably assume the app is broken.
+ */
+export function repairReason(holder, adv) {
+  const problem = placementProblem(holder, adv)
+  if (problem) return problem.why
+  if (!adv?.appliesTo?.name) return 'recorded before the app asked which action it went on'
+  if (rowIsGuessed(adv)) return `“${adv.name}” is printed more than once on that table, and the recorded row was a guess`
+  return null
 }
 
 /** The advancements this holder has attached to one action. */

@@ -39,7 +39,8 @@
  */
 
 import { owedStartingScrip, startingArsenalSpend } from './shape/arsenal.js'
-import { advancementsToRepair } from './advancement.js'
+import { advancementsToRepair, placementProblem } from './advancement.js'
+import { keptTriggerProblem } from './validation.js'
 import { aftermathDrift } from './repair.js'
 
 /** English for a list of names, so the bar can say what it actually found. */
@@ -128,10 +129,46 @@ export function outstandingFor({ arsenal, campaign } = {}) {
     })
   }
 
+  /**
+   * An advancement on an action the book does not allow it on, and the trigger
+   * a leader kept at creation that its archetype does not keep.
+   *
+   * Listed apart from the unplaced ones, and first, because they are a
+   * different claim: not "the app never asked", but "this is on your card and
+   * the book says it cannot be". A player reported one she could see and had no
+   * way to remove (v0.29.0).
+   */
+  const misplaced = [
+    ...(arsenal.leader?.advancements || []).filter((a) => placementProblem(arsenal.leader, a)),
+    ...(arsenal.totem?.advancements || []).filter((a) => placementProblem(arsenal.totem, a)),
+  ]
+  const kept = keptTriggerProblem(arsenal.leader)
+  if (misplaced.length || kept) {
+    const names = [
+      ...misplaced.map((a) => `${a.name} on ${a.appliesTo?.name}`),
+      ...(kept ? [`${arsenal.leader.trigger} (kept at creation)`] : []),
+    ]
+    items.push({
+      id: 'misplaced-triggers',
+      kind: 'misplaced-triggers',
+      severity: 'high',
+      count: names.length,
+      title: names.length === 1
+        ? 'Something on this leader’s card is not allowed there'
+        : `${names.length} things on this leader’s card are not allowed there`,
+      detail: 'An Attack Modification goes on an attack action and a Tactical '
+        + 'Modification on a tactical one (p. 31), and only the Heavy Hitter keeps '
+        + 'a trigger from creation (p. 17). Each one says why, and can be moved '
+        + 'or removed on the arsenal view.',
+      where: 'arsenal',
+      names,
+    })
+  }
+
   const toRepair = [
     ...advancementsToRepair(arsenal.leader),
     ...advancementsToRepair(arsenal.totem),
-  ]
+  ].filter((a) => !misplaced.includes(a))
   if (toRepair.length) {
     items.push({
       id: 'unplaced-advancements',

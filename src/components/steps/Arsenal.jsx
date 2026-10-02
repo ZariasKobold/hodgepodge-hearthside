@@ -12,6 +12,7 @@ import LeaderRecord from '../LeaderRecord.jsx'
 import CrewCards from '../CrewCards.jsx'
 import UnplacedAdvancements from '../UnplacedAdvancements.jsx'
 import RepairAftermath from '../RepairAftermath.jsx'
+import KeptTriggerRepair from '../KeptTriggerRepair.jsx'
 
 /**
  * Everything this leader has, in one place.
@@ -27,7 +28,7 @@ import RepairAftermath from '../RepairAftermath.jsx'
  */
 export default function Arsenal({
   campaign, arsenal, leader, archetype, week, rules, fileNumber,
-  onEditLeader, onHire, onSheet, onPlaceAdvancement, onRepairDrift,
+  onEditLeader, onHire, onSheet, onPlaceAdvancement, onRepairDrift, onSetTrigger,
 }) {
   const [imaging, setImaging] = useState(null)
   /** Which action each unplaced advancement is about to be given. */
@@ -85,6 +86,8 @@ export default function Arsenal({
       {/* Sits under the record rather than above it, because the record is what
           the repair is *for*: you name the action, and the line moves out of
           the catch-all list and up onto the card a few inches above. */}
+      <KeptTriggerRepair leader={leader} onSetTrigger={onSetTrigger} />
+
       {onPlaceAdvancement && (
         <UnplacedAdvancements
           arsenal={arsenal}
@@ -92,9 +95,19 @@ export default function Arsenal({
           rules={rules}
           draft={placing}
           onDraft={(id, value) => setPlacing((d) => ({ ...d, [id]: value }))}
-          onPlace={(id, appliesTo, opts) => {
-            onPlaceAdvancement(id, appliesTo, opts)
-            setPlacing((d) => { const next = { ...d }; delete next[id]; return next })
+          onPlace={(at, appliesTo, opts) => {
+            onPlaceAdvancement(at, appliesTo, opts)
+            // Drafts are keyed `${to}:${at}` (and `…:row`), not by the bare
+            // index — deleting `at` alone left the old answer waiting to be
+            // pre-selected for whatever lands on that index next.
+            const id = `${opts?.to || 'leader'}:${at}`
+            setPlacing((d) => {
+              const next = { ...d }
+              delete next[id]
+              delete next[`${id}:row`]
+              delete next[`${id}:move`]
+              return next
+            })
           }}
         />
       )}

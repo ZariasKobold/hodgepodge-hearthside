@@ -1,12 +1,12 @@
 # CLAUDE.md — Hodgepodge Hearthside project context
 
-<!-- HH v0.28.1 | Last updated: 2026-09-30 -->
+<!-- HH v0.29.2 | Last updated: 2026-10-01 -->
 
 ---
 
-## Current Version: 0.28.1
+## Current Version: 0.29.2
 
-## Last Updated: 2026-09-30
+## Last Updated: 2026-10-01
 
 **Live at hodgepodgehearthside.com** (Cloudflare Pages, auto-deploys on push to
 `main`). Repo: `ZariasKobold/hodgepodge-hearthside`.
@@ -87,12 +87,14 @@ of these fire:
   patch series and makes a version-based target unreachable — which is exactly
   what happened to the old v0.3.10 target.
 
-  **It has happened again. The Session 39 audit is overdue.** Sessions 39, 39b,
-  39c, 39d, 39e and 39f all shipped without it, and this is Session 40. The
-  lettered-suffix habit is how it got missed: six sessions all called "39" look
-  like one session, and the counter that decides when an audit is due stops
-  counting. Number sessions plainly — 40, 41, 42 — and let the version carry the
-  patch series. See `## ⚠️ NEXT SESSION` for when to run it.
+  **The count is the ordinal, never the label.** Run
+  `grep -c '^### Session' docs/VERSION_HISTORY.md` and add one; that is this
+  session's number. Do not read the last heading and increment it. That is how
+  the counter broke twice: first six sessions all called "39", then numbering
+  that restarted at 40 and again at 41, so the history holds two 40s and three
+  each of 41–47, and an audit due at entry 64 ran at entry 71
+  (`docs/audits/audit-v0.28.1.md`, M4). Old headings keep their wrong numbers,
+  because other entries cite them. **Next audit: entry 81.**
 - Before any milestone that widens blast radius: first D1 write, first
   non-you user, submitting to Wyrd's Community Creators page
 - **A new top-level module, a change under `functions/`, or the first write of a
@@ -114,6 +116,71 @@ Save to `docs/audits/audit-vX.Y.Z.md`.
 ---
 
 ## ⚠️ NEXT SESSION — pending
+
+### 🔎 Read `docs/audits/audit-v0.28.1.md` before any feature work
+
+Session 71, findings only, nothing fixed. In priority order:
+
+- ~~**H1**~~ — **fixed v0.29.0.** `settleMirrored` clears the flag only if the
+  disk still holds what was sent. The same session fixed arsenal "keep mine"
+  pushing to the campaign endpoint.
+- **H2** — the book-text entitlement reads `arsenals.doc`, which the client
+  writes, so "earned" is self-asserted. **Blocks loading any book text.**
+  This is an owner decision, not a code fix.
+- **M1** — the barter counter's "Bought" check has been dead since v0.22.0, so a
+  double-click charges twice.
+- **M2** — forfeited phases never show as forfeited in the history.
+- **M3** — self-annihilating equipment can never leave an arsenal. Read the
+  trap before fixing: the drift repair would re-buy it. *The Traitor half was
+  wrong in the audit:* the leaving crew's annihilation already removes the model,
+  and v0.29.2 built the receiving half.
+- **M4** — the session counter (fixed in §5 above). **M5** — the retracted
+  Gatling Gun story is still told as fact in code, and in player-facing copy.
+  **M6** — `corrupt` (carried). **M7** — this file's status block is stale;
+  see below. Plus nine lows.
+
+The crew builder was the next feature proposed, and is deliberately after H1.
+
+### A trigger can only be where the book allows it — v0.29.0
+
+A player reported a trigger on an action she could not remove. Two routes, both
+closed and repairable.
+
+**Her actual case was neither** (v0.29.1). She had put Reposition, from the
+Tactical table, on Intuition and meant Lost in the Hunt. Both are tactical, so
+the placement was legal and no repair would ever offer it. Under the advancement
+repair there is now a collapsed **"Put an advancement on the wrong action?"**
+list (`movableAdvancements`), with a Move button on every legally placed tier-1
+advancement. It opens the same picker, which starts blank. A legal placement is
+not always the intended one, and a finished aftermath cannot be reopened.
+
+**The Traitor's other half — v0.29.2.** The same message asked for a
+Shieldbearer that Madeline's model had flipped Traitor on (black joker, p. 34).
+The crew it leaves already annihilates it in its own injury phase. Until now
+nothing let the *receiving* crew add the free copy. The Weekly hire tab has a
+folded "A model defected to your crew" panel (`DefectorJoin`,
+`defectorPatch`). It takes a typed name and cost, the injuries it carried and
+its equipment, adds it for no scrip, and gives it this crew's keywords.
+`defected: true` keeps it out of `hiresInWeek`, so it neither takes the
+first-hire discount nor counts as the week's hire. It is typed, not picked,
+because a defector is usually outside this crew's register pool.
+
+- **Tier-1 on the wrong kind of action** (p. 31). Gained tier-2 actions now
+  carry `kind` / `stat` / `resistedBy`, read by script from pp. 44–49 (73 rows:
+  38 attack, 35 tactical). `placementProblem` reports wrong-kind, gone, and a
+  written-in name that is the leader's own action of the other kind.
+- **The creation trigger** (p. 17: Heavy Hitter only). `keptTriggerProblem`;
+  changing archetype or attack action now clears it.
+
+Rules that should not be undone:
+
+- **Only what is proven is reported.** A written-in target and a gained action
+  of unknown kind are trusted. A false alarm on a healthy leader is the worse
+  failure, because this is a high-severity bar item every player sees.
+- **A misplaced row starts blank in the repair panel**, so an untouched Save
+  cannot re-confirm the fault.
+- **The 2-scrip crowding fee is still shown and not charged.** It is a rules
+  change and the owner's call. It now counts the Heavy Hitter's kept trigger.
 
 ### Where things stand — v0.22.2
 
@@ -939,8 +1006,12 @@ problem; the loops around it had none.
 
 ### Audits
 
-`docs/audits/audit-v0.21.1.md` is the current one (Session 40); its findings
-are listed above and none is closed yet.
+`docs/audits/audit-v0.28.1.md` is the current one (Session 71); see the top of
+`## ⚠️ NEXT SESSION`. Nothing in it is fixed yet.
+
+`docs/audits/audit-v0.21.1.md` is the one before (Session 54 by ordinal count;
+its heading says 40). H1, M1 and M2 were closed in v0.22.0. M3, L1, L2 and L3
+are still open, and are carried into v0.28.1 as M6, L1, L2 and L3.
 
 `docs/audits/audit-v0.11.0.md` is the second (Session 29), and it carries a
 status block. **Every finding is closed** — both print findings, all

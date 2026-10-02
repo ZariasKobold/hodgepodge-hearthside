@@ -55,7 +55,7 @@ export default function App() {
   const {
     shelf, openId, open, close, startNew, discard, adopt, refresh,
     leader, set, setPick,
-    campaign, arsenal, week, mustHire, addModel, spendScrip, earnScrip,
+    campaign, arsenal, week, mustHire, addModel, addDefector, spendScrip, earnScrip,
     creditStartingScrip, owedStartingScrip, repairAftermathDrift,
     setWeek, stepWeek, setWeekMode, resetWeek, setStartedAt, setWeeksTotal,
     setHouseRules,
@@ -291,6 +291,7 @@ export default function App() {
     addInjury, healInjury, dropInjury, annihilateModel,
     advanceLeader, advanceTotem, setTotem, addCrewCardAdvancement, placeAdvancementAt,
     useMiraculousRecovery, rewindPhases,
+    addDefector,
     onHire: (model, cost) => {
       addModel(model, { scripPaid: cost })
       spendScrip(cost)
@@ -365,6 +366,7 @@ export default function App() {
             onSheet={() => setView('sheet')}
             onPlaceAdvancement={placeAdvancementAt}
             onRepairDrift={repairAftermathDrift}
+            onSetTrigger={(trigger) => set({ trigger })}
           />
         )}
 

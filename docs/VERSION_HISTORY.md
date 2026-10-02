@@ -5317,3 +5317,222 @@ chase.
 
 3 new tests, 697 total. Verified in the browser against a local D1 as the host,
 and over HTTP that the member's response carries no note.
+
+---
+
+### Session 71 — v0.28.2
+Date: 2026-09-30
+
+**docs: the fourth audit — `docs/audits/audit-v0.28.1.md`**
+
+Findings only; no fix code, per §5. **2 high, 7 medium, 9 low.**
+
+**Numbered 71, and the number is the finding.** §5 counts audits by the
+entries in this file, and the headings had stopped being a count: numbering
+restarted at 40 after v0.21.2 and again at 41 after v0.22.6, so there are two
+40s and three each of 41–47, and the two sessions before this one were
+labelled 48 and 49. By ordinal count this is entry 71. The last audit is entry
+54, so this one was due at 64. Old headings keep their numbers because other
+entries cite them. §5 now says the count is
+`grep -c '^### Session'` plus one, never the last heading plus one. Next audit
+at entry 81.
+
+**The two highs:**
+
+- **H1** — `mirror` and `mirrorArsenal` clear the dirty flag on success without
+  checking the disk. That is the v0.24.0 race, closed in `reconcile.js` and
+  still open in the path that runs on every save. Two overlapping pushes (a
+  typed name) leave the later edit marked clean; its own push is refused as
+  stale, and the reconcile that follows sees nothing to do. Reasoned from the
+  code, not reproduced. The steps are unconditional, so what is uncertain is
+  how often, not whether.
+- **H2** — the book-text entitlement is computed from `arsenals.doc`, which the
+  client writes. So "you may read what you have earned" is "you may read what
+  you claim to hold", and the names and values needed to claim everything are
+  in this public repository. The remaining barrier is one ownership question,
+  rate-limited per account. Nothing is exposed today (no text loaded, 0007/0008
+  not applied), and loading the text now waits on an owner decision.
+
+**The barter regression is worth recording as a pattern.** The v0.21.1 audit
+listed "bought items are disabled" among the reasons the aftermath is
+idempotent. It was true that day. v0.22.0 changed `bought` from ids to
+objects, and `bought.includes(e.id)` has matched nothing since. An audit's
+"verified clean" is a statement about one commit, and the next change can
+retire it without anything failing.
+
+**The transcription added since the last audit is correct.** Seven new
+numbers, the Skill Boost Skl conditions and the Signature flags, were read
+against pp. 39–43 and all match.
+
+Files: `docs/audits/audit-v0.28.1.md` (new), `CLAUDE.md`, `package.json`,
+`docs/VERSION_HISTORY.md`
+RESOLVED: nothing. This is a catalogue.
+NEXT: H1 before the next game night. H2 is the owner's decision. Then M1,
+M5, M3 (read its trap first), M2, M4, M7.
+
+---
+
+### Session 72 — v0.29.0
+Date: 2026-09-30
+
+**fix: the last keystroke reaches the account (audit H1), and a trigger can only be where the book allows it**
+
+#### H1 — closed
+
+`mirror` and `mirrorArsenal` cleared the dirty flag on every accepted push,
+including an *earlier* push accepted after a later save was already on the
+disk. That save was then marked clean. Its own push was refused as stale, and
+the reconcile that followed found nothing to do. `settleMirrored` in
+`reconcile.js` now clears the flag only if the disk still equals what was
+sent. It is the same rule `settleAfterPush` applies inside the reconcile,
+brought to the path that runs on every save. Four tests, including the
+lost-keystroke sequence.
+
+**Found on the way, and fixed:** resolving an *arsenal* conflict with "keep
+mine" pushed the arsenal through `mirror`, the **campaign** endpoint, so an
+arsenal document was PUT to `/api/campaigns/ars_…`. That has been live since
+sync came back in v0.21.0. It uses `mirrorArsenal` now. The corrected comments
+from audit L9 in `useSync.js` went with it.
+
+#### Triggers where the book does not allow them
+
+Reported by a player: a trigger on one of her actions that should not be
+there, and no way to take it off. Two routes could put one there, and both are
+closed, detected and repairable. Her own record has not been read, because
+production was unreachable from this session. Which route hit her is
+unconfirmed; the bar will name it on her screen if it is one of these.
+
+**1. A tier-1 advancement on the wrong kind of action.** p. 31: the Attack
+Modification table goes on "one attack action", the Tactical table on "one
+tactical action". Picks carry their slot, so those were always right. But
+every action gained from the tier-2 table had `slot: null` and was offered to
+*both* tables, so an attack trigger could go on a gained tactical action.
+
+- **The book now says which kind each gained action is.** `kind`, `stat` and
+  `resistedBy` were added to all 73 named rows of the Action table
+  (pp. 44–49). They were **read by script from the PDF's text layer, not
+  typed**: an action with a resist is an attack, one with "-" is tactical.
+  38 attack, 35 tactical, every name matched, and five were checked by hand.
+  Same footing as the Skill Boost numbers (§4): a fact off a stat line.
+- `targetsFor` offers a gained action only to its own table, and judges a
+  Skill Boost against its printed Skl and resist. A gained Hand Cannon (Skl 6)
+  is now a proven no for the 4→5 boost, where it used to be an unknown.
+- `placementProblem` reports three faults. A target of the wrong kind. A
+  target that is **gone**: the pick it was placed on was later changed, so the
+  modifier is attached to nothing. And a **written-in** name that is one of the
+  leader's own actions of the other kind. That last is the Lucky Upstart
+  case: no tactical slot, so the Tactical table falls through to a text box,
+  and typing the attack action's name put a tactical trigger on an attack.
+  Anything the app cannot see stays trusted: a written-in totem action, or a
+  gained action of unknown kind. A false alarm on a healthy leader would be
+  worse than a gap.
+
+**2. The trigger kept at creation.** Only the Heavy Hitter keeps one (p. 17),
+and `checkStructure` refused anything else only *during* creation. A leader who
+chose a trigger and then changed archetype, or swapped the attack action it
+came from, kept it on the record, the sheet and the PNG. The picker that could
+clear it is hidden for every archetype but one. `keptTriggerProblem` names it,
+and changing archetype or attack action now clears it at the source.
+
+**Repair, following the pattern the earlier repairs set.** A high-severity
+outstanding item names each fault by name ("Draw Out Secrets on Leap", "Poison
+Dart (kept at creation)"). On the arsenal view, the advancement panel now says
+*why* each row is there, starts a misplaced row blank so an untouched Save
+cannot re-confirm it, and refuses a written-in name that is still wrong.
+`KeptTriggerRepair` offers "take it off", or for a Heavy Hitter, the attack
+action's real triggers.
+
+The crowding note in `PhaseAdvance` now counts the Heavy Hitter's kept trigger
+toward "two or more", since it is on the card.
+
+**Fixtures corrected, not code.** Two existing tests placed advancements on
+the key `'k'`, which no leader holds, and passed only because nothing checked.
+The new check correctly calls those "attached to nothing". Both fixtures now
+use real pick keys. That is the fifth time a fixture easier than production has
+had to be corrected.
+
+Verified in a browser on a seeded Schemer carrying both faults: the bar named
+both, the panel offered only Blowdart for the attack trigger, both repairs
+landed, the bar and panels cleared, and the local server's copy (version 3)
+held the corrected record.
+
+27 new tests (4 H1, 23 placement), 724 total.
+
+Files: `src/lib/reconcile.js` + test, `src/hooks/useSync.js`,
+`src/data/advancements.js`, `src/lib/advancement.js` + test,
+`src/lib/validation.js`, `src/lib/outstanding.js` + test,
+`src/lib/triggerPlacement.test.js` (new), `src/hooks/useCampaign.js`,
+`src/components/KeptTriggerRepair.jsx` (new),
+`src/components/UnplacedAdvancements.jsx`,
+`src/components/aftermath/PhaseAdvance.jsx`, `src/components/steps/Arsenal.jsx`,
+`src/App.jsx`, `CLAUDE.md`, `package.json`
+RESOLVED: audit H1; arsenal "keep mine" hitting the campaign endpoint; triggers
+placed where p. 31 / p. 17 forbid them can no longer be made, and existing ones
+are named and repairable.
+UNVERIFIED: whether this covers the reported player's case, until she opens
+v0.29.0. The 2-scrip crowding fee is still shown and not charged; that is a
+rules change and still the owner's call.
+NEXT: confirm with the player. Then H2 (owner decision), M1, M5, M3.
+
+---
+
+### Session 73 — v0.29.1 → v0.29.2
+Date: 2026-10-01
+
+**feat: a legally placed advancement can be moved to the action the player meant**
+
+The player behind v0.29.0 answered. Her trigger was Reposition, from the
+Tactical Modification table, sitting on Intuition (a gained tactical action).
+She meant Lost in the Hunt, which the register confirms is also tactical. So the
+placement broke no rule, `placementProblem` was right to say nothing, and the
+repair panel never offered it. A finished aftermath cannot be reopened, so there
+was no way to change it. v0.29.0 would not have helped her.
+
+`movableAdvancements` in `advancement.js` lists every placed tier-1 advancement
+that is not already on the repair list, so one row is never offered twice.
+`UnplacedAdvancements` shows them as a collapsed "Put an advancement on the
+wrong action?" list with a Move button each. Move opens the same picker the
+repairs use, starting blank, with "Leave it" to back out. The id and the row
+are kept, so this records where it goes and does not record a new advancement.
+
+Verified in a browser on a seeded copy of her setup: Move, choose Lost in the
+Hunt, save. The stored `appliesTo` changed, and the card printed "Mask —
+Reposition" under Lost in the Hunt.
+
+3 new tests, 727 total.
+
+Files: `src/lib/advancement.js`, `src/lib/triggerPlacement.test.js`,
+`src/components/UnplacedAdvancements.jsx`, `src/components/steps/Arsenal.jsx`,
+`CLAUDE.md`, `package.json`
+#### v0.29.2 — the Traitor, received
+
+The same message asked for a Shieldbearer "since Madeline lost it due to a
+flip". The owner identified the flip: Traitor, the black joker on the injury
+chart (p. 34). The opposing crew "may add a copy of this model to its arsenal
+spending no scrip", with the new leader's keywords and the injuries and
+equipment it had that game.
+
+The leaving half was already right. `annihilates: true` on that row means the
+model's own player removes it in their injury phase. So audit M3's claim that a
+Traitor "stays" was wrong about the arsenal, and only the note in
+`PhaseInjuries` ("Tell them; they add it for nothing") pointed at a half that
+did not exist. No player can write another player's arsenal, so the receiving
+player has to add it on their own.
+
+- `defectorPatch` (`shape/arsenal.js`): a model at `scripPaid: 0`, the current
+  week, `defected: true`, this crew's keywords. Its injuries are attached to
+  the new model's id, and its equipment joins the arsenal at `cc: 0`. No scrip
+  moves.
+- `hiresInWeek` skips `defected` models, and `mustHireThisWeek` now reads
+  through it. A free defector would otherwise have used up the first-hire
+  discount and satisfied the mandatory hire.
+- `DefectorJoin.jsx`, a folded panel under the Weekly hire. The name and cost
+  are typed, because a defector comes from the other crew and is rarely in
+  this crew's register pool.
+
+Verified in a browser: Shieldbearer, cost 5, Leadfooted and Coffee added.
+Scrip unchanged, injury on the new model's id, Coffee at cc 0.
+
+3 more tests, 730 total. Files added: `src/lib/shape/arsenal.js` + test,
+`src/hooks/useCampaign.js`, `src/components/DefectorJoin.jsx` (new),
+`src/components/steps/Campaign.jsx`, `src/App.jsx`, `src/styles/app.css`.

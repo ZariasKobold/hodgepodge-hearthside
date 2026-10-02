@@ -835,6 +835,10 @@ body::after {
 }
 .repair .gap-note { margin-top: 10px; }
 .repair .field { margin-top: 18px; }
+/* Folded panels (the Traitor, moving an advancement): the summary is the whole
+   control until it is opened, so it has to read as one. */
+.repair summary, .repair__move summary { cursor: pointer; color: var(--text); font-weight: 600; }
+.repair__move { margin-top: 18px; }
 
 /* Wyrd's disclaimer follows anything that leaves the screen (§8) -------- */
 .legal-print { display: none; }

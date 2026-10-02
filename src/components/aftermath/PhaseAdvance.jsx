@@ -8,7 +8,7 @@ import {
 } from '../../lib/aftermath.js'
 import { offerFor, findTable, EXPERIENCE_TRACK } from '../../data/advancements.js'
 import {
-  needsTarget, targetsFor, advancementsOn, isTriggerRow, TRIGGER,
+  needsTarget, targetsFor, advancementsOn, isTriggerRow, TRIGGER, placementProblem,
 } from '../../lib/advancement.js'
 import { sourceSlug, findEntry } from '../../lib/rules.js'
 import { uid } from '../../lib/shape/arsenal.js'
@@ -147,16 +147,36 @@ export default function PhaseAdvance({
    * triggers (§4). So an advancement trigger is the only kind an action here
    * can have, and the app can count them exactly.
    */
+  // …with one exception: the Heavy Hitter keeps one trigger from its attack
+  // action at creation (p. 17), and that one is on the card and counts.
+  const keptHere = Boolean(
+    chosenTarget && draft.to !== 'totem' && leader.trigger
+    && leader.picks?.attack?.[0]?.key === chosenTarget.key
+  )
   const triggersHere = chosenTarget
-    ? advancementsOn(holder, chosenTarget.key).filter(isTriggerRow).length
+    ? advancementsOn(holder, chosenTarget.key).filter(isTriggerRow).length + (keptHere ? 1 : 0)
     : 0
 
   const isFirst = checked === 0
   const targetName = writeTarget ? draft.text.trim() : chosenTarget?.name || ''
+  /**
+   * A written-in target is taken on trust, except where the app can prove it
+   * wrong: the name of one of this leader's own actions of the other kind. A
+   * Lucky Upstart has no tactical slot, so the Tactical table lands here, and
+   * typing the attack action's name would put a tactical trigger on an attack.
+   */
+  const writtenWrong = writeTarget && targetName && table
+    ? placementProblem(holder, {
+      tableId: table.id,
+      name: entry?.name,
+      appliesTo: { key: null, name: targetName, written: true },
+    })
+    : null
   const ready = Boolean(
     table
     && (table.freeText ? draft.text.trim() : entry)
     && (!wantsTarget || targetName)
+    && !writtenWrong
   )
 
   function commit() {
@@ -375,8 +395,11 @@ export default function PhaseAdvance({
               <p className="note">
                 {draft.to === 'totem'
                   ? 'A totem’s actions come off its card, which this app does not store — so the name is written in.'
-                  : 'Nothing to pick from, so write the action in. It is recorded on the advancement either way.'}
+                  : `Nothing to pick from, so write the ${table.targetSlot} action in. It is recorded on the advancement either way.`}
               </p>
+              {writtenWrong && (
+                <p className="note note--warn">{writtenWrong.why}.</p>
+              )}
             </Field>
           )}
 
@@ -386,7 +409,7 @@ export default function PhaseAdvance({
               action that already has two or more costs {table.triggerCrowdingFee}{' '}
               scrip.{' '}
               {chosenTarget
-                ? `${targetName} has ${triggersHere} from advancements — the app does not count the source model's, because a leader taking an ally's action does not take its triggers.`
+                ? `${targetName} has ${triggersHere}${keptHere ? ', counting the one kept at creation' : ' from advancements'} — the app does not count the source model's, because a leader taking an ally's action does not take its triggers.`
                 : 'Check the action before you take it.'}{' '}
               The app does not deduct it; pay it yourself if it applies.
             </p>

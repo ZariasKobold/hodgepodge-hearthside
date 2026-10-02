@@ -3,6 +3,7 @@ import WeekControl from '../WeekControl.jsx'
 import WeeklyHire from './WeeklyHire.jsx'
 import Aftermath from '../Aftermath.jsx'
 import Players from './Players.jsx'
+import DefectorJoin from '../DefectorJoin.jsx'
 import {
   standingRating, activeInjuryCount,
 } from '../../lib/shape/arsenal.js'
@@ -95,6 +96,8 @@ export default function Campaign({
           onHire={actions.onHire}
         />
       )}
+
+      {tab === 'hire' && actions.addDefector && <DefectorJoin onAdd={actions.addDefector} />}
 
       {tab === 'players' && (
         <Players

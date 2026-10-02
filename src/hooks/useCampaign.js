@@ -10,7 +10,7 @@ import {
 } from '../lib/shelf.js'
 import {
   createModel, createEquipment, createInjury, createTotem,
-  totalFor, mustHireThisWeek, startingScripPatch, owedStartingScrip,
+  totalFor, mustHireThisWeek, startingScripPatch, owedStartingScrip, defectorPatch,
 } from '../lib/shape/arsenal.js'
 import {
   createCampaign, createGame, currentWeek, joinedWeekFor,
@@ -21,6 +21,7 @@ import { belongsTo, shouldRelease } from '../lib/shape/ownership.js'
 import { unwindArsenal } from '../lib/rewind.js'
 import { planRepair, repairPatch } from '../lib/repair.js'
 import { readBundle, refileForImport } from '../lib/shape/migrate.js'
+import { getArchetype } from '../data/archetypes.js'
 
 /**
  * A shelf of arsenals, one of which may be open, each sitting at a table.
@@ -303,6 +304,12 @@ export function useCampaign({ userId = null, userReady = true, onSaved, onArsena
       else if (k === 'arsenal') arsenalPatch.models = v
       else leaderPatch[k] = v
     }
+    // Only the Heavy Hitter keeps a trigger (p. 17), and the picker that could
+    // clear one is hidden for every other archetype — so changing away from it
+    // used to leave the trigger on the card with no way to take it off.
+    if ('archetype' in leaderPatch && !getArchetype(leaderPatch.archetype)?.keepsTrigger) {
+      leaderPatch.trigger = ''
+    }
 
     setArsenal((a) => {
       const merged = {
@@ -320,7 +327,19 @@ export function useCampaign({ userId = null, userReady = true, onSaved, onArsena
   }, [leader, setArsenal])
 
   const setPick = useCallback((slot, entriesForSlot) => {
-    setArsenal((a) => ({ leader: { ...a.leader, picks: { ...a.leader.picks, [slot]: entriesForSlot } } }))
+    setArsenal((a) => {
+      // The kept trigger comes off the attack action taken. A different attack
+      // action is a different card, so the old trigger cannot come with it.
+      const attackChanged = slot === 'attack'
+        && entriesForSlot?.[0]?.key !== a.leader.picks?.attack?.[0]?.key
+      return {
+        leader: {
+          ...a.leader,
+          picks: { ...a.leader.picks, [slot]: entriesForSlot },
+          ...(attackChanged && a.leader.trigger ? { trigger: '' } : {}),
+        },
+      }
+    })
   }, [setArsenal])
 
   /**
@@ -350,6 +369,11 @@ export function useCampaign({ userId = null, userReady = true, onSaved, onArsena
 
   const addModel = useCallback((model, { scripPaid = 0 } = {}) => {
     setArsenal((a) => ({ models: [...a.models, createModel({ ...model, addedWeek: week, scripPaid })] }))
+  }, [setArsenal, week])
+
+  /** A Traitor joining from the other crew, free (p. 34). See `defectorPatch`. */
+  const addDefector = useCallback((defector) => {
+    setArsenal((a) => defectorPatch(a, defector, week))
   }, [setArsenal, week])
 
   const removeModel = useCallback((modelId) => {
@@ -560,7 +584,7 @@ export function useCampaign({ userId = null, userReady = true, onSaved, onArsena
     mustHire: arsenal ? mustHireThisWeek(arsenal, week, { joinedWeek }) : false,
     // wizard adapter — same surface the step components already expect
     leader, set: setLeader, setPick,
-    addModel, removeModel, spendScrip, earnScrip,
+    addModel, addDefector, removeModel, spendScrip, earnScrip,
     creditStartingScrip, repairAftermathDrift,
     owedStartingScrip: arsenal ? owedStartingScrip(arsenal) : 0,
     // games and the aftermath

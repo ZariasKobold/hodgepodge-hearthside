@@ -1,6 +1,7 @@
 import { Label, Field, Button, Input, Select } from './ui.jsx'
 import {
-  advancementsToRepair, targetsFor, rowFor, ambiguousRows, rowIsGuessed,
+  advancementsToRepair, targetsFor, rowFor, ambiguousRows,
+  placementProblem, repairReason, movableAdvancements,
 } from '../lib/advancement.js'
 import { uid } from '../lib/shape/arsenal.js'
 import { findTable } from '../data/advancements.js'
@@ -46,11 +47,20 @@ import { sourceSlug, findEntry } from '../lib/rules.js'
 export default function UnplacedAdvancements({
   arsenal, leader, rules, draft, onDraft, onPlace,
 }) {
-  const rows = [
+  const repairs = [
     ...rowsFor(leader, 'leader'),
     ...rowsFor(arsenal.totem, 'totem'),
   ]
-  if (rows.length === 0) return null
+  // Placed legally, and the player may still have meant another action. The
+  // ones they have opened join the panel below the repairs.
+  const movable = [
+    ...movableFor(leader, 'leader'),
+    ...movableFor(arsenal.totem, 'totem'),
+  ]
+  const isMoving = (r) => Boolean(draft[`${r.to}:${r.at}:move`])
+  const rows = [...repairs, ...movable.filter(isMoving).map((r) => ({ ...r, moving: true }))]
+  const closed = movable.filter((r) => !isMoving(r))
+  if (rows.length === 0 && closed.length === 0) return null
 
   const actionFor = (target) => {
     const slug = sourceSlug(target)
@@ -60,21 +70,25 @@ export default function UnplacedAdvancements({
 
   return (
     <section className="repair noprint">
+      {repairs.length > 0 && (<>
       <Label>
-        {rows.length} advancement{rows.length === 1 ? '' : 's'} to check
+        {repairs.length} advancement{repairs.length === 1 ? '' : 's'} to check
       </Label>
       <p className="gap-note">
-        <strong>These were recorded before the app kept the whole answer.</strong>{' '}
-        A tier-1 advancement applies to the one action you chose at the table
-        (p.31) and nothing older than v0.22.2 recorded which — and where the
-        book prints a name more than once, the row itself was a guess. Settle
-        them here and the card will show what your leader actually has.
+        <strong>A tier-1 advancement goes on one action of its own kind</strong>{' '}
+        — an Attack Modification on an attack action, a Tactical Modification
+        on a tactical one (p.31). Each of these is either missing that action,
+        on one the book does not allow, or on a row the app had to guess. Each
+        says which. Settle them here and the card will show what your leader
+        actually has.
       </p>
+      </>)}
 
-      {rows.map(({ adv, to, holder, at }) => {
+      {rows.map(({ adv, to, holder, at, moving }) => {
         const id = `${to}:${at}`
         const table = findTable(adv.tableId)
         const choices = ambiguousRows(adv)
+        const problem = placementProblem(holder, adv)
 
         /**
          * Which row this was.
@@ -98,13 +112,23 @@ export default function UnplacedAdvancements({
         // Whatever is already on the advancement is the starting answer, so a
         // row that came back only to have its row corrected does not make the
         // player name the action a second time.
-        const recordedTarget = written
-          ? adv.appliesTo?.name || ''
-          : targets.some((t) => t.key === adv.appliesTo?.key) ? adv.appliesTo.key : ''
+        // — except when that answer is the fault. A misplaced advancement
+        // starts blank, so saving the untouched screen cannot re-confirm it.
+        const recordedTarget = problem || moving
+          ? ''
+          : written
+            ? adv.appliesTo?.name || ''
+            : targets.some((t) => t.key === adv.appliesTo?.key) ? adv.appliesTo.key : ''
         const value = draft[id] ?? recordedTarget
         const chosen = targets.find((t) => t.key === value) || null
         const name = written ? String(value).trim() : chosen?.name
         const placed = Boolean(adv.appliesTo?.name)
+        // A written-in name is checked against the leader's own actions too:
+        // typing the attack action's name into a tactical row is the same
+        // fault by a different door.
+        const writtenWrong = written && name
+          ? placementProblem(holder, { ...adv, appliesTo: { key: null, name, written: true } })
+          : null
 
         return (
           <Field key={id}>
@@ -112,6 +136,25 @@ export default function UnplacedAdvancements({
               {adv.name} — {adv.tableName}
               {to === 'totem' ? ' · the totem’s' : ''}
             </Label>
+
+            {/* Why it is here. A player told to "check" an advancement they
+                placed correctly last week, with no reason, will assume the app
+                is broken — and a misplaced one needs saying plainly, because
+                it is on their card right now. */}
+            {moving ? (
+              <p className="note">
+                On <strong>{adv.appliesTo.name}</strong> now. Pick the{' '}
+                {table.targetSlot} action it belongs on.{' '}
+                <Button ghost onClick={() => onDraft(`${id}:move`, undefined)}>Leave it</Button>
+              </p>
+            ) : problem ? (
+              <p className="note note--warn">
+                <strong>Not allowed where it is:</strong> {problem.why}. Move it to{' '}
+                {table.targetSlot === 'attack' ? 'an attack' : 'a tactical'} action below.
+              </p>
+            ) : (
+              <p className="note">{repairReason(holder, adv)}.</p>
+            )}
 
             {choices.length > 1 && (
               <>
@@ -152,6 +195,10 @@ export default function UnplacedAdvancements({
                   </option>
                 ))}
               </Select>
+            )}
+
+            {writtenWrong && (
+              <p className="note note--warn">{writtenWrong.why}.</p>
             )}
 
             {chosen?.eligible === false && (
@@ -204,15 +251,39 @@ export default function UnplacedAdvancements({
                  through would lock in something the book forbids and the app
                  can prove wrong. An *unknown* still saves; only a proven no
                  blocks. */
-              disabled={!name || chosen?.eligible === false}
+              disabled={!name || chosen?.eligible === false || Boolean(writtenWrong)}
             >
-              {placed ? 'Save' : 'Put it on'} {name || 'an action'}
+              {moving ? 'Move it to' : placed ? 'Save' : 'Put it on'} {name || 'an action'}
             </Button>
           </Field>
         )
       })}
+
+      {/* A legal placement is not always the intended one, and a finished
+          aftermath cannot be reopened — so this is the only way to say "I put
+          it on the wrong action". Collapsed to one line each until asked. */}
+      {closed.length > 0 && (
+        <details className="repair__move">
+          <summary>Put an advancement on the wrong action?</summary>
+          {closed.map(({ adv, to, at }) => (
+            <p key={`${to}:${at}`} className="note">
+              {adv.name} on <strong>{adv.appliesTo.name}</strong>
+              {to === 'totem' ? ' · the totem’s' : ''}{' '}
+              <Button ghost onClick={() => onDraft(`${to}:${at}:move`, true)}>Move</Button>
+            </p>
+          ))}
+        </details>
+      )}
     </section>
   )
+}
+
+/** The placed rows of one holder that are not already up for repair. */
+function movableFor(holder, to) {
+  if (!holder) return []
+  return movableAdvancements(holder).map((adv) => ({
+    adv, to, holder, at: holder.advancements.indexOf(adv),
+  }))
 }
 
 /**

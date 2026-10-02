@@ -209,93 +209,110 @@ const TACTICAL = [
 
 /* ── Tier 2 ─────────────────────────────────────────────────────── */
 
+/**
+ * `kind`, `stat` and `resistedBy` are facts off each action's printed stat line,
+ * pp. 44–49 — the same kind of fact as a Skl boost's `statTo` or a totem's Df
+ * (§4), not rules text.
+ *
+ * They exist because a tier-1 modifier may only go on its own kind of action:
+ * the Attack Modification table on "one attack action", the Tactical table on
+ * "one tactical action" (p. 31). Without them the app offered every gained
+ * action to both tables and could not say which were legal — so an attack
+ * trigger could be put on a tactical action and nothing could show it was wrong.
+ *
+ * Read by script from the book's text layer (v0.29.0), not typed: an action with
+ * a resist (Df, Wp, Sp, Sz) is an attack, one with "-" is tactical. All 73
+ * named rows matched; 38 attack, 35 tactical. `stat` is null where the book
+ * prints "-" for Skl. The joker's free choice has no kind, because it is
+ * whatever the player picks.
+ */
 const ACTION = [
-  { value: ALWAYS, name: 'Tap the Leyline', page: 44 },
-  { value: ALWAYS, name: 'Healing Energy', page: 44 },
+  { value: ALWAYS, name: 'Tap the Leyline', page: 44, kind: 'tactical', stat: null, resistedBy: null },
+  { value: ALWAYS, name: 'Healing Energy', page: 44, kind: 'tactical', stat: 0, resistedBy: null },
 
-  { value: 1, name: 'Throw ’Em a Bone', page: 44 },
-  { value: 1, name: 'Ice Blast', page: 44 },
-  { value: 1, name: 'Hand Cannon', page: 44 },
-  { value: 1, name: 'Spirit Slap', page: 44 },
+  { value: 1, name: 'Throw ’Em a Bone', page: 44, kind: 'tactical', stat: 0, resistedBy: null },
+  { value: 1, name: 'Ice Blast', page: 44, kind: 'attack', stat: 5, resistedBy: 'Df' },
+  { value: 1, name: 'Hand Cannon', page: 44, kind: 'attack', stat: 6, resistedBy: 'Df' },
+  { value: 1, name: 'Spirit Slap', page: 44, kind: 'attack', stat: 6, resistedBy: 'Wp' },
 
-  { value: 2, name: 'Defensive Energy', page: 44 },
-  { value: 2, name: 'Drunken Dash', page: 44 },
-  { value: 2, name: 'Lightning Strike', page: 44 },
-  { value: 2, name: 'Zipp Zapp', page: 44 },
-  { value: 2, name: 'Smashed Bottle', page: 44 },
+  { value: 2, name: 'Defensive Energy', page: 44, kind: 'tactical', stat: 0, resistedBy: null },
+  { value: 2, name: 'Drunken Dash', page: 44, kind: 'tactical', stat: 0, resistedBy: null },
+  { value: 2, name: 'Lightning Strike', page: 44, kind: 'attack', stat: 6, resistedBy: 'Df' },
+  { value: 2, name: 'Zipp Zapp', page: 44, kind: 'attack', stat: 6, resistedBy: 'Df' },
+  { value: 2, name: 'Smashed Bottle', page: 44, kind: 'attack', stat: 6, resistedBy: 'Df' },
 
-  { value: 3, name: 'Secret Passage', page: 44 },
-  { value: 3, name: 'False Claim', page: 45 },
-  { value: 3, name: 'Bored to Death', page: 45 },
-  { value: 3, name: 'Shuriken', page: 45 },
-  { value: 3, name: 'Burn Stick', page: 45 },
+  { value: 3, name: 'Secret Passage', page: 44, kind: 'tactical', stat: 0, resistedBy: null },
+  { value: 3, name: 'False Claim', page: 45, kind: 'tactical', stat: 0, resistedBy: null },
+  { value: 3, name: 'Bored to Death', page: 45, kind: 'attack', stat: 6, resistedBy: 'Wp' },
+  { value: 3, name: 'Shuriken', page: 45, kind: 'attack', stat: 6, resistedBy: 'Df' },
+  { value: 3, name: 'Burn Stick', page: 45, kind: 'attack', stat: 6, resistedBy: 'Sp' },
 
-  { value: 4, name: 'Lifting Spirits', page: 45 },
-  { value: 4, name: 'Retrofit', page: 45 },
-  { value: 4, name: 'Hellfire Shot', page: 45 },
-  { value: 4, name: 'Alchemical Vial', page: 45 },
-  { value: 4, name: 'Knock Heads', page: 45 },
+  { value: 4, name: 'Lifting Spirits', page: 45, kind: 'tactical', stat: 0, resistedBy: null },
+  { value: 4, name: 'Retrofit', page: 45, kind: 'tactical', stat: 0, resistedBy: null },
+  { value: 4, name: 'Hellfire Shot', page: 45, kind: 'attack', stat: 6, resistedBy: 'Wp' },
+  { value: 4, name: 'Alchemical Vial', page: 45, kind: 'attack', stat: 6, resistedBy: 'Df' },
+  { value: 4, name: 'Knock Heads', page: 45, kind: 'attack', stat: 6, resistedBy: 'Df' },
 
-  { value: 5, name: 'Leap', page: 45 },
-  { value: 5, name: 'Obscene Feast', page: 45 },
-  { value: 5, name: 'Avalanche', page: 45 },
-  { value: 5, name: 'Compact Shotgun', page: 45 },
-  { value: 5, name: 'Tangling Roots', page: 45 },
+  { value: 5, name: 'Leap', page: 45, kind: 'tactical', stat: 0, resistedBy: null },
+  { value: 5, name: 'Obscene Feast', page: 45, kind: 'tactical', stat: 0, resistedBy: null },
+  { value: 5, name: 'Avalanche', page: 45, kind: 'attack', stat: 6, resistedBy: 'Sp' },
+  { value: 5, name: 'Compact Shotgun', page: 45, kind: 'attack', stat: 6, resistedBy: 'Df' },
+  { value: 5, name: 'Tangling Roots', page: 45, kind: 'attack', stat: 6, resistedBy: 'Df' },
 
-  { value: 6, name: 'Supportive Measures', page: 46 },
-  { value: 6, name: 'Revitalize', page: 46 },
-  { value: 6, name: 'Covert Agent', page: 46 },
-  { value: 6, name: 'Bone Javelin', page: 46 },
-  { value: 6, name: 'Resupply', page: 46 },
+  { value: 6, name: 'Supportive Measures', page: 46, kind: 'tactical', stat: 0, resistedBy: null },
+  { value: 6, name: 'Revitalize', page: 46, kind: 'tactical', stat: 0, resistedBy: null },
+  { value: 6, name: 'Covert Agent', page: 46, kind: 'attack', stat: 6, resistedBy: 'Wp' },
+  { value: 6, name: 'Bone Javelin', page: 46, kind: 'attack', stat: 6, resistedBy: 'Df' },
+  { value: 6, name: 'Resupply', page: 46, kind: 'tactical', stat: null, resistedBy: null },
 
-  { value: 7, name: 'Fade Into Memory', page: 46 },
-  { value: 7, name: 'Steamroller', page: 46 },
-  { value: 7, name: 'Contract Kill', page: 46 },
-  { value: 7, name: 'Flare Gun', page: 46 },
-  { value: 7, name: 'Fishin’ Gear', page: 46 },
+  { value: 7, name: 'Fade Into Memory', page: 46, kind: 'tactical', stat: 0, resistedBy: null },
+  { value: 7, name: 'Steamroller', page: 46, kind: 'tactical', stat: 0, resistedBy: null },
+  { value: 7, name: 'Contract Kill', page: 46, kind: 'attack', stat: 6, resistedBy: 'Df' },
+  { value: 7, name: 'Flare Gun', page: 46, kind: 'attack', stat: 6, resistedBy: 'Df' },
+  { value: 7, name: 'Fishin’ Gear', page: 46, kind: 'attack', stat: 5, resistedBy: 'Df' },
 
-  { value: 8, name: 'Nitro Boost', page: 46 },
-  { value: 8, name: 'Falling Skies', page: 46 },
-  { value: 8, name: 'Spilling Secrets', page: 47 },
-  { value: 8, name: 'Giant’s Bane', page: 47 },
-  { value: 8, name: 'Dynamite Punch', page: 47 },
+  { value: 8, name: 'Nitro Boost', page: 46, kind: 'tactical', stat: 0, resistedBy: null },
+  { value: 8, name: 'Falling Skies', page: 46, kind: 'tactical', stat: 0, resistedBy: null },
+  { value: 8, name: 'Spilling Secrets', page: 47, kind: 'attack', stat: 6, resistedBy: 'Wp' },
+  { value: 8, name: 'Giant’s Bane', page: 47, kind: 'attack', stat: 6, resistedBy: 'Df' },
+  { value: 8, name: 'Dynamite Punch', page: 47, kind: 'attack', stat: 6, resistedBy: 'Df' },
 
-  { value: 9, name: 'Unstable Ground', page: 47 },
-  { value: 9, name: '50ft of Silk Rope', page: 47 },
-  { value: 9, name: 'Breath of Fire', page: 47 },
-  { value: 9, name: 'Netgun', page: 47 },
-  { value: 9, name: 'Balanced Sword', page: 47 },
+  { value: 9, name: 'Unstable Ground', page: 47, kind: 'tactical', stat: 0, resistedBy: null },
+  { value: 9, name: '50ft of Silk Rope', page: 47, kind: 'tactical', stat: 0, resistedBy: null },
+  { value: 9, name: 'Breath of Fire', page: 47, kind: 'attack', stat: 6, resistedBy: 'Df' },
+  { value: 9, name: 'Netgun', page: 47, kind: 'attack', stat: 6, resistedBy: 'Sp' },
+  { value: 9, name: 'Balanced Sword', page: 47, kind: 'attack', stat: 6, resistedBy: 'Df' },
 
-  { value: 10, name: 'A Cage for All', page: 47 },
-  { value: 10, name: 'Cleansing Shield', page: 47 },
-  { value: 10, name: 'Whip Vault', page: 47 },
-  { value: 10, name: 'Mortar Strike', page: 47 },
-  { value: 10, name: 'Absolute Control', page: 48 },
-  { value: 10, name: 'Outmaneuver', page: 48 },
-  { value: 10, name: 'Intuition', page: 48 },
-  { value: 10, name: 'Frightening Reminder', page: 48 },
-  { value: 10, name: '“Objection!”', page: 48 },
-  { value: 10, name: 'Chesterfield Shotgun', page: 48 },
-  { value: 10, name: '“Up We Go!”', page: 48 },
+  { value: 10, name: 'A Cage for All', page: 47, kind: 'tactical', stat: 0, resistedBy: null },
+  { value: 10, name: 'Cleansing Shield', page: 47, kind: 'tactical', stat: 0, resistedBy: null },
+  { value: 10, name: 'Whip Vault', page: 47, kind: 'tactical', stat: 0, resistedBy: null },
+  { value: 10, name: 'Mortar Strike', page: 47, kind: 'tactical', stat: 0, resistedBy: null },
+  { value: 10, name: 'Absolute Control', page: 48, kind: 'tactical', stat: 0, resistedBy: null },
+  { value: 10, name: 'Outmaneuver', page: 48, kind: 'tactical', stat: 0, resistedBy: null },
+  { value: 10, name: 'Intuition', page: 48, kind: 'tactical', stat: null, resistedBy: null },
+  { value: 10, name: 'Frightening Reminder', page: 48, kind: 'tactical', stat: 0, resistedBy: null },
+  { value: 10, name: '“Objection!”', page: 48, kind: 'attack', stat: 6, resistedBy: 'Wp' },
+  { value: 10, name: 'Chesterfield Shotgun', page: 48, kind: 'attack', stat: 6, resistedBy: 'Df' },
+  { value: 10, name: '“Up We Go!”', page: 48, kind: 'attack', stat: 3, resistedBy: 'Sz' },
 
-  { value: 11, name: 'Turn a Profit', page: 48 },
-  { value: 11, name: 'Raging Bellow', page: 48 },
-  { value: 11, name: 'Mirrored Malice', page: 48 },
-  { value: 11, name: 'Ansatsu Rifle', page: 48 },
-  { value: 11, name: 'Runic Blade', page: 48 },
+  { value: 11, name: 'Turn a Profit', page: 48, kind: 'tactical', stat: 0, resistedBy: null },
+  { value: 11, name: 'Raging Bellow', page: 48, kind: 'tactical', stat: 0, resistedBy: null },
+  { value: 11, name: 'Mirrored Malice', page: 48, kind: 'attack', stat: 6, resistedBy: 'Df' },
+  { value: 11, name: 'Ansatsu Rifle', page: 48, kind: 'attack', stat: 5, resistedBy: 'Df' },
+  { value: 11, name: 'Runic Blade', page: 48, kind: 'attack', stat: 6, resistedBy: 'Df' },
 
-  { value: 12, name: 'Fallow Night', page: 49 },
-  { value: 12, name: 'Blast to Bits', page: 49 },
-  { value: 12, name: 'Sundering', page: 49 },
-  { value: 12, name: 'Clockwork Seeker', page: 49 },
-  { value: 12, name: 'Mind Barbs', page: 49 },
+  { value: 12, name: 'Fallow Night', page: 49, kind: 'tactical', stat: 0, resistedBy: null },
+  { value: 12, name: 'Blast to Bits', page: 49, kind: 'tactical', stat: 0, resistedBy: null },
+  { value: 12, name: 'Sundering', page: 49, kind: 'attack', stat: 6, resistedBy: 'Wp' },
+  { value: 12, name: 'Clockwork Seeker', page: 49, kind: 'attack', stat: 6, resistedBy: 'Df' },
+  { value: 12, name: 'Mind Barbs', page: 49, kind: 'attack', stat: 6, resistedBy: 'Wp' },
 
-  { value: 13, name: 'Obey', page: 49 },
-  { value: 13, name: 'Expanding Influence', page: 49 },
-  { value: 13, name: 'Onward', page: 49 },
-  { value: 13, name: 'Dark Bargain', page: 49 },
-  { value: 13, name: 'Broken Illusions', page: 49 },
-  { value: 13, name: 'Long Carbine', page: 49 },
+  { value: 13, name: 'Obey', page: 49, kind: 'attack', stat: 6, resistedBy: 'Wp' },
+  { value: 13, name: 'Expanding Influence', page: 49, kind: 'tactical', stat: 0, resistedBy: null },
+  { value: 13, name: 'Onward', page: 49, kind: 'tactical', stat: 0, resistedBy: null },
+  { value: 13, name: 'Dark Bargain', page: 49, kind: 'tactical', stat: 0, resistedBy: null },
+  { value: 13, name: 'Broken Illusions', page: 49, kind: 'attack', stat: 6, resistedBy: 'Wp' },
+  { value: 13, name: 'Long Carbine', page: 49, kind: 'attack', stat: 6, resistedBy: 'Df' },
 
   {
     value: ANY_JOKER, name: 'Choose', page: 49,

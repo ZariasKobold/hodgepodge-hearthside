@@ -6,7 +6,7 @@ import {
   liveModels, totalFor, injuriesFor, injuryCountForModel, modelIsAnnihilated,
   activeInjuryCount, standingRating, ratingForGame, heldEquipmentIds,
   injuryNamesFor, isOutOfKeyword, hiresInWeek, mustHireThisWeek,
-  startingArsenalSpend, startingScripPatch, owedStartingScrip,
+  startingArsenalSpend, startingScripPatch, owedStartingScrip, defectorPatch,
 } from './arsenal.js'
 
 describe('createArsenal', () => {
@@ -274,5 +274,36 @@ describe('the starting scrip, p. 15', () => {
     expect(owedStartingScrip(built([20]))).toBe(3)
     expect(owedStartingScrip(built([20], { startingScripGranted: 0 }))).toBe(0)
     expect(owedStartingScrip(built([20], { startingScripGranted: 3 }))).toBe(0)
+  })
+})
+
+describe('defectorPatch — the Traitor, received (p. 34)', () => {
+  const week = 4
+  const base = () => createArsenal({ keywords: ['Wildfire', ''], scrip: 2, models: [createModel({ cost: 6, addedWeek: 0 })] })
+
+  it('adds the copy for no scrip, with this crew’s keywords', () => {
+    const a = base()
+    const patch = defectorPatch(a, { name: 'Shieldbearer', cost: 5 }, week)
+    const m = patch.models.at(-1)
+    expect(m).toMatchObject({ name: 'Shieldbearer', cost: 5, scripPaid: 0, addedWeek: 4, defected: true, keywords: ['Wildfire'] })
+    expect(patch.scrip).toBeUndefined()
+  })
+
+  it('carries its injuries onto the new model and its kit at no cost', () => {
+    const patch = defectorPatch(base(), {
+      name: 'Shieldbearer', cost: 5,
+      injuries: [{ name: 'Leadfooted', page: 35 }],
+      equipment: [{ id: 'coffee', name: 'Coffee', cc: 1, page: 22 }],
+    }, week)
+    const m = patch.models.at(-1)
+    expect(patch.injuries).toHaveLength(1)
+    expect(patch.injuries[0]).toMatchObject({ name: 'Leadfooted', modelId: m.id, gainedWeek: 4 })
+    expect(patch.equipment[0]).toMatchObject({ equipmentId: 'coffee', cc: 0, acquiredWeek: 4 })
+  })
+
+  it('is not a hire: no discount used, and the week still owes one', () => {
+    const a = { ...base(), ...defectorPatch(base(), { name: 'Shieldbearer', cost: 5 }, week) }
+    expect(hiresInWeek(a, week)).toEqual([])
+    expect(mustHireThisWeek(a, week)).toBe(true)
   })
 })

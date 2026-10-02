@@ -266,7 +266,7 @@ export default function PhaseInjuries({
                 <p className="note note--warn">
                   <strong>Traitor.</strong> This model leaves your arsenal and
                   joins the opposing crew's, keeping its injuries and equipment.
-                  Tell them; they add it for nothing.
+                  Tell them: they add it for nothing under Campaign → Weekly hire → “A model defected to your crew”.
                 </p>
               )}
 

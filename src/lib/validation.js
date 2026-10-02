@@ -101,3 +101,41 @@ export function candidatesFor(slot, roster, archetypeId, leaderKeywords) {
 export function availableTriggers(picks) {
   return picks.attack?.[0]?.triggers || []
 }
+
+/**
+ * Why the trigger a leader kept at creation cannot stand, or null.
+ *
+ * Only the Heavy Hitter keeps one, from the attack action it took (p. 17), and
+ * `checkStructure` refuses anything else — **during creation.** Nothing looked
+ * again afterwards. So a leader who chose a trigger and then changed archetype,
+ * or swapped the attack action it came from, kept it: printed on the record,
+ * the sheet and the PNG, with the picker that could clear it hidden because the
+ * new archetype does not keep one. A trigger the player could see and could
+ * not remove — reported by a player, v0.29.0.
+ *
+ * The third check is by name against the triggers recorded on the pick itself,
+ * and only when there are some: a hand-entered pick carries none, and a
+ * trigger typed in for it is an answer the app cannot check, not a mistake.
+ */
+export function keptTriggerProblem(leader) {
+  const trigger = String(leader?.trigger || '').trim()
+  if (!trigger) return null
+  const archetype = getArchetype(leader.archetype)
+  if (!archetype) return null
+  if (!archetype.keepsTrigger) {
+    return {
+      kind: 'archetype',
+      why: `A ${archetype.name} does not keep a trigger — only the Heavy Hitter does (p. 17)`,
+    }
+  }
+  const attack = leader.picks?.attack?.[0]
+  if (!attack) {
+    return { kind: 'no-action', why: 'There is no attack action for it to come from' }
+  }
+  const norm = (t) => String(t?.name ?? t ?? '').trim().toLowerCase()
+  const offered = attack.triggers || []
+  if (offered.length && !offered.some((t) => norm(t) === norm(trigger))) {
+    return { kind: 'not-on-action', why: `${trigger} is not one of ${attack.name}’s triggers` }
+  }
+  return null
+}

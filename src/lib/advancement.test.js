@@ -2,8 +2,9 @@ import { describe, it, expect } from 'vitest'
 import {
   needsTarget, targetsFor, advancementsOn, advancedAction, rowFor,
   gainedActions, gainedActionKey, advancementsToRepair, rowIsGuessed, ambiguousRows, rowsNamed,
+  placementProblem, repairReason,
 } from './advancement.js'
-import { findTable } from '../data/advancements.js'
+import { findTable, ADVANCEMENT_TABLES } from '../data/advancements.js'
 
 const attack = findTable('attack')
 const tactical = findTable('tactical')
@@ -151,21 +152,17 @@ describe('offering the actions an advancement may go on', () => {
     expect(targetsFor(l, attack, row(attack, 'Skill Boost', 10), () => four)[0].eligible).toBe(true)
   })
 
-  it('knows the Skl of a gained action that has already been boosted', () => {
+  it('judges a gained action by its printed stat line (v0.29.0)', () => {
+    // Hand Cannon is printed z10" · Skl 6 · Df (p. 44), so the book answers
+    // both the Skl and the resist — no card needed, and no unknown.
     const l = leader({
-      advancements: [
-        { id: 'adv_9', tableId: 'action', name: 'Hand Cannon', page: 44 },
-        took({
-          id: 'adv_a', name: 'Skill Boost', tableValue: 7,
-          appliesTo: { key: 'adv::adv_9', name: 'Hand Cannon', slot: 'attack', gained: true },
-        }),
-      ],
+      advancements: [{ id: 'adv_9', tableId: 'action', name: 'Hand Cannon', page: 44 }],
     })
-    const gained = targetsFor(l, attack, row(attack, 'Skill Boost', 10), () => null)[1]
-    // Skl 5 now, which the 5→6 row wants — but the resist is only on the card,
-    // so this stays an unknown rather than becoming a yes.
-    expect(gained.eligible).toBeNull()
-    expect(gained.why).toContain('resists')
+    const at = (value) => targetsFor(l, attack, row(attack, 'Skill Boost', value), () => null)
+      .find((t) => t.gained)
+    expect(at(12).eligible).toBe(true)
+    expect(at(7).eligible).toBe(false)
+    expect(at(7).why).toBe('Skl 6, needs 4')
   })
 
   it('will not clear a resist condition it cannot read, even knowing the Skl', () => {
@@ -184,16 +181,32 @@ describe('offering the actions an advancement may go on', () => {
     expect(out[0].eligible).toBeNull()
   })
 
-  it('includes actions gained from the tier-2 table, unclassified', () => {
+  it('offers a gained action to its own table only, by its printed kind', () => {
     const l = leader({
-      advancements: [{ id: 'adv_9', tableId: 'action', name: 'Hand Cannon', page: 44 }],
+      advancements: [
+        { id: 'adv_9', tableId: 'action', name: 'Hand Cannon', page: 44 },
+        { id: 'adv_8', tableId: 'action', name: 'Leap', page: 45 },
+      ],
     })
-    const out = targetsFor(l, attack, row(attack, 'Draw Out Secrets', 9), actionFor)
-    expect(out.map((t) => t.name)).toEqual(['Blowdart', 'Hand Cannon'])
-    const gained = out[1]
-    expect(gained.gained).toBe(true)
+    const onAttack = targetsFor(l, attack, row(attack, 'Draw Out Secrets', 9), actionFor)
+    expect(onAttack.map((t) => t.name)).toEqual(['Blowdart', 'Hand Cannon'])
+    expect(onAttack[1].gained).toBe(true)
+    expect(onAttack[1].eligible).toBe(true)
+    expect(onAttack[1].key).toBe('adv::adv_9')
+
+    const trigger = tactical.entries.find((e) => e.type === 'Trigger')
+    const onTactical = targetsFor(l, tactical, trigger, actionFor)
+    expect(onTactical.map((t) => t.name)).toEqual(['Life Raft', 'Leap'])
+  })
+
+  it('still offers a gained action it cannot classify, marked unknown', () => {
+    // The joker's free choice is whatever the player named.
+    const l = leader({
+      advancements: [{ id: 'adv_7', tableId: 'action', name: 'Something Off a Card', page: 49 }],
+    })
+    const gained = targetsFor(l, attack, row(attack, 'Draw Out Secrets', 9), actionFor)
+      .find((t) => t.gained)
     expect(gained.eligible).toBeNull()
-    expect(gained.key).toBe('adv::adv_9')
   })
 
   it('does not offer abilities or totems as gained actions', () => {
@@ -291,7 +304,9 @@ describe('advancements the repair panel has to offer', () => {
     name: 'Draw Out Secrets', tableValue: 9, page: 39, ...over,
   })
   const boost = (over = {}) => legacy({ name: 'Skill Boost', tableValue: 7, page: 39, ...over })
-  const placed = { key: 'k', name: 'Blowdart', slot: 'attack' }
+  // A key the leader really holds — a placeholder like 'k' reads, correctly,
+  // as an advancement attached to nothing (v0.29.0).
+  const placed = { key: 'skulker-skin::attack::Blowdart', name: 'Blowdart', slot: 'attack' }
 
   it('offers the tier-1 ones with no target', () => {
     const l = leader({ advancements: [legacy(), boost()] })

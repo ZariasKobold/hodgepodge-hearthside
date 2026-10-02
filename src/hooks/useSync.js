@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { remote, remoteArsenals } from '../lib/remote.js'
-import { runReconcile } from '../lib/reconcile.js'
+import { runReconcile, settleMirrored } from '../lib/reconcile.js'
 import {
   saveCampaign, loadCampaign, campaignIds, knownVersion, rememberVersion,
   isDirty, markDirty, saveArsenal, loadArsenal, arsenalIds, removeArsenal,
@@ -190,7 +190,9 @@ export function useSync({ user, available, onChanged }) {
         // Move the base version forward, or the next save conflicts with the
         // copy this very request just created.
         rememberVersion(campaign.id, saved?.version)
-        markDirty(campaign.id, false)
+        // Clean only if nothing newer has been saved since this was sent — a
+        // later keystroke must stay dirty so it is pushed (audit v0.28.1, H1).
+        settleMirrored(campaign, { load: loadCampaign, mark: markDirty })
         setState((s) => ({ ...s, status: 'synced', error: null, at: Date.now() }))
       })
       .catch((err) => {
@@ -201,9 +203,9 @@ export function useSync({ user, available, onChanged }) {
          * The server refused because this copy is behind — which is the guard
          * that exists precisely because blindly retrying is what destroyed a
          * leader portrait. So the local edit stays exactly where it is, and a
-         * full reconcile decides what happens to it: `planSync` compares
-         * `updatedAt` and either pushes this copy forward or pulls the newer
-         * one down. Nothing here overwrites anything.
+         * full reconcile decides what happens to it from the version and the
+         * dirty flag: push it if the account has not moved, raise a conflict if
+         * it has. Nothing here overwrites anything.
          */
         if (err.stale) {
           setState((s) => ({
@@ -211,6 +213,41 @@ export function useSync({ user, available, onChanged }) {
             status: 'syncing',
             error: null,
           }))
+          reconcile()
+          return
+        }
+        setState((s) => ({ ...s, status: 'failed', error: err.message }))
+      })
+  }, [user, available, reconcile])
+
+  /**
+   * The same for an arsenal, and deliberately a near-copy of `mirror` rather
+   * than one function with a `kind` argument.
+   *
+   * The plan forbids copy-pasting the *decision* logic — `planSync`, the version
+   * facts — and this is not that. This is the transport, where the two differ
+   * in which endpoint they call and which storage function writes the answer,
+   * and a discriminator threaded through would make both harder to read for no
+   * shared logic worth sharing.
+   */
+  const mirrorArsenal = useCallback((arsenal) => {
+    if (PUSH_DISABLED) return
+    if (!user || !available || !arsenal?.id) return
+    remoteArsenals.put(arsenal, { baseVersion: knownVersion(arsenal.id) })
+      .then(({ saved }) => {
+        if (!alive.current) return
+        rememberVersion(arsenal.id, saved?.version)
+        // See `mirror`: a later save on the disk keeps this dirty.
+        settleMirrored(arsenal, { load: loadArsenal, mark: markDirty })
+        setState((s) => ({ ...s, status: 'synced', error: null, at: Date.now() }))
+      })
+      .catch((err) => {
+        if (!alive.current) return
+        // A conflict is not a failure and must not be retried — the local edit
+        // stays exactly where it is and a full reconcile decides what happens
+        // to it. Blindly retrying is what destroyed a leader portrait.
+        if (err.stale) {
+          setState((s) => ({ ...s, status: 'syncing', error: null }))
           reconcile()
           return
         }
@@ -241,9 +278,10 @@ export function useSync({ user, available, onChanged }) {
 
     // `mine` means "I have seen theirs and I am replacing it", so the push is
     // now legitimate rather than blind and goes through the ordinary gate.
-    // Pushing is off, so 'keep mine' simply keeps it: the copy stays dirty and
-    // goes up when step F enables pushes. `mirror` is a no-op meanwhile.
-    if (out.resolved === 'mine') mirror(clash.mine)
+    if (out.resolved === 'mine') {
+      if (clash.kind === 'arsenal') mirrorArsenal(clash.mine)
+      else mirror(clash.mine)
+    }
 
     setState((s) => ({
       ...s,
@@ -252,7 +290,7 @@ export function useSync({ user, available, onChanged }) {
     }))
     onChanged?.()
     return out
-  }, [state.conflicts, onChanged, mirror])
+  }, [state.conflicts, onChanged, mirror, mirrorArsenal])
 
   /** Both sides, as a file, before choosing. The universal escape hatch (§8). */
   const downloadConflict = useCallback((id) => {
@@ -261,40 +299,6 @@ export function useSync({ user, available, onChanged }) {
     const name = clash.mine?.name || clash.mine?.leader?.name || clash.id
     exportJSON(conflictExport(clash), `${String(name).toLowerCase().replace(/\s+/g, '-')}-conflict.json`)
   }, [state.conflicts])
-
-  /**
-   * The same for an arsenal, and deliberately a near-copy of `mirror` rather
-   * than one function with a `kind` argument.
-   *
-   * The plan forbids copy-pasting the *decision* logic — `planSync`, the version
-   * facts — and this is not that. This is the transport, where the two differ
-   * in which endpoint they call and which storage function writes the answer,
-   * and a discriminator threaded through would make both harder to read for no
-   * shared logic worth sharing.
-   */
-  const mirrorArsenal = useCallback((arsenal) => {
-    if (PUSH_DISABLED) return
-    if (!user || !available || !arsenal?.id) return
-    remoteArsenals.put(arsenal, { baseVersion: knownVersion(arsenal.id) })
-      .then(({ saved }) => {
-        if (!alive.current) return
-        rememberVersion(arsenal.id, saved?.version)
-        markDirty(arsenal.id, false)
-        setState((s) => ({ ...s, status: 'synced', error: null, at: Date.now() }))
-      })
-      .catch((err) => {
-        if (!alive.current) return
-        // A conflict is not a failure and must not be retried — the local edit
-        // stays exactly where it is and a full reconcile decides what happens
-        // to it. Blindly retrying is what destroyed a leader portrait.
-        if (err.stale) {
-          setState((s) => ({ ...s, status: 'syncing', error: null }))
-          reconcile()
-          return
-        }
-        setState((s) => ({ ...s, status: 'failed', error: err.message }))
-      })
-  }, [user, available, reconcile])
 
   const forgetArsenal = useCallback((id) => {
     if (PUSH_DISABLED) return

@@ -512,9 +512,59 @@ export function owedStartingScrip(arsenal) {
   return startingScrip(startingArsenalSpend(arsenal))
 }
 
-/** Models added during a given week, in the order they were hired. */
+/**
+ * Models *hired* during a given week, in the order they were hired.
+ *
+ * A Traitor who came over from the other crew arrived that week too, but was
+ * not hired: it cost nothing, so it must not take the first-of-week discount
+ * or count as the week's mandatory hire (v0.29.2).
+ */
 export function hiresInWeek(arsenal, week) {
-  return (arsenal?.models || []).filter((m) => m.addedWeek === week)
+  return (arsenal?.models || []).filter((m) => m.addedWeek === week && !m.defected)
+}
+
+/**
+ * A model that defected to this crew — the Traitor result, black joker on the
+ * injury chart (p. 34).
+ *
+ * "The opposing crew may add a copy of this model to its arsenal spending no
+ * scrip; the model gains the keywords of its new crew's leader. The model
+ * retains any injuries and equipment it had this game in its new crew."
+ *
+ * The other half — annihilating it from the crew it left — already happens in
+ * that player's own injury phase. This half has to be done by the player who
+ * receives it, on their own arsenal, because nobody may write another player's
+ * arsenal.
+ *
+ *   - `scripPaid: 0` and no scrip moves.
+ *   - `defected: true`, so `hiresInWeek` does not treat it as a hire.
+ *   - `keywords` are this crew's own, which is what "gains the keywords of its
+ *     new crew's leader" amounts to, and keeps it out of any surcharge.
+ *   - Injuries attach to the new model's id. Equipment joins the arsenal at no
+ *     cost, as equipment in this app belongs to the arsenal, not to a model.
+ *
+ * Returns a patch for the arsenal; nothing here writes.
+ */
+export function defectorPatch(arsenal, { name, cost, slug = null, injuries = [], equipment = [] }, week) {
+  const model = createModel({
+    slug, name: String(name || '').trim(), cost: Number(cost) || 0,
+    addedWeek: week, scripPaid: 0, defected: true,
+    keywords: (arsenal?.keywords || []).filter(Boolean),
+  })
+  return {
+    models: [...(arsenal?.models || []), model],
+    injuries: [
+      ...(arsenal?.injuries || []),
+      ...injuries.map((i) => createInjury({ name: i.name, page: i.page ?? null, modelId: model.id, gainedWeek: week })),
+    ],
+    equipment: [
+      ...(arsenal?.equipment || []),
+      ...equipment.map((e) => createEquipment({
+        equipmentId: e.id ?? e.equipmentId ?? null, name: e.name, cc: 0,
+        page: e.page ?? null, thirst: Boolean(e.thirst), acquiredWeek: week,
+      })),
+    ],
+  }
 }
 
 /**
@@ -529,7 +579,7 @@ export function hiresInWeek(arsenal, week) {
  */
 export function mustHireThisWeek(arsenal, week, { joinedWeek = 1 } = {}) {
   if (week <= Math.max(1, joinedWeek || 1)) return false
-  return !(arsenal?.models || []).some((m) => m.addedWeek === week)
+  return hiresInWeek(arsenal, week).length === 0
 }
 
 export { ANNIHILATION_THRESHOLD }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { runReconcile } from './reconcile.js'
+import { runReconcile, settleMirrored } from './reconcile.js'
 import { SyncError } from './remote.js'
 
 /**
@@ -483,5 +483,51 @@ describe('a stale snapshot must never overwrite a newer local copy', () => {
 
     expect(h.campaigns.cmp_1.games).toHaveLength(1)
     expect(h.marks.cmp_1).not.toBe(false)
+  })
+})
+
+/* ── the save-time push (audit v0.28.1, H1) ─────────────────────── */
+
+describe('settleMirrored — a push that lands after a newer save', () => {
+  // A disk and a dirty flag, nothing else: exactly what `mirror` touches.
+  const harness = (doc) => {
+    const disk = { [doc.id]: doc }
+    const dirty = { [doc.id]: true }
+    return {
+      disk,
+      dirty,
+      load: (id) => disk[id] ?? null,
+      mark: (id, value) => { dirty[id] = value },
+    }
+  }
+
+  it('marks it clean when the disk still holds what was sent', () => {
+    const sent = { id: 'ars_1', scrip: 2, updatedAt: 1 }
+    const h = harness(sent)
+    expect(settleMirrored(sent, h)).toBe(true)
+    expect(h.dirty.ars_1).toBe(false)
+  })
+
+  it('leaves it dirty when a later save is on the disk — the lost keystroke', () => {
+    // Save A goes out; save AB lands on the disk; A's success arrives.
+    const sentA = { id: 'ars_1', leader: { name: 'A' }, updatedAt: 1 }
+    const h = harness(sentA)
+    h.disk.ars_1 = { id: 'ars_1', leader: { name: 'AB' }, updatedAt: 2 }
+    expect(settleMirrored(sentA, h)).toBe(false)
+    // Still owed a push, so the reconcile that AB's refused PUT starts will
+    // send it rather than finding nothing to do.
+    expect(h.dirty.ars_1).toBe(true)
+  })
+
+  it('ignores the save clock, which moves on every write', () => {
+    const sent = { id: 'cmp_1', weeksTotal: 12, updatedAt: 1 }
+    const h = harness({ ...sent, updatedAt: 99 })
+    expect(settleMirrored(sent, h)).toBe(true)
+  })
+
+  it('does nothing without a document', () => {
+    const h = harness({ id: 'x' })
+    expect(settleMirrored(null, h)).toBe(false)
+    expect(h.dirty.x).toBe(true)
   })
 })
