@@ -6,6 +6,7 @@ import {
   liveModels, liveEquipment, ratingForGame,
 } from '../../lib/shape/arsenal.js'
 import { maxEncounterSize } from '../../lib/campaign.js'
+import { gameFieldsFrom, hiredModels, crewRating, hiredEquipment } from '../../lib/encounter.js'
 
 /**
  * What happened in the game, recorded before the aftermath can start.
@@ -19,13 +20,19 @@ import { maxEncounterSize } from '../../lib/campaign.js'
  * questions in particular look like trivia and are not: they decide whether
  * the leader gains one point this game or two, and a wrong answer compounds
  * for the rest of the campaign because the track only goes one way.
+ *
+ * With an `encounter` from the crew builder, the questions it already answered
+ * are not asked again: the rating, the encounter size and the equipment come
+ * from the crew, and only the models that were hired can have been killed.
+ * Opponent, strategy and their rating stay editable, prefilled.
  */
-export default function GameLog({ arsenal, leader, week, weeksRemaining, isFirst, onLog }) {
-  const models = liveModels(arsenal)
+export default function GameLog({ arsenal, leader, week, weeksRemaining, isFirst, onLog, encounter = null }) {
+  const models = encounter ? hiredModels(encounter, arsenal) : liveModels(arsenal)
+  const fromCrew = encounter ? gameFieldsFrom(encounter, arsenal) : null
   const [g, setG] = useState({
-    opponent: '',
-    strategy: '',
-    encounterSize: '',
+    opponent: fromCrew?.opponent || '',
+    strategy: fromCrew?.strategy || '',
+    encounterSize: fromCrew?.encounterSize ?? '',
     schemesCompleted: 0,
     vpSelf: 0,
     vpOpponent: 0,
@@ -33,7 +40,7 @@ export default function GameLog({ arsenal, leader, week, weeksRemaining, isFirst
     withdrew: false,
     withdrewOnTurn: '',
     equipmentHiredCount: 0,
-    campaignRatingOpponent: 0,
+    campaignRatingOpponent: fromCrew ? fromCrew.campaignRatingOpponent : 0,
     killedModelIds: [],
     leaderWasKilled: false,
     killedNonPeon: false,
@@ -44,9 +51,11 @@ export default function GameLog({ arsenal, leader, week, weeksRemaining, isFirst
 
   // The rating for THIS game, which depends on how much kit was taken — so it
   // cannot be read off the arsenal and has to be computed from the answer.
-  const ratingSelf = ratingForGame(arsenal, {
-    equipmentHired: Array.from({ length: Number(g.equipmentHiredCount) || 0 }),
-  })
+  const ratingSelf = encounter
+    ? crewRating(encounter, arsenal)
+    : ratingForGame(arsenal, {
+      equipmentHired: Array.from({ length: Number(g.equipmentHiredCount) || 0 }),
+    })
 
   const path = leader.advancementPath
   // Annihilated kit cannot be hired until bought again (p. 22).
@@ -55,6 +64,9 @@ export default function GameLog({ arsenal, leader, week, weeksRemaining, isFirst
 
   function submit() {
     onLog({
+      // The crew's facts first; what the player typed below wins where both
+      // speak, because they may have corrected it at the table.
+      ...(fromCrew || {}),
       opponent: g.opponent.trim(),
       strategy: g.strategy.trim(),
       encounterSize: g.encounterSize === '' ? null : Number(g.encounterSize),
@@ -69,10 +81,12 @@ export default function GameLog({ arsenal, leader, week, weeksRemaining, isFirst
       // Stored as a list of ids so the count is never separately wrong; the
       // form asks for a number because which pieces went on which model is a
       // table-side detail the aftermath never reads.
-      equipmentHired: Array.from(
-        { length: Math.min(Number(g.equipmentHiredCount) || 0, ownedEquipment) },
-        (_, i) => ({ equipmentId: kit[i]?.equipmentId ?? null, modelId: null })
-      ),
+      equipmentHired: fromCrew
+        ? fromCrew.equipmentHired
+        : Array.from(
+          { length: Math.min(Number(g.equipmentHiredCount) || 0, ownedEquipment) },
+          (_, i) => ({ equipmentId: kit[i]?.equipmentId ?? null, modelId: null })
+        ),
       killedModelIds: g.killedModelIds,
       leaderWasKilled: g.leaderWasKilled,
       killedNonPeon: g.killedNonPeon,
@@ -161,18 +175,28 @@ export default function GameLog({ arsenal, leader, week, weeksRemaining, isFirst
         </Field>
         <Field>
           <Label>Equipment you hired</Label>
-          <Select
-            value={g.equipmentHiredCount}
-            onChange={(e) => set({ equipmentHiredCount: e.target.value })}
-            disabled={ownedEquipment === 0}
-          >
-            {Array.from({ length: ownedEquipment + 1 }, (_, n) => <option key={n} value={n}>{n}</option>)}
-          </Select>
-          <p className="note">
-            {ownedEquipment === 0
-              ? 'None in the arsenal yet — barter is where they come from.'
-              : 'Counted at hiring, not at owning, so it belongs to this game.'}
-          </p>
+          {encounter ? (
+            <p className="note">
+              {hiredEquipment(encounter, arsenal).length === 0
+                ? 'None, from the crew you hired.'
+                : `${hiredEquipment(encounter, arsenal).map((x) => x.row.name).join(', ')}, from the crew you hired.`}
+            </p>
+          ) : (
+            <>
+              <Select
+                value={g.equipmentHiredCount}
+                onChange={(e) => set({ equipmentHiredCount: e.target.value })}
+                disabled={ownedEquipment === 0}
+              >
+                {Array.from({ length: ownedEquipment + 1 }, (_, n) => <option key={n} value={n}>{n}</option>)}
+              </Select>
+              <p className="note">
+                {ownedEquipment === 0
+                  ? 'None in the arsenal yet — barter is where they come from.'
+                  : 'Counted at hiring, not at owning, so it belongs to this game.'}
+              </p>
+            </>
+          )}
         </Field>
         <Field>
           <Label>Their campaign rating</Label>

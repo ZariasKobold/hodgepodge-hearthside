@@ -21,6 +21,7 @@ import {
 } from '../lib/rewind.js'
 import { useState } from 'react'
 import { uid } from '../lib/shape/arsenal.js'
+import { openEncounter } from '../lib/encounter.js'
 
 /**
  * The aftermath — six phases, one game, one sitting or several.
@@ -53,6 +54,9 @@ export default function Aftermath({
   const games = (campaign.games || []).filter((g) => g.arsenalId === arsenal.id)
   const open = games.find((g) => g.aftermath?.phase && !g.aftermath?.done) || null
   const finished = games.filter((g) => g.aftermath?.done)
+  // A crew hired in the crew builder and not yet played. The game log reads
+  // its facts rather than asking for them again.
+  const encounter = openEncounter(campaign, arsenal.id)
 
   /* ── no game in progress — log one ─────────────────────────────── */
 
@@ -60,11 +64,14 @@ export default function Aftermath({
     return (
       <>
         <GameLog
+          // Keyed so a crew hired after the form first rendered still fills it.
+          key={encounter?.id || 'by-hand'}
           arsenal={arsenal}
           leader={leader}
           week={week}
           weeksRemaining={weeksRemaining(campaign)}
           isFirst={games.length === 0}
+          encounter={encounter}
           onLog={(fields) => {
             const game = actions.logGame(fields)
             actions.updateGame(game.id, {

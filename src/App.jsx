@@ -59,7 +59,8 @@ export default function App() {
     creditStartingScrip, owedStartingScrip, repairAftermathDrift,
     setWeek, stepWeek, setWeekMode, resetWeek, setStartedAt, setWeeksTotal,
     setHouseRules,
-    logGame, updateGame, buyEquipment, annihilateEquipment, addInjury, healInjury, dropInjury, annihilateModel,
+    logGame, updateGame, buyEquipment, annihilateEquipment, addInjury,
+    startEncounter, updateEncounter, discardEncounter, healInjury, dropInjury, annihilateModel,
     advanceLeader, advanceTotem, setTotem, addCrewCardAdvancement, placeAdvancementAt,
     useMiraculousRecovery, annihilateLeader, rewindPhases,
   } = useCampaign({
@@ -286,6 +287,7 @@ export default function App() {
     setWeek, stepWeek, setWeekMode, resetWeek, setStartedAt, setWeeksTotal,
     setHouseRules,
     logGame, updateGame,
+    startEncounter, updateEncounter, discardEncounter,
     earnScrip, spendScrip,
     buyEquipment,
     addInjury, healInjury, dropInjury, annihilateModel,

@@ -5662,3 +5662,56 @@ RESOLVED: audit v0.28.1, every finding.
 UNVERIFIED: migration 0009 has never run against a real D1, local or remote;
 the `json_each` statements are proven only against the test fake.
 NEXT: the crew builder, Phase A (local only). Next audit: entry 81.
+
+---
+
+### Session 75 — v0.31.0
+Date: 2026-10-06
+
+**feat: the crew builder, Phase A — hire a crew out of the arsenal**
+
+The first real game (2026-09-02) asked for this: no other crew builder can
+hold a campaign leader. Phase A is one side, local, offline: the Crew tab.
+
+Two rules questions went to the owner first, because they change arithmetic:
+
+- **p. 19's "injuries in the crew" means the hired crew**, not the arsenal.
+  The rating is worked out "after hiring and revealing crews". So a totem left
+  at camp brings none of its advancements, and a hurt model left at camp costs
+  nothing.
+- **Out of keyword is +1, Versatile exempt**, as in any hire. The arsenal does
+  not store model keywords (§4), so it is a per-model tick, default off.
+
+`src/lib/encounter.js` holds all of it: cost, cap, size, rating, the pool (to
+six from hiring, plus the lower rating's bonus up to three, which may pass
+six), and what stops a crew being played (over size, over cap, a model gone
+from the arsenal, kit on a peon or on two models). `gameFieldsFrom` turns the
+crew into the game, and `GameLog` asks only what the crew does not know: VP,
+result, schemes, who died (from the hired crew only), and the experience
+questions. `equipmentHired` now names each row and who carried it.
+
+The encounter lives on the player's own campaign document beside `games`, so it
+syncs and exports with no server change. `logGame` marks it played in the same
+write as the game. §5's "first write of a shape that persists" fires for
+`campaign.encounters`. It was reviewed against the sync path here: the field is
+optional on read, the shape gate does not look at it, and `setCampaign` merges,
+so an older client keeps it. Phase B's D1 table is where the full trigger
+applies.
+
+Verified in a browser: a 32ss arsenal against a typed 24ss gave a 30ss cap;
+three models with one taxed cost 20; kit on the Sentinel and the leader took
+the rating to 4 (2 kit + 3 advancements − 1 Sentinel injury); with their 4 the
+pool was 6. "Played it" prefilled the log, only hired models were killable, and
+the game held the encounter's facts with the encounter closed. No horizontal
+scroll at 375px.
+
+25 new tests, 807 total.
+
+Files: `src/lib/encounter.js` (new) + test (new),
+`src/components/steps/Encounter.jsx` (new), `src/components/steps/Campaign.jsx`,
+`src/components/aftermath/GameLog.jsx`, `src/components/Aftermath.jsx`,
+`src/hooks/useCampaign.js`, `src/lib/shape/campaign.js`, `src/App.jsx`,
+`src/styles/app.css`, `docs/data-model-v3.md`, `CLAUDE.md`, `package.json`
+UNVERIFIED: a crew built on one device and logged on another; sync carries the
+field, but it has not been watched doing so.
+NEXT: Phase B, the shared hidden-until-revealed session (D1, one row per crew).

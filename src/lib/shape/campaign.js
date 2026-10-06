@@ -104,6 +104,13 @@ export function createCampaign(patch = {}) {
     ownerUserId: null,
     participants: [],
     games: [],
+    /**
+     * Crews being hired, and the record of crews that were. One side each,
+     * written only by the player hiring it (`lib/encounter.js`). Optional on
+     * read: a campaign from before v0.31.0 has none, and every reader says
+     * `campaign.encounters || []`.
+     */
+    encounters: [],
     createdAt: Date.now(),
     ...patch,
   }
@@ -128,6 +135,14 @@ export function createGame(patch = {}) {
     campaignRatingOpponent: null,
     equipmentHired: [],     // [{ equipmentId, modelId }] — chosen fresh each game
     killedModelIds: [],     // drives phase 6 injury flips
+    /**
+     * Set when the game was hired through the crew builder: the encounter it
+     * came from, and who was in the crew. Null and empty for a game logged by
+     * hand, which knows only what the player typed.
+     */
+    encounterId: null,
+    hiredModelIds: [],
+    totemHired: false,
     /**
      * The two things only the player saw. The leader's experience depends on
      * them (p. 31) and nothing in the app can observe either, so they are

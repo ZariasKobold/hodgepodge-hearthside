@@ -3,6 +3,8 @@ import WeekControl from '../WeekControl.jsx'
 import WeeklyHire from './WeeklyHire.jsx'
 import Aftermath from '../Aftermath.jsx'
 import Players from './Players.jsx'
+import Encounter from './Encounter.jsx'
+import { openEncounter } from '../../lib/encounter.js'
 import DefectorJoin from '../DefectorJoin.jsx'
 import {
   standingRating, activeInjuryCount,
@@ -24,6 +26,9 @@ import {
  */
 const TABS = [
   { id: 'hire', label: 'Weekly hire' },
+  // Between the two, because that is when it happens: hire for the week, pick
+  // who goes to the game, play, then the aftermath.
+  { id: 'crew', label: 'Crew' },
   { id: 'aftermath', label: 'Aftermath' },
   { id: 'players', label: 'Players' },
 ]
@@ -37,6 +42,8 @@ export default function Campaign({
   const openGame = (campaign.games || []).find(
     (g) => g.arsenalId === arsenal.id && g.aftermath?.phase && !g.aftermath?.done
   )
+
+  const hiring = openEncounter(campaign, arsenal.id)
 
   const pendingCount = membership.isHost
     ? membership.members.filter((m) => m.status === 'pending').length
@@ -77,6 +84,7 @@ export default function Campaign({
                 to forget about, and it holds unpaid scrip and unflipped
                 injuries. It says so on the tab rather than only inside it. */}
             {t.id === 'aftermath' && openGame && <span className="views__dot" aria-label="unfinished" />}
+            {t.id === 'crew' && hiring && <span className="views__dot" aria-label="crew being hired" />}
             {/* Someone is waiting at the door. The host is the only one who can
                 open it, and it is the easiest thing here to not notice. */}
             {t.id === 'players' && pendingCount > 0 && (
@@ -98,6 +106,17 @@ export default function Campaign({
       )}
 
       {tab === 'hire' && actions.addDefector && <DefectorJoin onAdd={actions.addDefector} />}
+
+      {tab === 'crew' && (
+        <Encounter
+          campaign={campaign}
+          arsenal={arsenal}
+          leader={leader}
+          membership={membership}
+          actions={actions}
+          onToTable={() => setTab('aftermath')}
+        />
+      )}
 
       {tab === 'players' && (
         <Players

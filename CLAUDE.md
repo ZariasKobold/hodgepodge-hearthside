@@ -1,10 +1,10 @@
 # CLAUDE.md — Hodgepodge Hearthside project context
 
-<!-- HH v0.30.0 | Last updated: 2026-10-06 -->
+<!-- HH v0.31.0 | Last updated: 2026-10-06 -->
 
 ---
 
-## Current Version: 0.30.0
+## Current Version: 0.31.0
 
 ## Last Updated: 2026-10-06
 
@@ -119,28 +119,40 @@ audits had to invent the check by hand and one got it wrong.
 
 ## ⚠️ NEXT SESSION — pending
 
-### Next: the crew builder, Phase A — local only
+### The crew builder — Phase A shipped v0.31.0; Phase B is next
 
-Agreed with the owner on 2026-10-06, Session 74. Every finding in
-`docs/audits/audit-v0.28.1.md` is closed (v0.29.0 and v0.30.0), and the
-membership link it waited on is **confirmed on production**: a member's arsenal
-(Fish, Tukala) appears on the host's shared page, which needs `member_of` set.
+**Phase A is the Crew tab** (Campaign view, between Weekly hire and Aftermath):
+`src/lib/encounter.js` (pure, 25 tests) and `components/steps/Encounter.jsx`.
+One side, on this device, offline-capable. Pick the crew from the arsenal,
+leader always in at 0 and the totem optional at 0 (p. 19), equipment onto a
+holder, the opponent picked off the table's shared page or typed. It computes
+the cap, the cost, the rating and the starting pool. "Played it" hands the game
+log the crew's facts, and logging the game closes the encounter in the same
+write. Verified in a browser end to end.
 
-The design is `docs/data-model-v3.md` § "The crew builder". Two phases:
+Rules in it that should not be undone:
 
-- **Phase A, no server change.** Pick a crew from your own arsenal: leader and
-  totem at 0 (p. 19), equipment onto models (annihilated kit excluded:
-  `liveEquipment`), soulstones against the encounter cap, the leftover shown
-  (p. 19's pool, never scrip). The campaign rating is computed, not typed.
-  Resolving it creates the game, so the aftermath starts from facts. Works
-  offline (§6).
-- **Phase B, the shared session**, on top of A. **Not** inside the host's
-  campaign document, as the design sketch has it: the host could read a hidden
-  crew, and a member would be writing the host's row. Owner agreed: a small D1
-  table, **one row per crew, owned by the player hiring it**, and the server
-  returns the other side only once both are revealed. That is a `functions/`
-  change and a new persisted shape, so §5's third trigger fires: give the new
-  store attack tests in the `campaignStore.test.js` style before it ships.
+- **The rating counts the hired crew** (owner decision, Session 74): kit
+  taken, leader advancements, totem advancements only if the totem came, minus
+  injuries on the leader and the hired models. p. 19 works it out "after hiring
+  and revealing crews". **A game logged by hand**, with no crew, still uses the
+  whole-arsenal `ratingForGame`, because it does not know who was hired.
+- **Out of keyword is +1, Versatile exempt** (owner decision), and **ticked by
+  the player per model.** The arsenal stores no keywords for its models (§4
+  keeps the stored model to slug, name and cost), so the app cannot know.
+- **The pool takes the leftover to six**; the lower rating's bonus, up to
+  three, may go past six. Excess hiring stones are never scrip (p. 19).
+- **Encounters live on the player's own campaign document**, beside `games`,
+  as `campaign.encounters`. Optional on read: a campaign from before v0.31.0
+  has none. A played encounter is a record and cannot be discarded.
+
+**Phase B, the shared session**, builds on this. **Not** inside the host's
+campaign document, as the design sketch has it: the host could read a hidden
+crew, and a member would be writing the host's row. Owner agreed: a small D1
+table, **one row per crew, owned by the player hiring it**, and the server
+returns the other side only once both are revealed. That is a `functions/`
+change and a new persisted shape, so §5's third trigger fires: give the new
+store attack tests in the `campaignStore.test.js` style before it ships.
 
 ### Book text — what is still to do before any is loaded
 
@@ -242,7 +254,7 @@ aftermath. Shipped and live:
 | **The service worker** | v0.19.3. It cached Pages' SPA fallback under asset URLs, so a browser that loaded mid-deploy got a **permanent white screen** no reload could clear. Live since v0.14.0, observed in production on 2026-09-03. Two guards now — never write HTML under a non-navigation request, never serve it either — plus a cache-version bump that purges anyone already poisoned. |
 | **Membership** | v0.17.0. Owner-issued single-use invites, two gates (redeem → pending → host admits), per-campaign nicknames, opt-in Discord identity, and a read-only shared arsenal page. Writes were **not** widened — see below. |
 
-782 tests at v0.30.0.
+807 tests at v0.31.0.
 
 ### Unfinished business finds the player now — v0.23.0
 
@@ -1654,6 +1666,7 @@ hodgepodge-hearthside/
 │   │   ├── rules.js        live rules text, memory-only (§4)
 │   │   ├── remote.js       the D1 client + planSync, the merge that can lose data
 │   │   ├── reconcile.js    runReconcile — the sync loops, injectable and tested
+│   │   ├── encounter.js    the crew builder: hiring a crew out of the arsenal (p. 19)
 │   │   ├── rewind.js       going back through an aftermath, and what it costs
 │   │   ├── advancement.js  which action an advancement went on, and what it did
 │   │   └── recordImage.js  canvas PNG + the LEGAL constant
@@ -2012,7 +2025,7 @@ every session. `docs/VERSION_HISTORY.md` holds how it got this way.
 npm install
 cp .env.example .env
 npm run dev      # Vite only — NO Functions, NO database. useAuth degrades to signed out.
-npm run test     # 782 tests; `functions/` is in the run too, for the authz tests
+npm run test     # 807 tests; `functions/` is in the run too, for the authz tests
 npm run dialogue # hank.js and hank-dialogue.md agree (§1)
 npm run build    # production bundle — the dev proxy does NOT exist here
 npm run seed     # optional local register file; ask BiggerHat's maintainer first

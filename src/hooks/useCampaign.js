@@ -22,6 +22,7 @@ import { belongsTo, shouldRelease } from '../lib/shape/ownership.js'
 import { unwindArsenal } from '../lib/rewind.js'
 import { planRepair, repairPatch } from '../lib/repair.js'
 import { readBundle, refileForImport } from '../lib/shape/migrate.js'
+import { createEncounter } from '../lib/encounter.js'
 import { getArchetype } from '../data/archetypes.js'
 
 /**
@@ -424,9 +425,43 @@ export function useCampaign({ userId = null, userReady = true, onSaved, onArsena
 
   const logGame = useCallback((patch = {}) => {
     const game = createGame({ arsenalId: arsenal?.id ?? null, week, ...patch })
-    setCampaign((prev) => ({ games: [...prev.games, game] }))
+    setCampaign((prev) => ({
+      games: [...prev.games, game],
+      // A game hired through the crew builder closes its encounter in the
+      // same write, so the two can never disagree about whether it was played.
+      ...(game.encounterId ? {
+        encounters: (prev.encounters || []).map((e) => (e.id === game.encounterId
+          ? { ...e, status: 'played', gameId: game.id }
+          : e)),
+      } : {}),
+    }))
     return game
   }, [setCampaign, arsenal?.id, week])
+
+  /* ── the crew builder — one side, this player's own document ─── */
+
+  /** Begin hiring a crew. Returns it, so the screen can show it at once. */
+  const startEncounter = useCallback((patch = {}) => {
+    const encounter = createEncounter({ arsenalId: arsenal?.id ?? null, week, ...patch })
+    setCampaign((prev) => ({ encounters: [...(prev.encounters || []), encounter] }))
+    return encounter
+  }, [setCampaign, arsenal?.id, week])
+
+  /** Patch one encounter. Takes an object or a function of the encounter. */
+  const updateEncounter = useCallback((id, patch) => {
+    setCampaign((prev) => ({
+      encounters: (prev.encounters || []).map((e) => (e.id === id
+        ? { ...e, ...(typeof patch === 'function' ? patch(e) : patch) }
+        : e)),
+    }))
+  }, [setCampaign])
+
+  /** Throw away a crew that was never played. A played one is a record. */
+  const discardEncounter = useCallback((id) => {
+    setCampaign((prev) => ({
+      encounters: (prev.encounters || []).filter((e) => e.id !== id || e.status === 'played'),
+    }))
+  }, [setCampaign])
 
   const updateGame = useCallback((gameId, patch) => {
     setCampaign((prev) => ({
@@ -593,6 +628,7 @@ export function useCampaign({ userId = null, userReady = true, onSaved, onArsena
     owedStartingScrip: arsenal ? owedStartingScrip(arsenal) : 0,
     // games and the aftermath
     logGame, updateGame, removeGame,
+    startEncounter, updateEncounter, discardEncounter,
     buyEquipment, annihilateEquipment,
     addInjury, healInjury, dropInjury, annihilateModel,
     advanceLeader, advanceTotem, setTotem, addCrewCardAdvancement, placeAdvancementAt,
