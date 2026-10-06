@@ -10,7 +10,9 @@ import { useSharedCrew } from '../../hooks/useSharedCrew.js'
  * and `lib/encounter.js`; this file only owns the shared session's polling,
  * which runs only while this view is mounted, so nobody pays for it elsewhere.
  */
-export default function Crew({ campaign, arsenal, leader, membership, actions, signedIn, onToTable }) {
+export default function Crew({
+  campaign, arsenal, leader, archetype, membership, actions, signedIn, rules, roster, onToTable,
+}) {
   const shared = useSharedCrew({
     tableId: membership?.tableId,
     enabled: Boolean(signedIn),
@@ -21,6 +23,9 @@ export default function Crew({ campaign, arsenal, leader, membership, actions, s
       campaign={campaign}
       arsenal={arsenal}
       leader={leader}
+      archetype={archetype}
+      rules={rules}
+      roster={roster}
       membership={membership}
       actions={actions}
       shared={shared}

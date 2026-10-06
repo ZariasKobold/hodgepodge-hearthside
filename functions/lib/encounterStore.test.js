@@ -440,11 +440,12 @@ describe('the client summary and the server agree', () => {
     const leader = createLeader({ name: 'Cletus' })
     const arsenal = createArsenal({
       leader,
-      models: [createModel({ id: 'm1', name: 'Sir Vantes', cost: 7 })],
+      keywords: ['angler', ''],
+      models: [createModel({ id: 'm1', name: 'Sir Vantes', cost: 7, keywords: ['guard'] })],
       equipment: [createEquipment({ id: 'e1', name: 'Duplicator', equipmentId: 'duplicator' })],
     })
     const summary = crewSummary(createEncounter({
-      modelIds: ['m1'], taxed: ['m1'], encounterSize: 20, strategy: 'Turf War',
+      modelIds: ['m1'], encounterSize: 20, strategy: 'Turf War',
       equipment: [{ rowId: 'e1', holder: 'm1' }],
     }), arsenal, leader)
     expect(sanitiseCrew(summary)).toEqual(summary)

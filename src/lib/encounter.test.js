@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest'
 import {
   createEncounter, openEncounter, crewCost, encounterCap, encounterSizeOf,
   hiredEquipment, crewInjuryCount, crewRating, poolFor, encounterProblems,
-  encounterReady, toggleModel, toggleTotem, toggleTax, attachEquipment,
-  gameFieldsFrom, LEADER, TOTEM,
+  encounterReady, toggleModel, toggleTotem, attachEquipment,
+  gameFieldsFrom, paysKeywordTax, hireCostOf, LEADER, TOTEM,
 } from './encounter.js'
 import {
   createArsenal, createLeader, createModel, createEquipment, createInjury, createTotem,
@@ -25,9 +25,11 @@ function arsenalFixture(over = {}) {
       advancements: [{ id: 'adv_1', name: 'Skill Boost' }, { id: 'adv_2', name: 'Heavy Fall' }],
     }),
     models: [
-      createModel({ id: 'm_swash', name: 'Swashbuckler', cost: 4 }),
+      // Keywords as a register hire stores them (slugs), and none at all on the
+      // Sentinel, as a starting-arsenal model is stored.
+      createModel({ id: 'm_swash', name: 'Swashbuckler', cost: 4, keywords: ['angler'], characteristics: ['Minion (3)'] }),
       createModel({ id: 'm_sent', name: 'Shorebound Sentinel', cost: 5 }),
-      createModel({ id: 'm_siren', name: 'Silent Siren', cost: 7 }),
+      createModel({ id: 'm_siren', name: 'Silent Siren', cost: 7, keywords: ['banished', 'tidal'], characteristics: ['Enforcer'] }),
       createModel({ id: 'm_peon', name: 'Peon', cost: 3, peon: true }),
       createModel({ id: 'm_dead', name: 'Skulker Skin', cost: 6, annihilated: true }),
     ],
@@ -73,9 +75,35 @@ describe('cost and size (p. 19)', () => {
     expect(crewCost(enc({ modelIds: ['m_swash', 'm_siren'], totem: true }), a)).toBe(11)
   })
 
-  it('adds 1 for each model the player marks out of keyword', () => {
+  it('adds 1 for a model sharing neither keyword, worked out from its keywords', () => {
+    const outsider = createModel({ id: 'm_out', name: 'Lamplighter', cost: 6, keywords: ['tidal'] })
     const a = arsenalFixture()
-    expect(crewCost(enc({ modelIds: ['m_swash', 'm_siren'], taxed: ['m_siren'] }), a)).toBe(12)
+    a.models.push(outsider)
+    expect(crewCost(enc({ modelIds: ['m_swash', 'm_out'] }), a)).toBe(11)
+    expect(paysKeywordTax(outsider, a)).toBe(true)
+    // one keyword shared out of two is enough
+    expect(paysKeywordTax(a.models[2], a)).toBe(false)
+    expect(paysKeywordTax(a.models[0], a)).toBe(false)
+  })
+
+  it('never taxes a Versatile model, whatever its keywords', () => {
+    const a = arsenalFixture()
+    const versatile = createModel({ name: 'Rooster Rider', cost: 8, keywords: ['tidal'], characteristics: ['Versatile'] })
+    expect(paysKeywordTax(versatile, a)).toBe(false)
+    expect(hireCostOf(versatile, a)).toBe(8)
+  })
+
+  it('treats a model with no keywords on file as in keyword, never a guess', () => {
+    const a = arsenalFixture()
+    expect(paysKeywordTax(a.models[1], a)).toBe(false)
+    // and an arsenal with no keywords chosen taxes nobody
+    const outsider = createModel({ name: 'Lamplighter', cost: 6, keywords: ['tidal'] })
+    expect(paysKeywordTax(outsider, { ...a, keywords: ['', ''] })).toBe(false)
+  })
+
+  it('ignores a taxed list left on an older encounter', () => {
+    const a = arsenalFixture()
+    expect(crewCost(enc({ modelIds: ['m_swash'], taxed: ['m_swash'] }), a)).toBe(4)
   })
 
   it('never charges for an annihilated model, which is not in the arsenal', () => {
@@ -211,15 +239,13 @@ describe('what stops a crew being played', () => {
 })
 
 describe('editing', () => {
-  it('releasing a model takes its kit and its tax with it', () => {
+  it('releasing a model takes its kit with it', () => {
     const e = enc({
       modelIds: ['m_swash', 'm_sent'],
-      taxed: ['m_swash'],
       equipment: [{ rowId: 'eq_dup', holder: 'm_swash' }, { rowId: 'eq_face', holder: 'm_sent' }],
     })
     const next = { ...e, ...toggleModel(e, 'm_swash') }
     expect(next.modelIds).toEqual(['m_sent'])
-    expect(next.taxed).toEqual([])
     expect(next.equipment).toEqual([{ rowId: 'eq_face', holder: 'm_sent' }])
     expect({ ...next, ...toggleModel(next, 'm_swash') }.modelIds).toEqual(['m_sent', 'm_swash'])
   })
@@ -228,12 +254,6 @@ describe('editing', () => {
     const e = enc({ totem: true, equipment: [{ rowId: 'eq_face', holder: TOTEM }] })
     expect(toggleTotem(e)).toEqual({ totem: false, equipment: [] })
     expect(toggleTotem({ ...e, totem: false })).toEqual({ totem: true })
-  })
-
-  it('toggles the out-of-keyword surcharge per model', () => {
-    const e = enc({ taxed: [] })
-    expect(toggleTax(e, 'm_swash')).toEqual({ taxed: ['m_swash'] })
-    expect(toggleTax({ taxed: ['m_swash'] }, 'm_swash')).toEqual({ taxed: [] })
   })
 
   it('moves one piece of kit between holders, never duplicating it', () => {

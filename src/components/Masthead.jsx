@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useHank } from '../hooks/useHank.jsx'
 import AccountBadge from './AccountBadge.jsx'
 
@@ -22,6 +22,21 @@ const GROW_AT = 24
 export default function Masthead({ step, onJump, fileNumber, auth, admitted = true, view = 'library', onView, inCampaign = false, onLibrary }) {
   const { enabled, toggle } = useHank()
   const [compact, setCompact] = useState(false)
+  const bar = useRef(null)
+
+  // The bar's live height, for anything that sticks beneath it (the crew
+  // tracker's turn bar). Measured, not computed: it differs by width and by
+  // whether the bar is compact, and it animates between the two.
+  useEffect(() => {
+    const el = bar.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const root = document.documentElement
+    const ro = new ResizeObserver(() => {
+      root.style.setProperty('--masthead-h', `${Math.round(el.getBoundingClientRect().height)}px`)
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
   useEffect(() => {
     let frame = 0
@@ -47,7 +62,7 @@ export default function Masthead({ step, onJump, fileNumber, auth, admitted = tr
         spacer keeps the flow height constant, and both read the same
         --hero-h so they cannot drift apart. */}
     <div className="masthead__spacer" aria-hidden="true" />
-    <header className={`masthead${compact ? ' masthead--compact' : ''}`}>
+    <header ref={bar} className={`masthead${compact ? ' masthead--compact' : ''}`}>
       <div className="masthead__top">
         <div className="masthead__name">
           <h1 className="masthead__title">Hodgepodge Hearthside</h1>

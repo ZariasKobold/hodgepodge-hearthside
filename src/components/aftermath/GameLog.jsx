@@ -29,20 +29,23 @@ import { gameFieldsFrom, hiredModels, crewRating, hiredEquipment } from '../../l
 export default function GameLog({ arsenal, leader, week, weeksRemaining, isFirst, onLog, encounter = null }) {
   const models = encounter ? hiredModels(encounter, arsenal) : liveModels(arsenal)
   const fromCrew = encounter ? gameFieldsFrom(encounter, arsenal) : null
+  // What the table-side tracker counted, when the game was played with it.
+  // Offered, not imposed: every field below stays editable.
+  const played = encounter?.playFacts || null
   const [g, setG] = useState({
     opponent: fromCrew?.opponent || '',
     strategy: fromCrew?.strategy || '',
     encounterSize: fromCrew?.encounterSize ?? '',
-    schemesCompleted: 0,
-    vpSelf: 0,
-    vpOpponent: 0,
-    result: '',
+    schemesCompleted: played?.schemesCompleted ?? 0,
+    vpSelf: played?.vpSelf ?? 0,
+    vpOpponent: played?.vpOpponent ?? 0,
+    result: played?.result ?? '',
     withdrew: false,
     withdrewOnTurn: '',
     equipmentHiredCount: 0,
     campaignRatingOpponent: fromCrew ? fromCrew.campaignRatingOpponent : 0,
-    killedModelIds: [],
-    leaderWasKilled: false,
+    killedModelIds: played?.killedModelIds ?? [],
+    leaderWasKilled: played?.leaderWasKilled ?? false,
     killedNonPeon: false,
     interactedNearEnemyDeployment: false,
   })

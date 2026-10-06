@@ -23,6 +23,8 @@ import { useState } from 'react'
 import { uid } from '../lib/shape/arsenal.js'
 import { openEncounter } from '../lib/encounter.js'
 import { closeSession } from '../lib/sharedCrew.js'
+import { remove } from '../lib/storage.js'
+import { playKey } from '../hooks/usePlay.js'
 
 /**
  * The aftermath — six phases, one game, one sitting or several.
@@ -78,6 +80,8 @@ export default function Aftermath({
             // The game is played: leave the shared session so it stops being
             // offered. Best effort, never in the way of recording the game.
             if (encounter?.sharedId) closeSession(encounter.sharedId).catch(() => {})
+            // The tracker was scratch paper for this game; the game is recorded.
+            if (encounter) remove(playKey(encounter.id))
             actions.updateGame(game.id, {
               aftermath: createAftermath({ phase: firstPhase({ ...game, ...fields }) }),
             })

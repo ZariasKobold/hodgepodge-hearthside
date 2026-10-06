@@ -417,6 +417,9 @@ export default function App() {
             campaign={campaign}
             arsenal={arsenal}
             leader={leader}
+            archetype={archetype}
+            rules={rules}
+            roster={roster}
             membership={membership}
             actions={campaignActions}
             signedIn={Boolean(auth.user)}

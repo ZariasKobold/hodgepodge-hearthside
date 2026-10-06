@@ -10,10 +10,11 @@ import {
 const leader = createLeader({ name: 'Cletus', advancements: [{ id: 'a1' }, { id: 'a2' }] })
 const arsenal = createArsenal({
   id: 'ars_me',
+  keywords: ['angler', 'banished'],
   leader,
   models: [
     createModel({ id: 'm1', name: 'Shorebound Sentinel', cost: 5 }),
-    createModel({ id: 'm2', name: 'Silent Siren', cost: 7 }),
+    createModel({ id: 'm2', name: 'Silent Siren', cost: 7, keywords: ['tidal'] }),
   ],
   equipment: [
     createEquipment({ id: 'e1', equipmentId: 'duplicator', name: 'Duplicator' }),
@@ -33,7 +34,7 @@ const session = (over = {}) => ({
 describe('crewSummary', () => {
   it('names everything, by name, with no ids', () => {
     const e = createEncounter({
-      modelIds: ['m1', 'm2'], taxed: ['m2'], totem: true, strategy: 'Plant Explosives',
+      modelIds: ['m1', 'm2'], totem: true, strategy: 'Plant Explosives',
       opponent: { arsenalTotal: 30 },
       equipment: [{ rowId: 'e1', holder: 'm1' }, { rowId: 'e2', holder: LEADER }],
     })

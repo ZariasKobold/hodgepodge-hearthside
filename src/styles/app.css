@@ -1640,3 +1640,89 @@ body::after {
 .totem-card__body { margin-top: 8px; }
 .totem-card__group { margin-top: 8px; }
 .totem-card__list { margin: 2px 0 0; padding-left: 18px; color: var(--text); font-size: 14px; }
+
+/* The crew at the table (v0.33.0): the in-game tracker. Big targets, because
+   it is used one-handed at a table with cards in the other hand. */
+.play__bar {
+  position: sticky; top: var(--masthead-h, 0px); z-index: 5;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px;
+  background: var(--ground); border: 1px solid var(--line);
+  padding: 10px 14px; margin: 0 0 18px;
+}
+.play__group { display: flex; align-items: center; gap: 8px; }
+.play__k {
+  font-family: var(--data); font-size: 11px; letter-spacing: 1.5px;
+  text-transform: uppercase; color: var(--mute);
+}
+.play__v { font-family: var(--data); font-size: 20px; font-weight: normal; color: var(--brass); min-width: 1.4em; text-align: center; }
+.play__of { font-family: var(--data); font-size: 12px; color: var(--faint); }
+.play__step {
+  min-width: 36px; height: 36px; padding: 0 8px;
+  border: 1px solid var(--line); border-radius: var(--r);
+  background: var(--panel); color: var(--text);
+  font-family: var(--data); font-size: 18px; line-height: 1; cursor: pointer;
+}
+.play__step:hover:not(:disabled) { border-color: var(--brass); }
+.play__step:disabled { opacity: .35; cursor: not-allowed; }
+.play__step:focus-visible, .play__x:focus-visible { outline: 2px solid var(--ember); outline-offset: 2px; }
+.play__step--big { min-width: 48px; height: 48px; font-size: 24px; }
+
+.play__units {
+  display: grid; gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  margin-bottom: 22px;
+}
+.play__unit {
+  border: 1px solid var(--line); border-radius: var(--r);
+  background: var(--panel); padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 10px; min-width: 0;
+}
+.play__unit--done { border-color: var(--line-soft); background: var(--ground); }
+.play__unit--killed { opacity: .5; border-style: dashed; }
+.play__head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.play__name { font-family: var(--display); font-size: 20px; font-weight: 700; margin: 0; line-height: 1.15; }
+.play__unit--killed .play__name { text-decoration: line-through; }
+.play__tag { font-family: var(--data); font-size: 11px; color: var(--faint); }
+
+.play__health { display: flex; align-items: center; gap: 12px; }
+.play__hp { flex: 1; text-align: center; font-family: var(--data); }
+.play__hp strong { font-size: 30px; font-weight: normal; color: var(--text); }
+.play__hp span { font-size: 14px; color: var(--faint); }
+.play__meter { height: 6px; background: var(--night); border-radius: 3px; margin-top: 4px; overflow: hidden; }
+.play__fill { height: 100%; background: var(--ember); transition: width .15s ease; }
+.play__fill--low { background: var(--coal-lit); }
+.play__max { width: 96px; text-align: center; }
+
+.play__conditions { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.play__condition { display: flex; align-items: center; gap: 6px; font-family: var(--data); font-size: 13px; }
+.play__condition span { flex: 1; color: var(--text); }
+.play__condition strong { min-width: 1.4em; text-align: center; color: var(--brass); font-weight: normal; }
+.play__condition .play__step { min-width: 30px; height: 30px; font-size: 15px; }
+.play__x {
+  border: 0; background: none; color: var(--faint); font-size: 18px;
+  cursor: pointer; min-width: 30px; height: 30px;
+}
+.play__x:hover { color: var(--coal-lit); }
+
+.play__add { display: flex; gap: 8px; flex-wrap: wrap; }
+.play__add .input:first-child { flex: 1 1 140px; min-width: 0; }
+.play__notes { font-size: 13px; color: var(--mute); margin: 0; }
+.play__foot { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.play__card { margin-top: 4px; }
+.play__card .crewcard { margin: 0; }
+
+.play__score { display: flex; flex-wrap: wrap; gap: 12px 24px; }
+.play__short { display: none; }
+
+@media (max-width: 520px) {
+  /* Two rows at most: it sits over the cards for the whole game. */
+  .play__bar { gap: 6px 12px; padding: 6px 8px; margin-left: -8px; margin-right: -8px; }
+  .play__group { gap: 5px; }
+  .play__k { font-size: 10px; letter-spacing: 1px; }
+  .play__v { font-size: 17px; }
+  .play__bar .play__step { min-width: 30px; height: 30px; font-size: 16px; }
+  .play__bar .btn { padding: 6px 10px; }
+  .play__units { grid-template-columns: 1fr; }
+  .play__long { display: none; }
+  .play__short { display: inline; }
+}

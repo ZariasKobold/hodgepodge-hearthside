@@ -1,10 +1,10 @@
 # CLAUDE.md — Hodgepodge Hearthside project context
 
-<!-- HH v0.32.1 | Last updated: 2026-10-06 -->
+<!-- HH v0.33.0 | Last updated: 2026-10-06 -->
 
 ---
 
-## Current Version: 0.32.1
+## Current Version: 0.33.0
 
 ## Last Updated: 2026-10-06
 
@@ -119,7 +119,38 @@ audits had to invent the check by hand and one got it wrong.
 
 ## ⚠️ NEXT SESSION — pending
 
-### The crew builder — both phases built (v0.31.0, v0.32.0)
+### The crew builder — both phases built (v0.31.0, v0.32.0), played with (v0.33.0)
+
+> **Audit note.** v0.33.0 writes two new persisted shapes:
+> `encounter.playFacts` on the campaign document, and `play:<encounterId>` in
+> localStorage. That is §5's third trigger. The audit due at entry 81 should
+> cover both; neither leaves the device except `playFacts`, which is numbers
+> and model ids only.
+
+**The crew at the table (v0.33.0)**, owner request: useful *during* the game,
+the way Wyrd's crew builder app is. After hiring, "Start the game" swaps the
+hire for `steps/PlayTracker.jsx` over `src/lib/play.js` (pure). It tracks the
+turn, the soulstone pool (starting at the computed pool), the score, and for
+every model its health, conditions and tokens, whether it has activated, and a
+Killed toggle. Each card opens its rules text (read live, never stored). A model
+that arrives partway (a summon) can be added by name. "Game over" writes
+`playFacts` (score, schemes scored, result, who died) to the encounter once,
+and the game log opens already filled in.
+
+Rules that should not be undone:
+
+- **The tracker lives on this device** (`usePlay`, `play:<encounterId>`), never
+  on the campaign document. A game is dozens of taps a turn and every campaign
+  write is a push to the account. Only `playFacts` is synced. The key is
+  removed when the game is logged or the crew thrown away.
+- **It counts and never decides.** Zero health does not kill a model; the
+  player does. A new turn clears activations and nothing else, because what
+  ends at end of turn is a rules question (§4). Condition names are names.
+- **Summons never reach the arsenal or the injury phase**, and neither do the
+  totem or peons (`playFacts`).
+- **The turn bar sticks under the masthead** through `--masthead-h`, which
+  `Masthead` measures with a ResizeObserver. The bar's height changes with
+  width and with compaction, so it cannot be a constant.
 
 > **Migration 0010 is applied on remote** — 2026-10-06, by owner go-ahead,
 > with `d1 execute --file`. Verified after: both tables present and empty,
@@ -158,8 +189,13 @@ Rules that should not be undone:
   taken, leader advancements, totem advancements only if the totem came, minus
   injuries on the leader and the hired models. A game logged by hand still uses
   the whole-arsenal `ratingForGame`, because it does not know who was hired.
-- **Out of keyword is +1, Versatile exempt** (owner decision), **ticked by the
-  player per model**: the arsenal stores no keywords for its models (§4).
+- **Out of keyword is +1, Versatile exempt** (owner decision), **worked out,
+  never ticked** (owner decision, v0.33.0): `paysKeywordTax` reads the keyword
+  slugs and characteristics a register hire already stores. A model with no
+  keywords on file (the starting arsenal, which only offered in-keyword and
+  Versatile models; a defector; a typed hire) counts as in keyword. The old
+  per-model tick and `encounter.taxed` are gone; an old `taxed` list is
+  ignored.
 - **The pool takes the leftover to six**; the lower rating's bonus, up to
   three, may go past six. Excess hiring stones are never scrip (p. 19).
 - **Hidden is enforced in SQL.** `listSharedEncounters` selects the other
@@ -279,7 +315,7 @@ aftermath. Shipped and live:
 | **The service worker** | v0.19.3. It cached Pages' SPA fallback under asset URLs, so a browser that loaded mid-deploy got a **permanent white screen** no reload could clear. Live since v0.14.0, observed in production on 2026-09-03. Two guards now — never write HTML under a non-navigation request, never serve it either — plus a cache-version bump that purges anyone already poisoned. |
 | **Membership** | v0.17.0. Owner-issued single-use invites, two gates (redeem → pending → host admits), per-campaign nicknames, opt-in Discord identity, and a read-only shared arsenal page. Writes were **not** widened — see below. |
 
-852 tests at v0.32.0.
+873 tests at v0.33.0.
 
 ### Unfinished business finds the player now — v0.23.0
 
@@ -1695,6 +1731,7 @@ hodgepodge-hearthside/
 │   │   ├── reconcile.js    runReconcile — the sync loops, injectable and tested
 │   │   ├── encounter.js    the crew builder: hiring a crew out of the arsenal (p. 19)
 │   │   ├── sharedCrew.js   hiring together: the revealed summary + /api/encounters
+│   │   ├── play.js         the crew at the table: health, conditions, turn, score
 │   │   ├── rewind.js       going back through an aftermath, and what it costs
 │   │   ├── advancement.js  which action an advancement went on, and what it did
 │   │   └── recordImage.js  canvas PNG + the LEGAL constant
@@ -2053,7 +2090,7 @@ every session. `docs/VERSION_HISTORY.md` holds how it got this way.
 npm install
 cp .env.example .env
 npm run dev      # Vite only — NO Functions, NO database. useAuth degrades to signed out.
-npm run test     # 852 tests; `functions/` is in the run too, for the authz tests
+npm run test     # 873 tests; `functions/` is in the run too, for the authz tests
 npm run dialogue # hank.js and hank-dialogue.md agree (§1)
 npm run build    # production bundle — the dev proxy does NOT exist here
 npm run seed     # optional local register file; ask BiggerHat's maintainer first

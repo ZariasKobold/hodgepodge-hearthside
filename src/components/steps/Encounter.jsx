@@ -4,14 +4,16 @@ import {
   liveModels, liveEquipment, injuryCountForModel, injuriesFor, totalFor,
 } from '../../lib/shape/arsenal.js'
 import {
-  openEncounter, hiredModels, hireCostOf, crewCost, encounterCap, encounterSizeOf,
-  hiredEquipment, crewInjuryCount, crewRating, poolFor, encounterProblems,
-  encounterReady, toggleModel, toggleTotem, toggleTax, attachEquipment,
+  openEncounter, hiredModels, hireCostOf, paysKeywordTax, crewCost, encounterCap,
+  encounterSizeOf, hiredEquipment, crewInjuryCount, crewRating, poolFor,
+  encounterProblems, encounterReady, toggleModel, toggleTotem, attachEquipment,
   LEADER, TOTEM,
 } from '../../lib/encounter.js'
 import { arsenalTotal } from '../../lib/campaign.js'
 import { invitations, sessionFor, ratingPatch } from '../../lib/sharedCrew.js'
 import SharedCrewPanel from '../SharedCrewPanel.jsx'
+import PlayTracker from './PlayTracker.jsx'
+import { usePlay } from '../../hooks/usePlay.js'
 
 /**
  * Hire a crew for this week's game, out of the arsenal (p. 19).
@@ -32,10 +34,16 @@ import SharedCrewPanel from '../SharedCrewPanel.jsx'
  *
  * The arithmetic is all in `lib/encounter.js`. This file only renders it.
  */
-export default function Encounter({ campaign, arsenal, leader, membership, actions, shared, onToTable }) {
+export default function Encounter({
+  campaign, arsenal, leader, archetype, membership, actions, shared, rules, roster, onToTable,
+}) {
   const encounter = openEncounter(campaign, arsenal.id)
   const [discarding, setDiscarding] = useState(false)
   const session = sessionFor(encounter, shared?.sessions)
+  // The table-side tracker, on this device (`usePlay`). Shown instead of the
+  // hire once a game has been started, until the player goes back to the hire.
+  const tracker = usePlay(encounter?.id)
+  const [atHire, setAtHire] = useState(false)
 
   // Once both have revealed, their rating is a fact: fill it in, unless the
   // player already typed one. Before the early return, as hooks must be.
@@ -92,6 +100,40 @@ export default function Encounter({ campaign, arsenal, leader, membership, actio
   }
 
   const set = (patch) => actions.updateEncounter(encounter.id, patch)
+
+  if (tracker.play && !atHire) {
+    return (
+      <>
+        <PlayTracker
+          encounter={encounter}
+          arsenal={arsenal}
+          leader={leader}
+          archetype={archetype}
+          rules={rules}
+          roster={roster}
+          tracker={tracker}
+          onBackToHire={() => setAtHire(true)}
+          onFinish={(facts) => {
+            // Written to the encounter once, so the game log can read it. The
+            // tracker itself stays on this device until the game is logged.
+            set({ playFacts: facts })
+            onToTable()
+          }}
+        />
+        {shared && encounter.sharedId && (
+          <SharedCrewPanel
+            encounter={encounter}
+            arsenal={arsenal}
+            leader={leader}
+            shared={shared}
+            ready={encounterReady(encounter, arsenal)}
+            onLinked={(sharedId) => set({ sharedId })}
+            onRevealed={() => set({ revealedAt: Date.now() })}
+          />
+        )}
+      </>
+    )
+  }
   // A revealed crew is fixed on the server, so it is fixed here too.
   const locked = Boolean(encounter.revealedAt || session?.mine?.revealed)
   const setOpponent = (patch) => set((e) => ({ opponent: { ...e.opponent, ...patch } }))
@@ -258,21 +300,12 @@ export default function Encounter({ campaign, arsenal, leader, membership, actio
                   <input type="checkbox" checked={on} onChange={() => set(toggleModel(encounter, m.id))} />
                   {m.name}
                   <span className="hire__adj">
-                    {' '}({on ? hireCostOf(m, encounter) : m.cost}ss
+                    {' '}({hireCostOf(m, arsenal)}ss
+                    {paysKeywordTax(m, arsenal) && ' incl. +1 out of keyword'}
                     {hurt > 0 && ` · ${hurt} injured`}
                     {m.peon && ' · peon'})
                   </span>
                 </label>
-                {on && (
-                  <label className="hire__check crew__tax">
-                    <input
-                      type="checkbox"
-                      checked={(encounter.taxed || []).includes(m.id)}
-                      onChange={() => set(toggleTax(encounter, m.id))}
-                    />
-                    +1 out of keyword
-                  </label>
-                )}
               </div>
             )
           })}
@@ -280,8 +313,9 @@ export default function Encounter({ campaign, arsenal, leader, membership, actio
         </div>
         <p className="gap-note">
           <strong>Out of keyword costs 1 more</strong>, as in any hire, unless the
-          model is Versatile. The arsenal keeps only each model&rsquo;s name and
-          cost, so tick the box for the models that pay it.
+          model is Versatile. It is worked out from each model&rsquo;s keywords;
+          a model with none on file (one typed in by hand) is counted as in
+          keyword.
         </p>
       </Field>
 
@@ -368,8 +402,23 @@ export default function Encounter({ campaign, arsenal, leader, membership, actio
       )}
 
       <div className="export">
-        <Button onClick={onToTable} disabled={!ready}>
-          Played it — record the game
+        {tracker.play ? (
+          <Button onClick={() => { setAtHire(false); window.scrollTo(0, 0) }}>Back to the game</Button>
+        ) : (
+          <Button
+            onClick={() => {
+              tracker.start(pool?.total ?? pool?.fromHire ?? 0)
+              setAtHire(false)
+              // The button sits at the foot of a long hire; the game starts at the top.
+              window.scrollTo(0, 0)
+            }}
+            disabled={!ready}
+          >
+            Start the game
+          </Button>
+        )}
+        <Button ghost onClick={onToTable} disabled={!ready}>
+          {tracker.play ? 'Record the game' : 'Played it — record the game'}
         </Button>
         {discarding ? (
           <>
@@ -379,6 +428,7 @@ export default function Encounter({ campaign, arsenal, leader, membership, actio
                 // Leave the shared game too, so the other side is told rather
                 // than left waiting. Best effort: the local crew goes either way.
                 if (encounter.sharedId && shared) shared.close(encounter.sharedId).catch(() => {})
+                tracker.clear()
                 actions.discardEncounter(encounter.id)
                 setDiscarding(false)
               }}

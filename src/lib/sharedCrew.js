@@ -13,7 +13,7 @@
  */
 
 import {
-  hiredModels, hireCostOf, hiredEquipment, crewCost, crewRating, encounterSizeOf,
+  hiredModels, hireCostOf, paysKeywordTax, hiredEquipment, crewCost, crewRating, encounterSizeOf,
   LEADER, TOTEM,
 } from './encounter.js'
 
@@ -35,8 +35,8 @@ export function crewSummary(encounter, arsenal, leader) {
     totem: totemName,
     models: [...byId.values()].map((m) => ({
       name: m.name,
-      cost: hireCostOf(m, encounter),
-      taxed: (encounter.taxed || []).includes(m.id),
+      cost: hireCostOf(m, arsenal),
+      taxed: paysKeywordTax(m, arsenal),
     })),
     equipment: hiredEquipment(encounter, arsenal).map((x) => ({
       name: x.row.name,

@@ -13,9 +13,12 @@
  * - **Leader and totem cost 0.** The leader is always in the crew. The totem is
  *   optional, like any other model.
  * - **Out-of-keyword models cost 1 more, Versatile excepted**, as in any hire.
- *   Owner decision, Session 74. The arsenal stores no keywords for its models
- *   (§4 keeps the stored model to slug, name and cost), so which models pay it
- *   is the player's answer, per model, and defaults to none.
+ *   Owner decision, Session 74. Worked out, never ticked (owner decision,
+ *   Session 77): a model hired off the register carries its keyword slugs and
+ *   characteristics, which §4 keeps because the legality rules need them. A
+ *   model with no keywords on file (the starting arsenal, which only offered
+ *   in-keyword and Versatile models, a defector, a hand-typed hire) is treated
+ *   as in keyword, as `isOutOfKeyword` already does.
  * - **Equipment attaches to any model, free** — one row of the arsenal to one
  *   model. Peons may never carry it (p. 37). Annihilated kit is not hirable.
  * - **The encounter size** is agreed, at most the smaller arsenal plus six.
@@ -31,8 +34,9 @@
  */
 
 import {
-  uid, liveModels, liveEquipment, injuryCountForModel, injuriesFor, totalFor,
+  uid, liveModels, liveEquipment, injuryCountForModel, injuriesFor, totalFor, isOutOfKeyword,
 } from './shape/arsenal.js'
+import { isVersatile } from './indexing.js'
 import { campaignRating, soulstoneBonus, maxEncounterSize } from './campaign.js'
 
 /** The two holders that are not rows of `arsenal.models`. */
@@ -73,8 +77,6 @@ export function createEncounter(patch = {}) {
     strategy: '',
     modelIds: [],
     totem: false,
-    /** Model ids that pay the out-of-keyword surcharge. */
-    taxed: [],
     /** `{ rowId, holder }` — an equipment row of the arsenal, and who carries it. */
     equipment: [],
     gameId: null,
@@ -95,15 +97,22 @@ export function hiredModels(encounter, arsenal) {
   return liveModels(arsenal).filter((m) => ids.has(m.id))
 }
 
+/**
+ * Does this model pay the out-of-keyword surcharge in this arsenal's crew?
+ * Neither of the arsenal's two keywords, and not Versatile.
+ */
+export function paysKeywordTax(model, arsenal) {
+  return !isVersatile(model) && isOutOfKeyword(model, arsenal?.keywords || [])
+}
+
 /** What one model costs at this hire. */
-export function hireCostOf(model, encounter) {
-  const taxed = (encounter?.taxed || []).includes(model.id)
-  return (model.cost || 0) + (taxed ? KEYWORD_TAX : 0)
+export function hireCostOf(model, arsenal) {
+  return (model.cost || 0) + (paysKeywordTax(model, arsenal) ? KEYWORD_TAX : 0)
 }
 
 /** Soulstones spent on the crew. Leader and totem are free. */
 export function crewCost(encounter, arsenal) {
-  return hiredModels(encounter, arsenal).reduce((sum, m) => sum + hireCostOf(m, encounter), 0)
+  return hiredModels(encounter, arsenal).reduce((sum, m) => sum + hireCostOf(m, arsenal), 0)
 }
 
 /** The largest encounter these two arsenals allow, or null without their total. */
@@ -229,13 +238,12 @@ export function encounterReady(encounter, arsenal) {
 
 /* ── editing, as patches ────────────────────────────────────────── */
 
-/** Hire or release one model. Releasing it takes its equipment off and its tax. */
+/** Hire or release one model. Releasing it takes its equipment off. */
 export function toggleModel(encounter, modelId) {
   const hired = encounter.modelIds.includes(modelId)
   if (!hired) return { modelIds: [...encounter.modelIds, modelId] }
   return {
     modelIds: encounter.modelIds.filter((id) => id !== modelId),
-    taxed: (encounter.taxed || []).filter((id) => id !== modelId),
     equipment: (encounter.equipment || []).filter((x) => x.holder !== modelId),
   }
 }
@@ -244,11 +252,6 @@ export function toggleTotem(encounter) {
   return encounter.totem
     ? { totem: false, equipment: (encounter.equipment || []).filter((x) => x.holder !== TOTEM) }
     : { totem: true }
-}
-
-export function toggleTax(encounter, modelId) {
-  const taxed = encounter.taxed || []
-  return { taxed: taxed.includes(modelId) ? taxed.filter((id) => id !== modelId) : [...taxed, modelId] }
 }
 
 /** Put one equipment row on a holder, or take it off with `holder = null`. */

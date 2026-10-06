@@ -9,7 +9,7 @@ import { EntryBody } from './RulesText.jsx'
  * text arrives live and is never stored (§4), so the button is also the honest
  * signal that this needs the register to be up.
  */
-function StatCard({ card, hired }) {
+export function StatCard({ card, hired }) {
   const line = [
     card.keywords.join(' / '),
     card.stationLabel,

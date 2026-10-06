@@ -5809,3 +5809,73 @@ below 360px; measured in the browser, nothing clips at 375 or 320.
 Files added to this entry: `src/components/steps/Crew.jsx` (new),
 `src/components/Masthead.jsx`, `src/App.jsx`,
 `src/components/steps/Campaign.jsx`, `src/styles/app.css`.
+
+---
+
+### Session 77 — v0.33.0
+Date: 2026-10-06
+
+**feat: the crew at the table, and the keyword surcharge worked out**
+
+Two owner requests.
+
+**"More like malifauxcrewbuilder.com, so it is useful during gameplay."** The
+site would not finish loading in the session's browser, so its feature list
+came from Wyrd's own description: VP, health, condition and token tracking,
+quick-reference cards, and models added partway through. All of that is built,
+for one side, on the player's own device:
+
+- `src/lib/play.js` (pure, 19 tests): units keyed `leader`, `totem`, a model
+  id or a summon's `smn_` id; damage clamped to the card, a typed maximum where
+  no card can be read, stacking conditions, activations cleared by a new turn,
+  pool and VP floored at zero, and `playFacts` for the game log.
+- `src/hooks/usePlay.js`: localStorage only, under `play:<encounterId>`. Not
+  the campaign document, because every campaign write is a push and a game is
+  dozens of taps a turn.
+- `components/steps/PlayTracker.jsx`: a sticky turn bar (turn of 5, pool, VP,
+  activations), a card per model with health −/+ and a meter, conditions,
+  Ready/Activated, Killed, and its rules card. The leader's card is
+  `LeaderRecord`, the totem's `TotemCard`, a model's `StatCard`. Cards are read
+  once at the start of the game, a handful of requests.
+- "Start the game" on the hire; "Back to the hire" and "Back to the game"
+  move between them; "Game over" writes `encounter.playFacts` once, and
+  `GameLog` prefills VP, result, schemes scored, killed models and the leader
+  from it. Every field stays editable.
+
+**"No reason for the +1 out of keyword box on each model. We have their
+keywords."** True for every model hired off the register: `onHire` stores the
+whole indexed model, keyword slugs and characteristics included (§4 keeps
+those because the legality rules need them). `paysKeywordTax(model, arsenal)`
+is `!isVersatile && isOutOfKeyword`, and the tick, `toggleTax` and
+`encounter.taxed` are gone. Starting-arsenal models store no keywords, and
+count as in keyword, which they are: the creation picker offers only keyword
+and Versatile models. `hireCostOf` now takes the arsenal, not the encounter.
+
+Proven in a browser with real register models (Bayou, keywords Angler and Big
+Hat): Hog Whisperer (Sooey) priced at 8 with "+1 out of keyword", the Versatile
+Bayou Gator and a keyword-less Buckaroo at their printed cost. In play, health
+came off the live cards (Buckaroo 7, Hermits 6; the leader's 14 off the
+archetype), damage, Burning, activations, a typed Bayou Gremlin, scoring and a
+kill all landed, and "Game over" opened a game log reading 2–1, Won, one scheme,
+Buckaroo killed.
+
+Found in the browser and fixed:
+- The sticky bar slid under the fixed masthead. `Masthead` now publishes its
+  measured height as `--masthead-h`, and the bar sticks beneath it.
+- "Start the game" left the page scrolled to the foot of the hire.
+- At 375px the bar took three rows over the cards; it is two now (80px), with
+  "Acted" for "Activated".
+
+21 new tests, 873 total.
+
+Files: `src/lib/play.js` (new) + test (new), `src/hooks/usePlay.js` (new),
+`src/components/steps/PlayTracker.jsx` (new), `src/lib/encounter.js` + test,
+`src/lib/sharedCrew.js` + test, `functions/lib/encounterStore.test.js`,
+`src/components/steps/Encounter.jsx`, `src/components/steps/Crew.jsx`,
+`src/components/aftermath/GameLog.jsx`, `src/components/Aftermath.jsx`,
+`src/components/CrewCards.jsx`, `src/components/Masthead.jsx`, `src/App.jsx`,
+`src/styles/app.css`, `CLAUDE.md`, `package.json`
+UNVERIFIED: not yet used at a real table; the opponent's side is not shared
+live (each player tracks their own crew).
+NEXT: owner feedback from a real game. Live two-sided tracking would build on
+the Phase B session and needs a write path under `functions/`.
