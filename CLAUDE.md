@@ -1,12 +1,12 @@
 # CLAUDE.md — Hodgepodge Hearthside project context
 
-<!-- HH v0.29.3 | Last updated: 2026-10-01 -->
+<!-- HH v0.30.0 | Last updated: 2026-10-06 -->
 
 ---
 
-## Current Version: 0.29.3
+## Current Version: 0.30.0
 
-## Last Updated: 2026-10-01
+## Last Updated: 2026-10-06
 
 **Live at hodgepodgehearthside.com** (Cloudflare Pages, auto-deploys on push to
 `main`). Repo: `ZariasKobold/hodgepodge-hearthside`.
@@ -110,36 +110,47 @@ Ritual: read this file and `docs/VERSION_HISTORY.md` in full, then every file
 in `src/`, then catalogue findings by priority **before** writing fix code.
 Save to `docs/audits/audit-vX.Y.Z.md`.
 
-**Dialogue-specific audit:** confirm `src/data/hank.js` and
-`docs/hank-dialogue.md` still agree. They drift silently and nothing catches it.
+**Dialogue-specific audit:** `npm run dialogue`. It confirms `src/data/hank.js`
+and `docs/hank-dialogue.md` hold the same lines and that the counts line is
+right, and exits 1 if not. Committed at v0.30.0 (audit v0.28.1 L2), after two
+audits had to invent the check by hand and one got it wrong.
 
 ---
 
 ## ⚠️ NEXT SESSION — pending
 
-### 🔎 Read `docs/audits/audit-v0.28.1.md` before any feature work
+### Next: the crew builder, Phase A — local only
 
-Session 71, findings only, nothing fixed. In priority order:
+Agreed with the owner on 2026-10-06, Session 74. Every finding in
+`docs/audits/audit-v0.28.1.md` is closed (v0.29.0 and v0.30.0), and the
+membership link it waited on is **confirmed on production**: a member's arsenal
+(Fish, Tukala) appears on the host's shared page, which needs `member_of` set.
 
-- ~~**H1**~~ — **fixed v0.29.0.** `settleMirrored` clears the flag only if the
-  disk still holds what was sent. The same session fixed arsenal "keep mine"
-  pushing to the campaign endpoint.
-- **H2** — the book-text entitlement reads `arsenals.doc`, which the client
-  writes, so "earned" is self-asserted. **Blocks loading any book text.**
-  This is an owner decision, not a code fix.
-- **M1** — the barter counter's "Bought" check has been dead since v0.22.0, so a
-  double-click charges twice.
-- **M2** — forfeited phases never show as forfeited in the history.
-- **M3** — self-annihilating equipment can never leave an arsenal. Read the
-  trap before fixing: the drift repair would re-buy it. *The Traitor half was
-  wrong in the audit:* the leaving crew's annihilation already removes the model,
-  and v0.29.2 built the receiving half.
-- **M4** — the session counter (fixed in §5 above). **M5** — the retracted
-  Gatling Gun story is still told as fact in code, and in player-facing copy.
-  **M6** — `corrupt` (carried). **M7** — this file's status block is stale;
-  see below. Plus nine lows.
+The design is `docs/data-model-v3.md` § "The crew builder". Two phases:
 
-The crew builder was the next feature proposed, and is deliberately after H1.
+- **Phase A, no server change.** Pick a crew from your own arsenal: leader and
+  totem at 0 (p. 19), equipment onto models (annihilated kit excluded:
+  `liveEquipment`), soulstones against the encounter cap, the leftover shown
+  (p. 19's pool, never scrip). The campaign rating is computed, not typed.
+  Resolving it creates the game, so the aftermath starts from facts. Works
+  offline (§6).
+- **Phase B, the shared session**, on top of A. **Not** inside the host's
+  campaign document, as the design sketch has it: the host could read a hidden
+  crew, and a member would be writing the host's row. Owner agreed: a small D1
+  table, **one row per crew, owned by the player hiring it**, and the server
+  returns the other side only once both are revealed. That is a `functions/`
+  change and a new persisted shape, so §5's third trigger fires: give the new
+  store attack tests in the `campaignStore.test.js` style before it ships.
+
+### Book text — what is still to do before any is loaded
+
+H2 was settled by owner decision at v0.30.0: friction plus an honest claim (see
+§4's earned-text exception). Migrations **0007, 0008 and 0009** are written and
+**none is applied to remote**. Apply all three together, with
+`d1 execute --file`, when text is first loaded. After that, add explicit
+`DELETE`s for `book_access`, `book_challenge_attempts` and `book_served` to
+`deleteAccount`. Today they rely on `ON DELETE CASCADE`, and naming tables that
+do not exist yet would roll back the whole erasure batch.
 
 ### A trigger can only be where the book allows it — v0.29.0
 
@@ -195,7 +206,11 @@ Rules that should not be undone:
 - **The 2-scrip crowding fee is still shown and not charged.** It is a rules
   change and the owner's call. It now counts the Heavy Hitter's kept trigger.
 
-### Where things stand — v0.22.2
+### Where things stand — v0.30.0
+
+*The table below was last rewritten at v0.22.2 and is kept as the record of
+Sessions 14–38. The sections above it are newer. Audit v0.28.1 M7 found this
+heading six versions stale; it now says when it was written.*
 
 Sessions 14–38 took this from a local-only leader builder to a synced,
 multi-leader campaign tracker that plays a whole campaign week, game and
@@ -217,7 +232,7 @@ aftermath. Shipped and live:
 | **The aftermath** | v0.16.0. All six phases as one stateful flow, walked once per game, the record stored on the game so it survives a closed tab and syncs like anything else. Barter with the full equipment table, leader advancement across all six tables, Dr. Mo, injury flips with their reflip conditions, and annihilation checked at the end of phase 6. |
 | **The week is yours** | v0.17.0. Calendar or manual, per campaign. Forward *and back* in both. Campaign length, week length and start date are all editable. Calendar mode still writes an offset, not a week, so it keeps advancing underneath. |
 | **The build stamp** | v0.18.0. Version, commit and build date in the footer, baked in by `vite.config.js`. The commit is the half that matters — `CF_PAGES_COMMIT_SHA` cannot be forgotten the way a version bump can, and it answers "is what I pushed what is live?" from the page itself. |
-| **The v3 shape** | v0.19.2. Arsenals are top-level objects and campaigns are tables. **The app runs on this now** — `campaignShape.js` is deleted. The lift runs on load and was verified against all six live campaigns. ⚠ **Sync is off** while it beds in; see below. |
+| **The v3 shape** | v0.19.2. Arsenals are top-level objects and campaigns are tables. **The app runs on this now** — `campaignShape.js` is deleted. The lift runs on load and was verified against all six live campaigns. Sync was paused for the cutover and has been **on since v0.21.0**. |
 | **The starting scrip** | v0.19.1. p. 15's grant is finally *paid* rather than only displayed. Reconciled from the week-0 models, so editing the starting arsenal adjusts the balance instead of paying twice; arsenals that predate the fix are **offered** the scrip they were never given. |
 | **Sync is back on** | v0.21.0. Both kinds. `arsenalStore.js` + `/api/arsenals` beside the campaign pair, a shape gate on both, and `planSync` called once per kind rather than rewritten. Round trip proven: pull → play a week → push → a second device sees the hire. |
 | **Membership is visible again** | v0.20.2. `openId` names the open *arsenal* since the v3 cutover, and `App` was still handing it to `useMembership` as a campaign id — so every membership lookup asked about an arsenal, found no campaign, and was refused. A host with an admitted member was told "This campaign is yours alone" for three versions. **A rename that changes what a variable means is not a rename.** |
@@ -227,7 +242,7 @@ aftermath. Shipped and live:
 | **The service worker** | v0.19.3. It cached Pages' SPA fallback under asset URLs, so a browser that loaded mid-deploy got a **permanent white screen** no reload could clear. Live since v0.14.0, observed in production on 2026-09-03. Two guards now — never write HTML under a non-navigation request, never serve it either — plus a cache-version bump that purges anyone already poisoned. |
 | **Membership** | v0.17.0. Owner-issued single-use invites, two gates (redeem → pending → host admits), per-campaign nicknames, opt-in Discord identity, and a read-only shared arsenal page. Writes were **not** widened — see below. |
 
-673 tests.
+782 tests at v0.30.0.
 
 ### Unfinished business finds the player now — v0.23.0
 
@@ -699,9 +714,10 @@ names the leader each player brought. Rules worth keeping:
 - **One leader per player per table** — `linkCampaign` clears the caller's other
   links to that table; withdrawing is `DELETE /:id/link`.
 
-**Not yet seen on production.** Proven locally over HTTP and in the browser as
-both accounts. The first real member to open v0.28.0 should land on the host's
-table — worth checking that `member_of` gets set.
+**Confirmed on production, 2026-10-06.** A real member (Fish) linked Tukala,
+the Cursed Hunt to the owner's table, and it shows on the host's shared page
+with its roster, equipment, injuries and totem. That page reads only arsenals
+whose campaign has `member_of` set, so the link works end to end.
 
 ### Membership works; the link nobody has clicked does not
 
@@ -1019,8 +1035,10 @@ problem; the loops around it had none.
 
 ### Audits
 
-`docs/audits/audit-v0.28.1.md` is the current one (Session 71); see the top of
-`## ⚠️ NEXT SESSION`. Nothing in it is fixed yet.
+`docs/audits/audit-v0.28.1.md` is the current one (Session 71). **Every
+finding is closed**, H1 at v0.29.0 and the rest at v0.30.0; the file carries a
+status block. H2 was closed by owner decision rather than a code fix alone.
+The next audit is due at entry 81 (§5).
 
 `docs/audits/audit-v0.21.1.md` is the one before (Session 54 by ordinal count;
 its heading says 40). H1, M1 and M2 were closed in v0.22.0. M3, L1, L2 and L3
@@ -1053,7 +1071,7 @@ Two things from that work worth keeping:
   regex that assumed every code looks like `S-04`. The doc uses three formats
   (`XX-NN`, `XX-WORD`, `XX-FNN`) plus descriptive suffixes on `C-01 · Identity`.
   A naive pattern silently drops fourteen entries and "finds" drift that is not
-  there. The counter script is still unwritten.
+  there. Written at last in v0.30.0: `npm run dialogue`.
 - **`createCampaign` spreads its patch last.** Passing `id: undefined` to blank
   a field overwrites the value it just generated, and `saveCampaign` then
   no-ops on the missing id. Strip keys, do not blank them.
@@ -1350,11 +1368,9 @@ he visibly changes when a leader dies — it costs one line of code.
 
 #### Smaller, any time
 
-- **The dialogue counter script.** `scripts/` still has no counter, and §5's
-  dialogue check depends on whoever runs it inventing a correct regex. The
-  v0.5.2 audit's M6 was a false positive for exactly that reason. A generator
-  that writes `hank-dialogue.md` from `hank.js` would retire the dual-file rule
-  entirely.
+- **A dialogue generator.** `npm run dialogue` (v0.30.0) *checks* the two
+  files agree. A generator that writes `hank-dialogue.md` from `hank.js` would
+  retire the dual-file rule entirely; the numbering is the hard part.
 - **Nine low audit findings**, catalogued in `docs/audits/audit-v0.5.2.md`.
   L2 is closed: `VITE_REGISTRY_MODE=local` reaches `loadLocalRegister` now, and
   `useRoster` reads the seeded file.
@@ -1481,8 +1497,8 @@ Three rules in it worth not undoing:
 - **Identical copies settle themselves** (`sameInSubstance`), and nothing else
   ever does. That is provably lossless; everything else is the owner's call.
 
-**Still unexercised against a real conflict**, because sync is off. The pure
-layer has 38 tests and the screen was driven in a browser against an injected
+**Still unexercised against a real conflict.** Sync has been on since v0.21.0,
+but no two devices are known to have disagreed yet. The pure layer has 38 tests and the screen was driven in a browser against an injected
 conflict; neither is the same as two devices disagreeing.
 
 **Medium:**
@@ -1534,19 +1550,14 @@ conflict; neither is the same as two devices disagreeing.
   carries the field and `ArsenalSheet` prints it; nothing sets it. The leader's
   picker became `characteristicOptions` in v0.18.3 and is a component away from
   being reusable there.
-- `hank.js` and `hank-dialogue.md` are kept in sync by hand. A generator script
-  in `scripts/` would make the code the single source. Not written — though the
-  v0.21.1 audit proved the two files agree exactly (241 of 241) and recorded the
-  three traps any checker has to survive.
+- `hank.js` and `hank-dialogue.md` are kept in sync by hand, and
+  `npm run dialogue` now says when they are not (242 of 242 at v0.30.0).
 - `useCampaign` exposes a flat `leader` adapter so the four wizard steps didn't
   need rewriting. Fine now; retire it once the wizard reads the arsenal
   directly, or it becomes a second shape to keep in sync.
-- **A `hank.js` line is filed under the wrong moment.** `AFTERMATH_INJURED[0]`
-  opens with "Well howdy again friend, it's been a hot minute… Anyway, how'd
-  things go?" — that is an *arrival* line, and it fires at the injury flip,
-  after the player has already described the game. A §2 violation sitting in the
-  data rather than in the code. Left alone this session because it is the
-  owner's voice to rewrite, and any change to it is a dual-file change (§1).
+- ~~**A `hank.js` line is filed under the wrong moment.**~~ **Fixed v0.30.0**
+  by owner decision: I-01 moved unchanged to the standing rotation as S-13, and
+  the owner wrote I-03 for the injury flip. I-01's number is retired, not reused.
 - ~~**`updatedAt` is still a client clock**~~ — **retired in v0.18.5.**
   Migration 0004 adds a server-assigned `campaigns.version`, incremented on
   every accepted write. `planSync` now decides from two facts it was *told*
@@ -1703,10 +1714,12 @@ next, so the lie compounds.
 3. Update the counts line at the bottom of the doc
 4. If a new group was added, update the "Selection order" section
 5. Verify the file still loads: `node --input-type=module -e "import('./src/data/hank.js').then(m => console.log(Object.keys(m).length))"`
+6. `npm run dialogue`. It must say the two files agree.
 
 If this ever becomes tiresome, the fix is a generator script in `scripts/` that
 writes the markdown from the code. That would make the code the single source.
 It has not been written; until it is, do it by hand and do it every time.
+`scripts/check-dialogue.mjs` at least catches it when you forget.
 
 ---
 
@@ -1833,12 +1846,23 @@ that makes it sound, and the narrowness is the whole thing:
 | Reading it signed in, for entries **your own arsenal holds** | Reading it signed out, or for anything you have not earned |
 | Holding it in memory for the tab | Persisting it to localStorage, the export, or a campaign document |
 
-The rule that makes it defensible is in `functions/lib/bookStore.js`: a caller
-may read an entry **only if one of their own arsenals holds it**. Gating on
-"is signed in" alone would be weak, since one authenticated request could then
-walk all 340 keys. Gating on what you hold means collecting the book requires
-earning every advancement and buying every item across many real campaign
-weeks, which is not a scrape.
+The rule is in `functions/lib/bookStore.js`: a caller may read an entry **only
+if one of their own arsenals holds it**. This section used to say that this
+meant collecting the book required "earning every advancement and buying every
+item across many real campaign weeks". **That was never true** (audit v0.28.1
+H2): `arsenals.doc` is whatever the client last PUT, so "holds" means *claims
+to hold*. Owner decision, v0.30.0: accept that, say so, and add friction that
+does not trust the document:
+
+- **A proved title** (`book_access`), once per account.
+- **A plausible arsenal.** One claiming more advancements than its checked
+  experience boxes paid for entitles nothing at all (`plausibleArsenal`). That
+  caps a forged arsenal at 15 advancements.
+- **A daily allowance.** At most 40 keys a user has never been served, per
+  rolling day (`book_served`, migration 0009). A key served once is free for
+  ever. The whole book takes over a week of asking.
+
+That is friction, not proof, and it is the honest description.
 
 Two consequences that are costs, not oversights:
 
@@ -1988,7 +2012,8 @@ every session. `docs/VERSION_HISTORY.md` holds how it got this way.
 npm install
 cp .env.example .env
 npm run dev      # Vite only — NO Functions, NO database. useAuth degrades to signed out.
-npm run test     # 570 tests; `functions/` is in the run too, for the authz tests
+npm run test     # 782 tests; `functions/` is in the run too, for the authz tests
+npm run dialogue # hank.js and hank-dialogue.md agree (§1)
 npm run build    # production bundle — the dev proxy does NOT exist here
 npm run seed     # optional local register file; ask BiggerHat's maintainer first
 

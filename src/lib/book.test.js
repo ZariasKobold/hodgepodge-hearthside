@@ -62,7 +62,7 @@ describe('advancementKey', () => {
 describe('equipmentKey and injuryKey', () => {
   it('use the id, which is already unique', () => {
     expect(equipmentKey('gatling-gun')).toBe('equipment:gatling-gun')
-    expect(injuryKey('broken-arm')).toBe('injury:broken-arm')
+    expect(injuryKey('Pack Mule')).toBe('injury:Pack Mule')
   })
   it('are null without one', () => {
     expect(equipmentKey(null)).toBeNull()

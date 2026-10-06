@@ -531,3 +531,25 @@ describe('settleMirrored — a push that lands after a newer save', () => {
     expect(h.dirty.x).toBe(true)
   })
 })
+
+describe('runReconcile — corrupt rows (audit v0.28.1 M6)', () => {
+  it('counts unreadable rows of both kinds instead of discarding the count', async () => {
+    const h = harness({
+      remoteCampaigns: [{ id: 'cmp_bad', updatedAt: 1, version: 2, corrupt: true }],
+      remoteArsenals: [
+        { id: 'ars_bad', updatedAt: 1, version: 1, corrupt: true },
+        { id: 'ars_bad2', updatedAt: 1, version: 1, corrupt: true },
+      ],
+    })
+    const out = await runReconcile(h.ports)
+    expect(out.corrupt).toBe(3)
+    // Still treated as absent: nothing was pulled from them.
+    expect(h.saved.arsenals).toEqual([])
+    expect(h.saved.campaigns).toEqual([])
+  })
+
+  it('is zero on an ordinary pass', async () => {
+    const out = await runReconcile(harness().ports)
+    expect(out.corrupt).toBe(0)
+  })
+})

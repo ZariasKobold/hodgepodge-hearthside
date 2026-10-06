@@ -63,6 +63,8 @@ export function useSync({ user, available, onChanged }) {
     /** Local edits the account has not been sent, because pushing is off. */
     held: 0,
     adopted: 0,
+    /** Rows on the account that could not be read. See `planSync`. */
+    corrupt: 0,
     /**
      * Structured, and deliberately not folded into `error`.
      *

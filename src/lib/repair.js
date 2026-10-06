@@ -1,11 +1,12 @@
 /**
- * Putting back what a lost update ate.
+ * Putting back what an aftermath record names and the arsenal lacks.
  *
- * On 2026-09-08 a reconcile in flight overwrote an arsenal with its own opening
- * snapshot (see `settleAfterPush` in `reconcile.js`). The bug is fixed; the
- * damage is not. One arsenal on the database is still missing a Gatling Gun,
- * three advancements and three experience boxes that its aftermath record says
- * were earned.
+ * Built in v0.24.0 for a loss that turned out never to have happened: two
+ * table dumps taken two hours apart were compared as one state (see
+ * CLAUDE.md). The race it was blamed on is real in the code and closed by
+ * `settleAfterPush`. This detector has never fired on a real arsenal, and is
+ * kept as a guard. If it ever fires on a healthy one, that is a bug here, not
+ * a discovery.
  *
  * ## Per row id, never a forward replay
  *

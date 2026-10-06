@@ -5581,3 +5581,84 @@ trigger under Grave's Curse.
 `src/data/advancements.js`, `src/lib/advancement.js`, `src/lib/totem.test.js`
 (new), `src/components/TotemCard.jsx` (new), `src/components/steps/Arsenal.jsx`,
 `src/components/ArsenalSheet.jsx`, `src/App.jsx`, `src/styles/app.css`.
+
+---
+
+### Session 74 — v0.30.0
+Date: 2026-10-06
+
+**fix: every remaining finding of audit v0.28.1, closed**
+
+The owner confirmed a real member's arsenal on the host's shared page, which
+proves `member_of` is set on production, and asked for the rest of the audit
+before the crew builder. Three findings were owner decisions, asked first:
+H2 (friction plus an honest claim), M1 (repeats allowed, double-click blocked),
+L3 (move the line, and a new one written by the owner).
+
+- **H2.** The book-text claim was false: `arsenals.doc` is client-written, so
+  "holds" means *claims to hold*. §4, `bookStore.js` and `book.js` now say so.
+  Friction that does not trust the document: an arsenal claiming more
+  advancements than its checked boxes paid for (15 numbered boxes, p. 31's
+  "one advancement per numbered box") entitles nothing, and at most 40 keys a
+  user has never seen are served per rolling day (`book_served`, migration
+  0009, not applied, goes on with 0007/0008). Found on the way: the text query
+  bound one parameter per key, and D1 refuses more than 100, so a full
+  200-key ask could never have run. Lists are bound as JSON through `json_each`.
+- **M1.** `PhaseBarter` counts purchases from the real record shape and shows
+  "Bought ×N". `purchaseReady` ignores a click until the last purchase reaches
+  the record. Verified in a browser: two clicks in one tick charged 1 scrip and
+  recorded one row; a later deliberate click bought a second.
+- **M2.** The history derives forfeiture from `phasesFor(game)`. The fixture
+  that carried a never-written `skippedPhases` is now built with
+  `createGame` + `createAftermath`.
+- **M3.** Equipment is annihilated by flag (`annihilated`, `annihilatedWeek`),
+  never deleted, so `aftermathDrift` still matches the purchase and the repair
+  cannot re-buy it (tested). An Annihilate control with a confirm step and an
+  Undo on the Arsenal view; `liveEquipment` everywhere kit is counted or hired.
+  `removeModel` / `removeEquipment` deleted: unused, and deletion was the trap.
+- **M5.** Comments and both player-facing copies now say the record and the
+  arsenal disagree, never a retracted cause.
+- **M6.** `planSync` returns the corrupt ids; the shelf says how many copies on
+  the account could not be read.
+- **M7.** CLAUDE.md's status heading, test counts, "sync is off" and audit
+  status corrected.
+- **L1** state cookie cleared once used. **L2** `npm run dialogue`
+  (`scripts/check-dialogue.mjs`); 242 of 242. **L3** I-01 → S-13 unchanged, new
+  I-03 by the owner; I-01's number retired. **L4** an import reconciles at
+  once. **L5** injury book keys are the printed name on all three ends; the old
+  fixture's `injuryId` was a field no record has. **L6** `/api/book` answers
+  empty, not 500, where its tables do not exist. **L7** read from the book
+  (p. 19): Fate takes back the newest leader injury wherever it came from
+  (`fateTakesBack`, including Dr. Mo's), and a second annihilation is recorded
+  (`leader.annihilatedWeek`) and shown on the arsenal and the shelf. **L8**
+  read from p. 33: "How many fingers" heals first, so the healed injury is not
+  a duplicate on the follow-up flip (`doctorPatientInjuryNames`). **L9** the
+  stacked v0.7.0 `planSync` header removed.
+
+Verified in a browser on a seeded arsenal: the annihilated-leader note and
+shelf marker, annihilate → confirm → undo with scrip unchanged, and the barter
+double-click.
+
+42 new tests, 782 total.
+
+Files: `src/lib/aftermath.js` + test, `src/lib/aftermathHistory.js` + test,
+`src/lib/shape/arsenal.js` + test, `src/lib/shape/compare.js`,
+`src/lib/repair.js` + test, `src/lib/outstanding.js`, `src/lib/reconcile.js` +
+test, `src/lib/remote.js` + test, `src/lib/book.js` + test,
+`src/hooks/useCampaign.js`, `src/hooks/useSync.js`, `src/data/hank.js`,
+`src/App.jsx`, `src/components/aftermath/PhaseBarter.jsx`,
+`src/components/aftermath/PhaseDoctor.jsx`, `src/components/aftermath/GameLog.jsx`,
+`src/components/Aftermath.jsx`, `src/components/steps/Arsenal.jsx`,
+`src/components/ArsenalLibrary.jsx`, `src/components/ArsenalSheet.jsx`,
+`src/components/SharedArsenal.jsx`, `src/components/RepairAftermath.jsx`,
+`src/components/BookText.jsx`, `src/styles/app.css`,
+`functions/lib/bookStore.js` + test, `functions/lib/bookAccess.test.js`,
+`functions/lib/auth.js`, `functions/lib/auth.test.js` (new),
+`functions/lib/bookRoute.test.js` (new), `functions/api/book.js`,
+`migrations/0009_book_served.sql` (new), `scripts/check-dialogue.mjs` (new),
+`scripts/book-template.mjs`, `docs/hank-dialogue.md`,
+`docs/audits/audit-v0.28.1.md`, `CLAUDE.md`, `package.json`
+RESOLVED: audit v0.28.1, every finding.
+UNVERIFIED: migration 0009 has never run against a real D1, local or remote;
+the `json_each` statements are proven only against the test fake.
+NEXT: the crew builder, Phase A (local only). Next audit: entry 81.

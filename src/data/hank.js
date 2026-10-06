@@ -66,6 +66,10 @@ export const AFTERMATH_STANDING = [
 
   // 12
   `"Y'all again! Startin' to think you like my company more'n whatever's out there. Can't say I blame ya. Sit. Talk. How'd it turn out?"`,
+
+  // 13 — was I-01. It is an arrival line ("how'd things go?") and used to fire
+  // at the injury flip, after the game had already been described (§2).
+  `"Well howdy again friend, it's been a hot minute. Let's catch up. Looks like y'all have gotten into a tussle or two. I do love me a good battle story and comparin' scars. If y'all need I also have a doc friend who'll fix ya up. He ain't got a doctor's license, strictly speakin' but that's just cuz the board thought his methods were "questionable." Anyway, how'd things go?"`,
 ]
 
 /**
@@ -153,11 +157,17 @@ export const AFTERMATH_LOST = [
   `"Y'all come back sore, that's fine. Y'all come back, that's the part I care about. Next one's next week."`,
 ]
 
-/** Fires at the injury flip itself, not on arrival — the doc keeps his joke by being rare. */
+/**
+ * Fires at the injury flip itself, not on arrival — the doc keeps his joke by
+ * being rare. I-01 moved to the standing rotation as S-13; the numbers are
+ * kept rather than reused, so "I-02" still means the line it always meant.
+ */
 export const AFTERMATH_INJURED = [
-  `"Well howdy again friend, it's been a hot minute. Let's catch up. Looks like y'all have gotten into a tussle or two. I do love me a good battle story and comparin' scars. If y'all need I also have a doc friend who'll fix ya up. He ain't got a doctor's license, strictly speakin' but that's just cuz the board thought his methods were "questionable." Anyway, how'd things go?"`,
-
+  // I-02
   `"Ooh. That's gonna leave a mark, and I mean that in the admirin' way. Dr. Mo's still around if y'all want patchin' — he works cheap on account of nobody else'll have him. How'd this happen?"`,
+
+  // I-03
+  `"Well boy howdy, that is gonna leave a scar. I hope y'all have a swift recovery."`,
 ]
 
 /** Final stretch of the campaign. */

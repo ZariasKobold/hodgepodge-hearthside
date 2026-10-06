@@ -23,6 +23,29 @@ immediately before this one, by the same author as this audit. They were
 re-read with that in mind and nothing is raised against them, but a
 self-review is weaker evidence than the rest of this document.
 
+## Status — every finding closed, v0.30.0 (Session 74)
+
+| Finding | Status |
+|---|---|
+| **H1** | Fixed v0.29.0 — `settleMirrored`. |
+| **H2** | Owner decision, v0.30.0: the claim corrected in §4, `bookStore.js`, `book.js`; plausibility check and a 40-key daily allowance (`book_served`, 0009). Friction, not proof, and now described as such. |
+| **M1** | Fixed — `boughtCount` / `purchaseReady`. Repeats allowed (p. 21); a double-click is one purchase. |
+| **M2** | Fixed — derived from `phasesFor`; the fixture is built as a real record is. |
+| **M3** | Fixed — equipment annihilated by flag; drift trap tested. The Traitor half was already right (v0.29.2). |
+| **M4** | Fixed v0.28.2 — §5 counts by ordinal. |
+| **M5** | Fixed — code and player-facing copy state what is known, not a cause. |
+| **M6** | Fixed — corrupt ids counted and shown on the shelf. |
+| **M7** | Fixed — CLAUDE.md corrected. |
+| **L1** | Fixed — state cookie cleared after it is checked. |
+| **L2** | Fixed — `npm run dialogue`. |
+| **L3** | Fixed by owner decision — I-01 → S-13; new I-03. |
+| **L4** | Fixed — an import starts a reconcile. |
+| **L5** | Fixed — injury keys by printed name on all three ends. |
+| **L6** | Fixed — empty answers where the tables are missing. |
+| **L7** | Fixed from the book (p. 19) — `fateTakesBack`; `leader.annihilatedWeek`. |
+| **L8** | Fixed from the book (p. 33) — the healed injury is not a duplicate. |
+| **L9** | Fixed. |
+
 ---
 
 ## Verified clean

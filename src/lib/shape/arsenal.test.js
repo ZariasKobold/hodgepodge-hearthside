@@ -7,6 +7,7 @@ import {
   activeInjuryCount, standingRating, ratingForGame, heldEquipmentIds,
   injuryNamesFor, isOutOfKeyword, hiresInWeek, mustHireThisWeek,
   startingArsenalSpend, startingScripPatch, owedStartingScrip, defectorPatch,
+  liveEquipment, annihilateEquipmentPatch,
 } from './arsenal.js'
 
 describe('createArsenal', () => {
@@ -305,5 +306,44 @@ describe('defectorPatch — the Traitor, received (p. 34)', () => {
     const a = { ...base(), ...defectorPatch(base(), { name: 'Shieldbearer', cost: 5 }, week) }
     expect(hiresInWeek(a, week)).toEqual([])
     expect(mustHireThisWeek(a, week)).toBe(true)
+  })
+})
+
+/* ── equipment that annihilates itself (audit v0.28.1 M3) ──────── */
+
+describe('annihilateEquipmentPatch', () => {
+  const arsenal = () => createArsenal({
+    scrip: 4,
+    equipment: [
+      createEquipment({ id: 'eqp_foot', equipmentId: 'lucky-gremlin-foot', name: 'Lucky Gremlin Foot' }),
+      createEquipment({ id: 'eqp_relic', equipmentId: 'medusa', name: 'Medusa', thirst: true }),
+    ],
+  })
+
+  it('flags the row and keeps it, with the week it went', () => {
+    const a = arsenal()
+    const next = { ...a, ...annihilateEquipmentPatch(a, 'eqp_foot', 5) }
+    expect(next.equipment).toHaveLength(2)
+    expect(next.equipment[0]).toMatchObject({ id: 'eqp_foot', annihilated: true, annihilatedWeek: 5 })
+    expect(liveEquipment(next).map((e) => e.id)).toEqual(['eqp_relic'])
+  })
+
+  it('moves no scrip', () => {
+    const a = arsenal()
+    expect(annihilateEquipmentPatch(a, 'eqp_foot', 5)).not.toHaveProperty('scrip')
+  })
+
+  it('undoes cleanly', () => {
+    const a = arsenal()
+    const gone = { ...a, ...annihilateEquipmentPatch(a, 'eqp_foot', 5) }
+    const back = { ...gone, ...annihilateEquipmentPatch(gone, 'eqp_foot', 6, false) }
+    expect(back.equipment[0]).toMatchObject({ annihilated: false, annihilatedWeek: null })
+  })
+
+  it('frees the Those Who Thirst table once the relic has gone', () => {
+    const a = arsenal()
+    expect(heldEquipmentIds(a)).toContain('medusa')
+    const gone = { ...a, ...annihilateEquipmentPatch(a, 'eqp_relic', 5) }
+    expect(heldEquipmentIds(gone)).not.toContain('medusa')
   })
 })

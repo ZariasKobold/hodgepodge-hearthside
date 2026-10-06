@@ -11,6 +11,7 @@ import {
 import {
   createModel, createEquipment, createInjury, createTotem,
   totalFor, mustHireThisWeek, startingScripPatch, owedStartingScrip, defectorPatch,
+  annihilateEquipmentPatch,
 } from '../lib/shape/arsenal.js'
 import {
   createCampaign, createGame, currentWeek, joinedWeekFor,
@@ -376,10 +377,6 @@ export function useCampaign({ userId = null, userReady = true, onSaved, onArsena
     setArsenal((a) => defectorPatch(a, defector, week))
   }, [setArsenal, week])
 
-  const removeModel = useCallback((modelId) => {
-    setArsenal((a) => ({ models: a.models.filter((m) => m.id !== modelId) }))
-  }, [setArsenal])
-
   const spendScrip = useCallback((amount) => {
     setArsenal((a) => ({ scrip: Math.max(0, a.scrip - amount) }))
   }, [setArsenal])
@@ -451,12 +448,14 @@ export function useCampaign({ userId = null, userReady = true, onSaved, onArsena
   }, [setArsenal, week])
 
   /**
-   * Equipment leaves the arsenal outright when annihilated — it "may not be
-   * used until purchased again" — so this deletes rather than flagging.
+   * Annihilated equipment "may not be used until purchased again" (p. 22).
+   * Flagged, not deleted: a deleted row is what `aftermathDrift` reads as a
+   * lost purchase, and the repair would re-buy it (audit v0.28.1 M3). Pass
+   * `false` to undo a misclick.
    */
-  const removeEquipment = useCallback((id) => {
-    setArsenal((a) => ({ equipment: a.equipment.filter((e) => e.id !== id) }))
-  }, [setArsenal])
+  const annihilateEquipment = useCallback((rowId, annihilated = true) => {
+    setArsenal((a) => annihilateEquipmentPatch(a, rowId, week, annihilated))
+  }, [setArsenal, week])
 
   /* ── injuries ─────────────────────────────────────────────────── */
 
@@ -572,6 +571,11 @@ export function useCampaign({ userId = null, userReady = true, onSaved, onArsena
     setArsenal((a) => ({ leader: { ...a.leader, miraculousRecoveryUsed: true } }))
   }, [setArsenal])
 
+  /** The second annihilation, which stands (p. 19). See `createLeader`. */
+  const annihilateLeader = useCallback(() => {
+    setArsenal((a) => ({ leader: { ...a.leader, annihilatedWeek: week } }))
+  }, [setArsenal, week])
+
   return {
     // the shelf — entries are { arsenal, campaign }
     shelf, openId, open, close, startNew, discard, adopt, refresh,
@@ -584,16 +588,16 @@ export function useCampaign({ userId = null, userReady = true, onSaved, onArsena
     mustHire: arsenal ? mustHireThisWeek(arsenal, week, { joinedWeek }) : false,
     // wizard adapter — same surface the step components already expect
     leader, set: setLeader, setPick,
-    addModel, addDefector, removeModel, spendScrip, earnScrip,
+    addModel, addDefector, spendScrip, earnScrip,
     creditStartingScrip, repairAftermathDrift,
     owedStartingScrip: arsenal ? owedStartingScrip(arsenal) : 0,
     // games and the aftermath
     logGame, updateGame, removeGame,
-    buyEquipment, removeEquipment,
+    buyEquipment, annihilateEquipment,
     addInjury, healInjury, dropInjury, annihilateModel,
     advanceLeader, advanceTotem, setTotem, addCrewCardAdvancement, placeAdvancementAt,
     rewindPhases,
-    useMiraculousRecovery,
+    useMiraculousRecovery, annihilateLeader,
     // the participation, for anything that needs the seat rather than the player
     participation: campaign && arsenal ? participationForArsenal(campaign, arsenal.id) : null,
   }

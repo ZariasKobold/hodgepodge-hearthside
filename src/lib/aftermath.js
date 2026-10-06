@@ -154,6 +154,71 @@ export function barterStock(value, suit, { scrip = 0 } = {}) {
 }
 
 /**
+ * How many of one item this barter has bought. The book lets a player buy the
+ * same thing twice off one flip (p. 21), so the counter shows a count rather
+ * than a lock.
+ *
+ * `bought` holds `{ rowId, equipmentId, … }` since v0.22.0. Comparing it to a
+ * bare id is the bug audit v0.28.1 M1 found: it matched nothing, so the button
+ * never said what had been bought.
+ */
+export function boughtCount(bought = [], equipmentId) {
+  return bought.filter((b) => (b?.equipmentId ?? b) === equipmentId).length
+}
+
+/**
+ * A purchase is accepted only once the previous one has landed in the record.
+ * `pending` is the length of `bought` when the last click was accepted, or
+ * null. Until `bought` grows past it, a second click is the same purchase
+ * clicked twice, not a second purchase, and it is ignored. Without this a
+ * double-click charged twice while the record, patched from one stale
+ * snapshot, kept only one of the two.
+ */
+export function purchaseReady(pending, bought = []) {
+  // `!==` rather than `>`: a revision that undoes the barter shrinks the record,
+  // and a guard that waited for it to grow past the old length would never
+  // accept another click.
+  return pending == null || bought.length !== pending
+}
+
+/**
+ * The injury Fate takes back when a leader's Miraculous Recovery fires.
+ *
+ * p. 19: "If your leader was annihilated due to receiving a third injury and
+ * Fate intervenes, no new injury is gained but the previous two injuries
+ * remain." The third is the newest, wherever it came from. That used to be
+ * read only off a phase-6 flip, so a third injury handed over by Dr. Mo in
+ * phase 5 stayed on the leader (audit v0.28.1 L7).
+ *
+ * Newest first: the injury phase runs after the doctor, and within each phase
+ * later entries are later. Matched on the row id each phase records. A record
+ * from before row ids falls back to the old name match on the injury flip.
+ * Returns the row id to drop, or null when nothing in this aftermath did it.
+ */
+export function fateTakesBack(record, arsenal) {
+  const live = (arsenal?.injuries || []).filter((i) => !i.removedAt)
+  const held = new Set(live.map((i) => i.id))
+
+  const flips = [...(record?.injuries?.flips || [])]
+    .reverse()
+    .filter((f) => f.isLeader && f.result?.attaches)
+  for (const f of flips) if (f.rowId && held.has(f.rowId)) return f.rowId
+
+  const visits = [...(record?.doctor?.attempts || [])]
+    .reverse()
+    .filter((v) => v.isLeader && v.addedRowId)
+  for (const v of visits) if (held.has(v.addedRowId)) return v.addedRowId
+
+  const legacy = flips.find((f) => !f.rowId)
+  if (legacy) {
+    const leaderRows = live.filter((i) => !i.modelId && !i.titleGroup)
+    const row = [...leaderRows].reverse().find((i) => i.name === legacy.result.name)
+    if (row) return row.id
+  }
+  return null
+}
+
+/**
  * A *flipped* red joker sends you to Those Who Thirst; a *cheated* one counts
  * as a thirteen instead. The distinction is the whole rule, so it is a
  * parameter rather than an inference.
@@ -301,6 +366,22 @@ export function resolveDoctorInjury(value, suit, model = {}) {
     reflip: !out.attaches,
     reflipWhy: out.attaches ? null : whyNoInjury(out),
   }
+}
+
+/**
+ * The injuries a patient counts as already having, for the doctor's follow-up
+ * flip.
+ *
+ * p. 33, "How many fingers do you need?": "Annihilate the chosen injury
+ * upgrade, then flip for the model on the injury chart." The heal comes first,
+ * so the injury just healed is no longer on the model, and flipping it again
+ * gives the model an injury. It is not thrown back as a duplicate (audit
+ * v0.28.1 L8). "Oops?" heals nothing, so for it everything still counts.
+ */
+export function doctorPatientInjuryNames(injuries = [], outcome, healingId) {
+  return injuries
+    .filter((i) => !(outcome?.heals && i.id === healingId))
+    .map((i) => i.name)
 }
 
 function whyNoInjury(out) {

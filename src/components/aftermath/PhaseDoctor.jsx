@@ -5,6 +5,7 @@ import FlipInput, { isJoker } from '../FlipInput.jsx'
 import { healGreeting, healed, healCantAfford } from '../../data/hank.js'
 import {
   doctorOutcome, doctorAffordable, resolveDoctorInjury, DOCTOR_FEE_PER_ATTEMPT,
+  doctorPatientInjuryNames,
 } from '../../lib/aftermath.js'
 import {
   injuriesFor, liveModels, activeInjuryCount,
@@ -94,13 +95,13 @@ export default function PhaseDoctor({ week, arsenal, leader, record, onAttempt, 
   /**
    * What the patient already carries, so a result they have is thrown back and
    * a result their kind cannot take is too. The same facts `PhaseInjuries`
-   * assembles, from the same place.
+   * assembles, from the same place, less the injury this visit heals first.
    */
   const patient = subject
     ? {
       isLeader: Boolean(subject.isLeader),
       isTotem: false,
-      injuryNames: subject.injuries.map((i) => i.name),
+      injuryNames: doctorPatientInjuryNames(subject.injuries, outcome, injury?.id),
     }
     : {}
 

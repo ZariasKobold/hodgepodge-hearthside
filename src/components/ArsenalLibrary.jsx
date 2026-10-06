@@ -136,6 +136,22 @@ function SyncLine({ sync, count, offlineSession }) {
     )
   }
 
+  // A damaged row is never allowed to overwrite a good copy, so nothing here is
+  // lost. But a leader that exists only in a damaged row will not appear, and
+  // the player deserves to know why (audit v0.28.1 M6).
+  if (sync.status === 'synced' && sync.corrupt > 0) {
+    return (
+      <p className="note note--warn">
+        <strong>{sync.corrupt === 1 ? 'One saved copy' : `${sync.corrupt} saved copies`} on
+        your account could not be read.</strong>{' '}
+        Nothing in this browser was replaced by {sync.corrupt === 1 ? 'it' : 'them'}, and
+        your copies here will be sent up as usual. If a leader you expected is
+        missing, open the app on the device where you last played it, so that
+        copy goes up.
+      </p>
+    )
+  }
+
   if (sync.status === 'synced') {
     const bits = []
     if (sync.pulled > 0) bits.push(`${sync.pulled} pulled down`)
@@ -181,6 +197,7 @@ function LeaderCard({ arsenal, campaign, onOpen, onExport, onDiscard }) {
         <span className="record__eyebrow">
           {arsenal.faction ? factionLabel(arsenal.faction) : 'No faction yet'}
           {archetype ? ` · ${archetype.name}` : ''}
+          {leader.annihilatedWeek != null ? ' · annihilated' : ''}
         </span>
         <span className="record__file">
           {campaign ? `Week ${week} of ${campaign.weeksTotal}` : 'Not at a table'}

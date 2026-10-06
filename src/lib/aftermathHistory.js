@@ -24,7 +24,7 @@
  * Pure, and imports only phase metadata (§6).
  */
 
-import { AFTERMATH_PHASES } from './campaign.js'
+import { phasesFor } from './aftermath.js'
 // The one suit map, not a second one. The first cut of this file declared its
 // own with plural keys (`tomes`) while every record ever written stores the
 // singular (`tome`), so the suit silently vanished from every barter line —
@@ -133,13 +133,16 @@ export function summarisePhase(record, phaseId) {
 export function summariseAftermath(game) {
   const record = game?.aftermath
   if (!record) return []
-  const skipped = new Set(record.skippedPhases || [])
-  return AFTERMATH_PHASES.map((p) => ({
+  // Forfeiture is derived from the game, the way the walk itself derives it.
+  // It used to read `record.skippedPhases`, which nothing has ever written, so
+  // an early withdrawal's five forfeited phases read "Nothing recorded"
+  // (audit v0.28.1 M2). Its test passed on a fixture that carried the field.
+  return phasesFor(game).map((p) => ({
     id: p.id,
     n: p.n,
     name: p.name,
-    skipped: skipped.has(p.id),
-    lines: skipped.has(p.id) ? [] : summarisePhase(record, p.id),
+    skipped: p.skipped,
+    lines: p.skipped ? [] : summarisePhase(record, p.id),
   }))
 }
 

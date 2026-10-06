@@ -11,14 +11,17 @@
  *
  * So the text is in **D1**, loaded by hand by the owner (migration 0007,
  * `scripts/book-to-sql.mjs`), and read through `POST /api/book`, which answers
- * only for entries the caller's own arsenals actually hold. Collecting the book
- * would mean earning every advancement and buying every item across many real
- * campaign weeks — which is not a scrape. `functions/lib/bookStore.js` holds
- * that rule and is the file to read before changing any of this.
+ * only for entries the caller's own arsenals claim to hold. That is a claim,
+ * not proof: the server never sees play, and audit v0.28.1 H2 corrected the
+ * line that used to say otherwise. What stands behind it is friction: a proved
+ * title, a plausibility check on the arsenal, and a daily allowance of new
+ * text. `functions/lib/bookStore.js` holds those rules and is the file to read
+ * before changing any of this.
  *
  * This is the **second explicit amendment to §4**, after v0.5.0's display-only
  * exception, and by the same authority: owner decision. It is narrower than it
- * looks — no public read, no write endpoint, no entitlement without play.
+ * looks — no public read, no write endpoint, and nothing served faster than
+ * a daily allowance.
  *
  * ## Two sources, on purpose
  *
@@ -90,7 +93,8 @@ let localFile = null
  * Table, value and name together, because none of the three is unique alone:
  * "Skill Boost" is printed three times on the attack table at different values,
  * and value 9 on the action table carries four different options. Getting this
- * wrong is how v0.22.2's name-keyed select recorded the wrong row for a year.
+ * wrong is how the name-keyed select fixed in v0.22.2 recorded the wrong row
+ * for several versions.
  *
  * **Mirrored in `functions/lib/bookStore.js`**, which cannot import this (§6).
  * If either changes, change both — a divergence means the server entitles
@@ -116,9 +120,19 @@ export function equipmentKey(id) {
   return id ? `equipment:${id}` : null
 }
 
-/** The key for one injury row. */
-export function injuryKey(id) {
-  return id ? `injury:${id}` : null
+/**
+ * The key for one injury upgrade, by its printed name.
+ *
+ * By name because nothing else is shared by all three ends. The injury table's
+ * rows carry no id, an arsenal's injury row has a random `inj_…` id, and an
+ * upgrade's text is the same whichever flip attached it. Until audit v0.28.1
+ * L5 the scaffold keyed by a row id that does not exist, and the server by the
+ * random one, so no injury could ever have shown text.
+ *
+ * **Mirrored in `functions/lib/bookStore.js`.** Change both or neither.
+ */
+export function injuryKey(name) {
+  return name ? `injury:${name}` : null
 }
 
 /** The dev-only local copy, read once. Absent in production by construction. */

@@ -3,7 +3,7 @@ import { SLOTS } from '../data/archetypes.js'
 import { getEffect } from '../data/crewCards.js'
 import { factionLabel } from '../data/factions.js'
 import {
-  totalFor, liveModels, activeInjuryCount, injuriesFor, standingRating,
+  totalFor, liveModels, liveEquipment, activeInjuryCount, injuriesFor, standingRating,
 } from '../lib/shape/arsenal.js'
 import {
   gamesWon,
@@ -200,7 +200,7 @@ export default function ArsenalSheet({ arsenal, leader, archetype, campaign, rul
 
   const abilityNames = (leader.picks.ability || []).map((p) => p.name)
   const won = campaign ? gamesWon(campaign, arsenal.id) : 0
-  const equipment = arsenal.equipment || []
+  const equipment = liveEquipment(arsenal)
   const totem = arsenal.totem
   const boxesChecked = leader.experience?.boxesChecked || 0
   const leaderAdvancements = leader.advancements || []

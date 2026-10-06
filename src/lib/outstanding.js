@@ -25,11 +25,10 @@
  * record says what should be true of the arsenal, so anything the record
  * claims and the arsenal lacks is drift, and drift is worth saying out loud.
  *
- * It is not hypothetical. A player finished one aftermath across two sittings
- * six days apart; the barter purchase and all three advancements reached the
- * *game record* and none of them reached the arsenal, so her leader's card was
- * missing an action she had earned and her sheet omitted equipment she had
- * paid for. Nothing in the app said a word, because nothing was looking.
+ * The drift check was written for a loss that was later retracted as a
+ * measurement error (v0.24.1; see CLAUDE.md). It has never fired on a real
+ * arsenal. It stays because the race it guards is real in the code, and if
+ * the two ever disagree, saying so beats a card that is silently short.
  *
  * Every drift check is deliberately **one-sided**: it reports what the record
  * has and the arsenal lacks, never the reverse. An arsenal may legitimately
@@ -89,11 +88,14 @@ export function outstandingFor({ arsenal, campaign } = {}) {
       kind: 'aftermath-drift',
       severity: 'high',
       count: advDrift.length + eqpDrift.length + boxes,
-      title: 'An aftermath was recorded but never reached this leader',
+      // States what is known, never a cause. Audit v0.28.1 M5: this used to
+      // blame a sync bug that was retracted, which would have told a player a
+      // false reason in the one situation the item appears.
+      title: 'A game record and this leader disagree',
       detail: `The game record says you earned ${parts.join('; ')}. `
-        + 'None of it is on the arsenal, so the card, the sheet and the '
-        + 'campaign rating are all short. Nothing is lost — the record still '
-        + 'holds all of it, and it can be put back.',
+        + 'The arsenal does not hold it, so the card, the sheet and the '
+        + 'campaign rating may be short. The record still holds all of it, and '
+        + 'it can be put back.',
       where: 'arsenal',
       // Deliberately empty: the detail above already names everything, and the
       // bar prints `names` as a second list underneath.

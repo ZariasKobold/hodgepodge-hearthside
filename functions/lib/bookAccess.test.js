@@ -44,8 +44,10 @@ function accessDB({ granted = [], challenges = [], attempts = null, arsenals = [
         }
         if (/FROM arsenals/.test(flat)) return { results: arsenals }
         if (/FROM book_text/.test(flat)) {
+          // Lists arrive as JSON arrays opened with json_each (see bookStore).
+          const keys = entry.binds.flatMap((b) => (typeof b === 'string' && b.startsWith('[') ? JSON.parse(b) : [b]))
           return {
-            results: entry.binds.filter((k) => k in book).map((k) => ({ key: k, text: book[k] })),
+            results: keys.filter((k) => k in book).map((k) => ({ key: k, text: book[k] })),
           }
         }
         return { results: [] }
@@ -207,7 +209,12 @@ describe('answering it', () => {
 describe('the text needs both gates', () => {
   const BALANCED = {
     doc: JSON.stringify({
-      leader: { advancements: [{ id: 'a', tableId: 'action', tableValue: 9, name: 'Balanced Sword' }] },
+      leader: {
+        advancements: [{ id: 'a', tableId: 'action', tableValue: 9, name: 'Balanced Sword' }],
+        // One box checked pays for one advancement. Without it the arsenal is
+        // implausible and entitles nothing (audit v0.28.1 H2).
+        experience: { boxesChecked: 1 },
+      },
       equipment: [], injuries: [],
     }),
   }

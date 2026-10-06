@@ -16,14 +16,32 @@
  * asked for that is not entitled is simply absent from the answer, and asking
  * for the whole book returns only the handful you have earned.
  *
- * ## Why that is the strong version
+ * ## What this does and does not prove — corrected by audit v0.28.1 H2
  *
- * Gating on "is signed in" alone would be weak — signing in costs a Discord
- * account, and one authenticated request could then walk all 340 keys. Gating
- * on *what you hold* means collecting the book requires actually earning every
- * advancement and buying every item, across many real campaign weeks, which is
- * not a scrape. That property is the whole reason this is a D1 table with an
- * entitlement check rather than a JSON file behind a login.
+ * This header used to say that collecting the book "requires actually earning
+ * every advancement and buying every item, across many real campaign weeks".
+ * **That was never true.** `arsenals.doc` is whatever the client last PUT. The
+ * server witnesses no flip, no purchase and no advancement, so "holds" means
+ * *claims to hold*. Anyone signed in can write an arsenal that claims all of it.
+ *
+ * What the gate actually is, stated honestly:
+ *
+ *   1. **Signed in**, with a Discord account.
+ *   2. **Has answered a question** only somebody holding the book can answer
+ *      (`book_access`), once per title.
+ *   3. **Claims to hold the entry** in an arsenal that is *plausible*: no more
+ *      advancements than its checked experience boxes could have paid for
+ *      (`plausibleArsenal`). A forger can still check every box, but that
+ *      caps one arsenal at 15 advancements rather than all of them.
+ *   4. **Has not had too much new text today.** At most `NEW_KEYS_PER_DAY`
+ *      keys a user has never been served before, per rolling day
+ *      (`book_served`, migration 0009). A real leader earns a handful a week.
+ *      Taking the whole book takes more than a week of asking.
+ *
+ * That is friction, not proof. It stops a drive-by scrape and slows a
+ * determined person to a crawl. It does not stop them, and nothing that trusts
+ * the client's document can. If that is ever not good enough, the answer is
+ * the server witnessing play, or emptying the table.
  *
  * The cost is deliberate and worth naming: **the barter counter cannot show
  * text for something you have not bought yet.** An item on offer is not held,
@@ -86,6 +104,7 @@ function entitledKeys(docs) {
       continue
     }
     if (!doc || typeof doc !== 'object') continue
+    if (!plausibleArsenal(doc)) continue
 
     const advancements = [
       ...(doc.leader?.advancements || []),
@@ -104,9 +123,12 @@ function entitledKeys(docs) {
     // Injuries are kept rather than deleted when healed (`removedAt`), and a
     // healed injury is still part of this leader's story — the ledger shows it,
     // so the text stays readable for it.
+    //
+    // Keyed by the printed name, as `injuryKey` in `src/lib/book.js` and the
+    // scaffold key it. This used the arsenal row's random `inj_…` id, which no
+    // book row could ever match (audit v0.28.1 L5).
     for (const i of doc.injuries || []) {
-      if (i?.injuryId) keys.add(`injury:${i.injuryId}`)
-      else if (i?.id) keys.add(`injury:${i.id}`)
+      if (i?.name) keys.add(`injury:${i.name}`)
     }
   }
 
@@ -115,6 +137,45 @@ function entitledKeys(docs) {
 
 /** How many keys one request may ask about. A filter still needs a ceiling. */
 const MAX_KEYS = 200
+
+/**
+ * New keys a user may be served per rolling 24 hours. A key served once is
+ * served again freely for ever, so re-reading your own card costs nothing; only
+ * text you have never been shown counts. A twelve-week campaign earns perhaps
+ * 50 keys per leader across three months, so a real player never sees this.
+ */
+export const NEW_KEYS_PER_DAY = 40
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/**
+ * Where on the experience track an advancement is paid for: the indexes of the
+ * 15 numbered boxes in the flattened 3x13 track (`EXPERIENCE_BOXES` in
+ * `src/data/advancements.js`, p. 37). Duplicated, not imported, by §6. If the
+ * track ever changes, change both. `bookStore.test.js` checks the count.
+ */
+const ADVANCEMENT_BOX_INDEXES = [0, 1, 2, 4, 6, 8, 10, 12, 16, 19, 20, 24, 29, 34, 38]
+
+/** Advancements an arsenal could have paid for with the boxes it has checked. */
+function advancementsPaidFor(boxesChecked) {
+  const n = Number.isFinite(boxesChecked) ? boxesChecked : 0
+  return ADVANCEMENT_BOX_INDEXES.filter((i) => i < n).length
+}
+
+/**
+ * An arsenal claiming more advancements than its own experience track paid for
+ * entitles nothing at all. It cannot be a real leader's record, so nothing it
+ * claims is trusted, its equipment included.
+ *
+ * Leader, totem and crew card all draw on the leader's one track, so they are
+ * counted together. A tier-3 totem advancement spends a box and records no
+ * advancement, so an honest record is only ever at or under the limit.
+ */
+function plausibleArsenal(doc) {
+  const count = (doc.leader?.advancements?.length || 0)
+    + (doc.totem?.advancements?.length || 0)
+    + (doc.crewCardAdvancements?.length || 0)
+  return count <= advancementsPaidFor(doc.leader?.experience?.boxesChecked)
+}
 
 /* ── proving you own the book ───────────────────────────────────── */
 
@@ -302,17 +363,58 @@ export async function getBookText(userId, keys, env) {
   const titles = [...await grantedTitles(userId, env)]
   if (titles.length === 0) return {}
 
-  const keyMarks = allowed.map(() => '?').join(', ')
-  const titleMarks = titles.map(() => '?').join(', ')
+  /*
+   * Lists are bound as one JSON array each and opened with `json_each`, rather
+   * than one `?` per key. D1 allows 100 bound parameters a statement, and
+   * MAX_KEYS alone is 200, so a full ask used to be a query D1 would refuse.
+   */
   const { results } = await env.DB.prepare(
     `SELECT key, text FROM book_text
-      WHERE key IN (${keyMarks}) AND title IN (${titleMarks})`
-  ).bind(...allowed, ...titles).all()
+      WHERE key IN (SELECT value FROM json_each(?))
+        AND title IN (SELECT value FROM json_each(?))`
+  ).bind(JSON.stringify(allowed), JSON.stringify(titles)).all()
+  const rows = results || []
+  if (rows.length === 0) return {}
+
+  /*
+   * The daily allowance. Keys already served pass freely; new ones are taken
+   * in order until today's room runs out, and the rest are simply absent, as
+   * an unentitled key is. Only rows that exist are recorded, so a typo cannot
+   * spend somebody's allowance.
+   */
+  const now = Date.now()
+  const { results: seen } = await env.DB.prepare(
+    `SELECT key FROM book_served
+      WHERE user_id = ? AND key IN (SELECT value FROM json_each(?))`
+  ).bind(userId, JSON.stringify(rows.map((r) => r.key))).all()
+  const already = new Set((seen || []).map((r) => r.key))
+
+  const fresh = rows.filter((r) => !already.has(r.key))
+  let granted = []
+  if (fresh.length > 0) {
+    const { results: recent } = await env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM book_served WHERE user_id = ? AND first_at > ?`
+    ).bind(userId, now - DAY_MS).all()
+    const room = Math.max(0, NEW_KEYS_PER_DAY - (recent?.[0]?.n ?? 0))
+    granted = fresh.slice(0, room)
+    if (granted.length > 0) {
+      await env.DB.prepare(
+        `INSERT OR IGNORE INTO book_served (user_id, key, first_at)
+         SELECT ?, value, ? FROM json_each(?)`
+      ).bind(userId, now, JSON.stringify(granted.map((r) => r.key))).run()
+    }
+  }
 
   const out = {}
-  for (const row of results || []) out[row.key] = row.text
+  for (const row of rows) {
+    if (already.has(row.key)) out[row.key] = row.text
+  }
+  for (const row of granted) out[row.key] = row.text
   return out
 }
 
 /** Exported for the authorization tests, which assert on the entitled set. */
-export const __test = { entitledKeys, advancementKey, MAX_KEYS }
+export const __test = {
+  entitledKeys, advancementKey, plausibleArsenal, advancementsPaidFor,
+  ADVANCEMENT_BOX_INDEXES, MAX_KEYS,
+}

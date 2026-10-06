@@ -6,7 +6,8 @@ import {
   tierOfBox, boxesCrossed, experienceWasted, trackIsFull, TOTAL_EXPERIENCE_BOXES,
   doctorOutcome, doctorAffordable,
   modelsToFlipFor, resolveInjuryFlip, resolveLuckyMiss, annihilatedAfterInjuries,
-  resolveDoctorInjury, doomedSubjects,
+  resolveDoctorInjury, doomedSubjects, boughtCount, purchaseReady, fateTakesBack,
+  doctorPatientInjuryNames,
 } from './aftermath.js'
 import { EXPERIENCE_TRACK, EXPERIENCE_BOXES, offerFor, findTable } from '../data/advancements.js'
 import { BARTER, THIRST, barterOffer, thirstOffer, ALWAYS } from '../data/equipment.js'
@@ -449,5 +450,114 @@ describe('who the end of phase six carries off', () => {
   it('takes nobody when nobody qualifies', () => {
     expect(doomedSubjects(crew, () => 2)).toEqual([])
     expect(doomedSubjects([], () => 9)).toEqual([])
+  })
+})
+
+/* ── the barter counter (audit v0.28.1 M1) ─────────────────────── */
+
+describe('boughtCount', () => {
+  const bought = [
+    { rowId: 'eqp_1', equipmentId: 'coffee', name: 'Coffee', cc: 1 },
+    { rowId: 'eqp_2', equipmentId: 'coffee', name: 'Coffee', cc: 1 },
+    { rowId: 'eqp_3', equipmentId: 'duplicator', name: 'Duplicator', cc: 4 },
+  ]
+  it('counts the record as it is really written, objects and all', () => {
+    expect(boughtCount(bought, 'coffee')).toBe(2)
+    expect(boughtCount(bought, 'duplicator')).toBe(1)
+    expect(boughtCount(bought, 'false-face')).toBe(0)
+  })
+  it('is zero for a barter with nothing bought', () => {
+    expect(boughtCount(undefined, 'coffee')).toBe(0)
+  })
+})
+
+describe('purchaseReady', () => {
+  it('accepts the first click', () => {
+    expect(purchaseReady(null, [])).toBe(true)
+  })
+  it('refuses a second click before the first purchase reaches the record', () => {
+    expect(purchaseReady(0, [])).toBe(false)
+  })
+  it('accepts the next purchase once the first has landed', () => {
+    expect(purchaseReady(0, [{ equipmentId: 'coffee' }])).toBe(true)
+  })
+  it('still refuses while the record stands where the last click left it', () => {
+    expect(purchaseReady(1, [{ equipmentId: 'coffee' }])).toBe(false)
+  })
+  it('accepts again after a revision has undone purchases', () => {
+    expect(purchaseReady(2, [])).toBe(true)
+  })
+})
+
+/* ── Miraculous Recovery takes back the newest injury (audit L7) ── */
+
+describe('fateTakesBack', () => {
+  const leaderInjury = (id, name) => ({ id, name, page: 34, modelId: null, titleGroup: null, removedAt: null })
+  const arsenal = (...injuries) => ({ injuries })
+
+  it('takes the injury the phase-6 flip attached', () => {
+    const record = {
+      doctor: { attempts: [] },
+      injuries: { flips: [{ isLeader: true, result: { attaches: true, name: 'Pack Mule' }, rowId: 'inj_3' }] },
+    }
+    const a = arsenal(leaderInjury('inj_1', 'Leadfooted'), leaderInjury('inj_2', 'Senseless'), leaderInjury('inj_3', 'Pack Mule'))
+    expect(fateTakesBack(record, a)).toBe('inj_3')
+  })
+
+  /** The case the old code missed: Dr. Mo handed over the third. */
+  it('takes the injury Dr. Mo attached when no flip did', () => {
+    const record = {
+      doctor: { attempts: [{ isLeader: true, hurt: { name: 'Off Balance' }, addedRowId: 'inj_9' }] },
+      injuries: { flips: [] },
+    }
+    const a = arsenal(leaderInjury('inj_1', 'Leadfooted'), leaderInjury('inj_2', 'Senseless'), leaderInjury('inj_9', 'Off Balance'))
+    expect(fateTakesBack(record, a)).toBe('inj_9')
+  })
+
+  it('prefers the phase-6 injury over an earlier one from the doctor', () => {
+    const record = {
+      doctor: { attempts: [{ isLeader: true, addedRowId: 'inj_2' }] },
+      injuries: { flips: [{ isLeader: true, result: { attaches: true, name: 'Pack Mule' }, rowId: 'inj_3' }] },
+    }
+    const a = arsenal(leaderInjury('inj_1', 'Leadfooted'), leaderInjury('inj_2', 'Off Balance'), leaderInjury('inj_3', 'Pack Mule'))
+    expect(fateTakesBack(record, a)).toBe('inj_3')
+  })
+
+  it('ignores a model’s injuries and a healed row', () => {
+    const record = {
+      doctor: { attempts: [{ isLeader: false, addedRowId: 'inj_m' }, { isLeader: true, addedRowId: 'inj_gone' }] },
+      injuries: { flips: [] },
+    }
+    const a = arsenal({ ...leaderInjury('inj_gone', 'X'), removedAt: 5 }, { ...leaderInjury('inj_m', 'Y'), modelId: 'mdl_1' })
+    expect(fateTakesBack(record, a)).toBeNull()
+  })
+
+  it('falls back to the name for a record from before row ids', () => {
+    const record = { injuries: { flips: [{ isLeader: true, result: { attaches: true, name: 'Pack Mule' } }] } }
+    const a = arsenal(leaderInjury('inj_1', 'Pack Mule'))
+    expect(fateTakesBack(record, a)).toBe('inj_1')
+  })
+})
+
+/* ── the doctor heals before he flips (audit v0.28.1 L8) ───────── */
+
+describe('doctorPatientInjuryNames', () => {
+  const injuries = [{ id: 'inj_1', name: 'Pack Mule' }, { id: 'inj_2', name: 'Senseless' }]
+
+  it('leaves out the injury "How many fingers" heals first', () => {
+    const outcome = doctorOutcome(9)
+    expect(doctorPatientInjuryNames(injuries, outcome, 'inj_1')).toEqual(['Senseless'])
+  })
+
+  it('so the same injury flipped again attaches, rather than being thrown back', () => {
+    const names = doctorPatientInjuryNames(injuries, doctorOutcome(9), 'inj_1')
+    const row = INJURY_TABLE.find((r) => r.name === 'Pack Mule')
+    const out = resolveDoctorInjury(row.value, row.suits[0], { injuryNames: names })
+    expect(out.attaches).toBe(true)
+  })
+
+  it('keeps everything for "Oops?", which heals nothing', () => {
+    expect(doctorPatientInjuryNames(injuries, doctorOutcome('blackJoker'), 'inj_1'))
+      .toEqual(['Pack Mule', 'Senseless'])
   })
 })

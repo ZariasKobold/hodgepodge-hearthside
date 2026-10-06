@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { aftermathDrift, planRepair, repairPatch, describeRepair } from './repair.js'
-import { createArsenal, createModel, createEquipment, STARTING_ARSENAL_WEEK } from './shape/arsenal.js'
+import {
+  createArsenal, createModel, createEquipment, STARTING_ARSENAL_WEEK, annihilateEquipmentPatch,
+} from './shape/arsenal.js'
 
 /**
  * The real loss, transcribed from the documents on the database on
@@ -70,6 +72,17 @@ describe('aftermathDrift', () => {
     expect(d.advancements).toEqual([])
     expect(d.equipment).toEqual([])
     expect(d.boxes).toBe(0)
+  })
+
+  /**
+   * The trap audit v0.28.1 M3 named. Equipment annihilated in a game must not
+   * read as a lost purchase, or the repair would put it back and charge again.
+   */
+  it('does not report annihilated equipment as lost', () => {
+    const base = arsenalWith({ equipment: [createEquipment({ id: 'eqp_mtsy5kbj11nuok' })] })
+    const a = { ...base, ...annihilateEquipmentPatch(base, 'eqp_mtsy5kbj11nuok', 3) }
+    expect(a.equipment[0].annihilated).toBe(true)
+    expect(aftermathDrift(a, campaignWith(a)).equipment).toEqual([])
   })
 
   /** Nothing before v0.22.2 has an id, and a name is not an identity. */

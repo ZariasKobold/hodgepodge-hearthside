@@ -156,7 +156,7 @@ export async function runReconcile({
   } catch (err) {
     return {
       status: err instanceof SyncError && err.signedOut ? 'offline' : 'failed',
-      pushed: 0, pulled: 0, held: 0, adopted: 0, conflicts: [],
+      pushed: 0, pulled: 0, held: 0, adopted: 0, conflicts: [], corrupt: 0,
       error: err.message,
       changed: false,
     }
@@ -175,7 +175,7 @@ export async function runReconcile({
    * it. The deadlock is gone by a different route: `planSync` asks whether the
    * copy is dirty, so a device merely ahead in clock time no longer pushes.
    */
-  const { pull, push, adopted, conflicts } = planSync(mine, theirs, {
+  const { pull, push, adopted, conflicts, corrupt: corruptCampaigns } = planSync(mine, theirs, {
     baseOf: knownVersion,
     isDirty,
   })
@@ -350,6 +350,8 @@ export async function runReconcile({
     held,
     adopted: adopted.length,
     conflicts: clashes,
+    /** Rows on the account the server could not parse, both kinds. */
+    corrupt: corruptCampaigns.length + arsenalPlan.corrupt.length,
     error: trouble,
     changed: pulled > 0,
   }

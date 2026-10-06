@@ -168,24 +168,6 @@ export function stampOwner(campaign, userId) {
    keeps it in its own key where React state cannot reach it. */
 
 /**
- * Works out what to do with a shelf that exists in two places.
- *
- * Pure, and separated from the network on purpose: this is the part that can
- * lose somebody's twelve weeks, so it is the part that gets tested.
- *
- * Three cases, and the third is the one the owner asked for:
- *
- *   remote only  → pull it down; a campaign built on another device
- *   both         → newer `updatedAt` wins; ties keep local, since the local
- *                  copy is the one the running app already has in hand
- *   local only   → push it up. This is the adoption case: everything built
- *                  before signing in, or while signed out, becomes theirs on
- *                  the account the moment they log in.
- *
- * A remote row that failed to parse server-side arrives flagged `corrupt` and
- * is treated as absent, so a damaged row can never overwrite a good local copy.
- */
-/**
  * Decides, per campaign, whether to pull, push, or refuse to guess.
  *
  * ## Versions, not clocks
@@ -226,6 +208,19 @@ export function stampOwner(campaign, userId) {
  * no worse either, and it is now bounded: one pull teaches a device its
  * version and it never comes back here for that campaign. Deleting the
  * fallback outright would strand every copy already on a disk.
+ *
+ * ## The other two cases, and damaged rows
+ *
+ * Remote only pulls: a campaign built on another device. Local only pushes:
+ * the adoption case, everything built before signing in. A remote row that
+ * failed to parse server-side arrives flagged `corrupt` and is treated as
+ * absent, so a damaged row can never overwrite a good local copy, and its id
+ * is returned in `corrupt` so the shelf can say so (audit v0.28.1 M6).
+ *
+ * Pure and separated from the network on purpose: this is the part that can
+ * lose somebody's twelve weeks, so it is the part that gets tested. (A v0.7.0
+ * header that said "newer `updatedAt` wins" sat above this one until audit
+ * v0.28.1 L9; that rule has been the bridge only since v0.18.5.)
  */
 export function planSync(localCampaigns, remoteCampaigns, { baseOf, isDirty } = {}) {
   const base = typeof baseOf === 'function' ? baseOf : () => null
@@ -281,5 +276,9 @@ export function planSync(localCampaigns, remoteCampaigns, { baseOf, isDirty } = 
     push,
     conflicts,
     adopted: push.filter((c) => !remoteById.has(c.id)).map((c) => c.id),
+    // Ids only, and reported rather than acted on. Dropping them from the plan
+    // is what keeps a damaged row from overwriting a good copy; saying so is
+    // what keeps a player from wondering where a leader went (audit M6).
+    corrupt: remoteCampaigns.filter((c) => c && c.id && c.corrupt).map((c) => c.id),
   }
 }

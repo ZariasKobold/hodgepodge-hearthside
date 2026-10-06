@@ -59,9 +59,9 @@ export default function App() {
     creditStartingScrip, owedStartingScrip, repairAftermathDrift,
     setWeek, stepWeek, setWeekMode, resetWeek, setStartedAt, setWeeksTotal,
     setHouseRules,
-    logGame, updateGame, buyEquipment, addInjury, healInjury, dropInjury, annihilateModel,
+    logGame, updateGame, buyEquipment, annihilateEquipment, addInjury, healInjury, dropInjury, annihilateModel,
     advanceLeader, advanceTotem, setTotem, addCrewCardAdvancement, placeAdvancementAt,
-    useMiraculousRecovery, rewindPhases,
+    useMiraculousRecovery, annihilateLeader, rewindPhases,
   } = useCampaign({
     // The shelf is scoped to the account, not the browser. Without this a
     // second person signing in on a shared machine sees the first one's
@@ -290,7 +290,7 @@ export default function App() {
     buyEquipment,
     addInjury, healInjury, dropInjury, annihilateModel,
     advanceLeader, advanceTotem, setTotem, addCrewCardAdvancement, placeAdvancementAt,
-    useMiraculousRecovery, rewindPhases,
+    useMiraculousRecovery, annihilateLeader, rewindPhases,
     addDefector,
     onHire: (model, cost) => {
       addModel(model, { scripPaid: cost })
@@ -344,7 +344,16 @@ export default function App() {
             shelf={shelf}
             onOpen={openCampaign}
             onNew={buildNew}
-            onImport={(data) => { adopt(data); setStep(3); setView('arsenal') }}
+            onImport={(data) => {
+              adopt(data)
+              // `adopt` saves and marks the import dirty but pushes nothing,
+              // and a reconcile otherwise runs once per sign-in. Without this
+              // the import reached the account only on the next page load
+              // (audit v0.28.1 L4).
+              if (auth.available) sync.reconcile()
+              setStep(3)
+              setView('arsenal')
+            }}
             onDiscard={discard}
             sync={sync}
             signedIn={Boolean(auth.user)}
@@ -368,6 +377,7 @@ export default function App() {
             onRepairDrift={repairAftermathDrift}
             onSetTrigger={(trigger) => set({ trigger })}
             onSetTotem={setTotem}
+            onAnnihilateEquipment={annihilateEquipment}
           />
         )}
 

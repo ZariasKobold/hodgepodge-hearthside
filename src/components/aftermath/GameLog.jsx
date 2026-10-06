@@ -3,7 +3,7 @@ import { Label, Field, Button, Input, Select } from '../ui.jsx'
 import HankSays from '../HankSays.jsx'
 import { aftermathGreeting } from '../../data/hank.js'
 import {
-  liveModels, ratingForGame,
+  liveModels, liveEquipment, ratingForGame,
 } from '../../lib/shape/arsenal.js'
 import { maxEncounterSize } from '../../lib/campaign.js'
 
@@ -49,7 +49,9 @@ export default function GameLog({ arsenal, leader, week, weeksRemaining, isFirst
   })
 
   const path = leader.advancementPath
-  const ownedEquipment = arsenal.equipment?.length || 0
+  // Annihilated kit cannot be hired until bought again (p. 22).
+  const kit = liveEquipment(arsenal)
+  const ownedEquipment = kit.length
 
   function submit() {
     onLog({
@@ -69,7 +71,7 @@ export default function GameLog({ arsenal, leader, week, weeksRemaining, isFirst
       // table-side detail the aftermath never reads.
       equipmentHired: Array.from(
         { length: Math.min(Number(g.equipmentHiredCount) || 0, ownedEquipment) },
-        (_, i) => ({ equipmentId: arsenal.equipment[i]?.equipmentId ?? null, modelId: null })
+        (_, i) => ({ equipmentId: kit[i]?.equipmentId ?? null, modelId: null })
       ),
       killedModelIds: g.killedModelIds,
       leaderWasKilled: g.leaderWasKilled,

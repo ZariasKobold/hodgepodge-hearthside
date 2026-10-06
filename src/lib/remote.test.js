@@ -63,6 +63,15 @@ describe('planSync', () => {
     expect(plan.push.map((c) => c.id)).toEqual(['a'])
   })
 
+  /** Audit v0.28.1 M6: dropped from the plan, but no longer dropped silently. */
+  it('names the corrupt rows it set aside', () => {
+    const plan = planSync(
+      [campaign('a', 100)],
+      [{ id: 'a', updatedAt: 9999, corrupt: true }, { id: 'b', updatedAt: 1, corrupt: true }]
+    )
+    expect(plan.corrupt).toEqual(['a', 'b'])
+  })
+
   it('treats a missing timestamp as the oldest possible, never the newest', () => {
     // A campaign saved before updatedAt existed must not win against a real one.
     const plan = planSync([{ id: 'a' }], [campaign('a', 1)])

@@ -74,6 +74,7 @@ export function sameInSubstance(a, b) {
 /* ── summaries: the numbers a player recognises ─────────────────── */
 
 const liveInjuries = (list) => (list || []).filter((i) => !i.removedAt)
+const liveKit = (list) => (list || []).filter((e) => !e.annihilated)
 
 export function summariseArsenal(a) {
   if (!a) return null
@@ -84,7 +85,7 @@ export function summariseArsenal(a) {
     models: live.length,
     soulstones: live.reduce((sum, m) => sum + (m.cost || 0), 0),
     injuries: liveInjuries(a.injuries).length,
-    equipment: (a.equipment || []).length,
+    equipment: liveKit(a.equipment).length,
     experience: a.leader?.experience?.boxesChecked ?? 0,
     advancements: (a.leader?.advancements || []).length,
     totem: a.totem?.name || null,
@@ -181,7 +182,7 @@ export function describeConflict({ kind, mine, theirs }) {
     ? [
         { label: 'models', ...membership(mine?.models, theirs?.models, modelLabel) },
         { label: 'injuries', ...membership(liveInjuries(mine?.injuries), liveInjuries(theirs?.injuries), injuryLabel) },
-        { label: 'equipment', ...membership(mine?.equipment, theirs?.equipment, kitLabel) },
+        { label: 'equipment', ...membership(liveKit(mine?.equipment), liveKit(theirs?.equipment), kitLabel) },
       ]
     : [{ label: 'games', ...membership(mine?.games, theirs?.games, gameLabel) }]
 

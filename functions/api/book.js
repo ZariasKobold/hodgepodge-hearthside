@@ -63,25 +63,40 @@ export async function onRequest(context) {
    */
   const action = body?.action || 'text'
 
-  if (action === 'status') {
-    const titles = [...await grantedTitles(user.id, env)]
-    return json({ titles }, 200, noStore)
-  }
+  try {
+    if (action === 'status') {
+      const titles = [...await grantedTitles(user.id, env)]
+      return json({ titles }, 200, noStore)
+    }
 
-  if (action === 'challenge') {
-    // Null means "already proved, or nothing to ask" — the client shows no gate
-    // either way, which is what "asked once" means.
-    const challenge = await getChallenge(user.id, body?.title, env)
-    return json({ challenge }, 200, noStore)
-  }
+    if (action === 'challenge') {
+      // Null means "already proved, or nothing to ask" — the client shows no gate
+      // either way, which is what "asked once" means.
+      const challenge = await getChallenge(user.id, body?.title, env)
+      return json({ challenge }, 200, noStore)
+    }
 
-  if (action === 'answer') {
-    const result = await answerChallenge(user.id, body?.challengeId, body?.answer, env)
-    return json(result, 200, noStore)
-  }
+    if (action === 'answer') {
+      const result = await answerChallenge(user.id, body?.challengeId, body?.answer, env)
+      return json(result, 200, noStore)
+    }
 
-  const text = await getBookText(user.id, body?.keys, env)
-  // Never cached anywhere between here and the tab. The text is licensed to
-  // the reader, not to the network.
-  return json(text, 200, noStore)
+    const text = await getBookText(user.id, body?.keys, env)
+    // Never cached anywhere between here and the tab. The text is licensed to
+    // the reader, not to the network.
+    return json(text, 200, noStore)
+  } catch (err) {
+    /*
+     * The book tables (0007–0009) are not applied to every database. Until
+     * they are, the honest answer is the empty one each action already gives
+     * when nothing is loaded, not a 500 on every signed-in page load (audit
+     * v0.28.1 L6). Anything else is a real failure and still throws.
+     */
+    if (!/no such table/i.test(String(err?.message || err))) throw err
+    const empty = action === 'status' ? { titles: [] }
+      : action === 'challenge' ? { challenge: null }
+        : action === 'answer' ? { ok: false }
+          : {}
+    return json(empty, 200, noStore)
+  }
 }

@@ -86,6 +86,13 @@ export function createLeader(patch = {}) {
     experience: { boxesChecked: 0 },
     advancements: [],
     miraculousRecoveryUsed: false,
+    /**
+     * The week the leader was annihilated a second time, when Fate had already
+     * stepped in once and the result stands (p. 19). The book says to retire
+     * the crew and start anew (p. 37). Recorded so the arsenal says so, rather
+     * than carrying on as playable with nothing to show (audit v0.28.1 L7).
+     */
+    annihilatedWeek: null,
     ...patch,
   }
 }
@@ -135,6 +142,15 @@ export function createEquipment(patch = {}) {
     /** Those Who Thirst items are limited to one at a time; ordinary ones are not. */
     thirst: false,
     acquiredWeek: null,
+    /**
+     * Annihilated equipment "may not be used until purchased again" (p. 22).
+     * Flagged, never deleted, for the reason models are: `aftermathDrift`
+     * matches every purchase in an aftermath record to the row it created, and
+     * a deleted row reads as *lost*. The repair would then offer to put it back
+     * and charge for it a second time (audit v0.28.1 M3).
+     */
+    annihilated: false,
+    annihilatedWeek: null,
     ...patch,
   }
 }
@@ -331,6 +347,24 @@ export function liveModels(arsenal) {
   return (arsenal?.models || []).filter((m) => !m.annihilated)
 }
 
+/** Equipment that can still be hired. Annihilated kit stays on file, unusable. */
+export function liveEquipment(arsenal) {
+  return (arsenal?.equipment || []).filter((e) => !e.annihilated)
+}
+
+/**
+ * Annihilate one piece of equipment, or undo that. The row stays, so the
+ * purchase that made it still matches (see `createEquipment`). No scrip moves
+ * either way: annihilating is not a sale, and undoing it corrects a misclick.
+ */
+export function annihilateEquipmentPatch(arsenal, rowId, week, annihilated = true) {
+  return {
+    equipment: (arsenal?.equipment || []).map((e) => (e.id === rowId
+      ? { ...e, annihilated, annihilatedWeek: annihilated ? week ?? null : null }
+      : e)),
+  }
+}
+
 export function totalFor(arsenal) {
   return arsenalTotal(liveModels(arsenal))
 }
@@ -408,9 +442,12 @@ export function ratingForGame(arsenal, game) {
   })
 }
 
-/** Equipment ids currently in the arsenal, for the Those Who Thirst limit. */
+/**
+ * Equipment ids currently in the arsenal, for the Those Who Thirst limit.
+ * Annihilated kit is not held: a relic that has gone frees the table again.
+ */
 export function heldEquipmentIds(arsenal) {
-  return (arsenal?.equipment || []).map((e) => e.equipmentId).filter(Boolean)
+  return liveEquipment(arsenal).map((e) => e.equipmentId).filter(Boolean)
 }
 
 /**

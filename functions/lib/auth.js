@@ -125,6 +125,15 @@ export async function completeOAuth(request, env, providerName) {
     return json({ message: 'State mismatch — start sign-in again.' }, 400)
   }
 
+  // The state is single-use. Once it has been checked, every answer clears it,
+  // so a used value does not sit in the browser for the rest of its ten
+  // minutes (audit L1). A mismatch above leaves it alone, because that answer
+  // may be a stale tab and the real sign-in may still be in flight.
+  const spent = (res) => {
+    res.headers.append('Set-Cookie', cookie(STATE_COOKIE, '', { maxAge: 0 }))
+    return res
+  }
+
   const tokenRes = await fetch(p.tokenUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -136,13 +145,13 @@ export async function completeOAuth(request, env, providerName) {
       redirect_uri: redirectUri(request, providerName),
     }),
   })
-  if (!tokenRes.ok) return json({ message: 'Token exchange failed.' }, 502)
+  if (!tokenRes.ok) return spent(json({ message: 'Token exchange failed.' }, 502))
   const { access_token } = await tokenRes.json()
 
   const userRes = await fetch(p.userUrl, {
     headers: { Authorization: `Bearer ${access_token}` },
   })
-  if (!userRes.ok) return json({ message: 'Could not read your profile.' }, 502)
+  if (!userRes.ok) return spent(json({ message: 'Could not read your profile.' }, 502))
 
   const profile = p.normalize(await userRes.json())
   const now = Date.now()
@@ -171,13 +180,13 @@ export async function completeOAuth(request, env, providerName) {
     'INSERT INTO sessions (id, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)'
   ).bind(sessionId, userId, now, expiresAt).run()
 
-  return new Response(null, {
+  return spent(new Response(null, {
     status: 302,
     headers: {
       Location: '/',
       'Set-Cookie': cookie(SESSION_COOKIE, sessionId, { maxAge: SESSION_DAYS * 86400 }),
     },
-  })
+  }))
 }
 
 /**

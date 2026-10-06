@@ -8,17 +8,18 @@ import { advancementKey, equipmentKey, injuryKey, textFor } from '../lib/book.js
  * and the page number. That silence is the whole contract: this is an addition
  * for a player who owns the book, never a hole in the page for one who does not.
  *
- * Pass exactly one of `advancement`, `equipmentId` or `injuryId`.
+ * Pass exactly one of `advancement`, `equipmentId` or `injury` (the upgrade's
+ * printed name).
  *
  * Not persisted anywhere, ever (§4) — see `lib/book.js`.
  */
-export default function BookText({ book, advancement, equipmentId, injuryId }) {
+export default function BookText({ book, advancement, equipmentId, injury }) {
   const key = advancement
     ? advancementKey(advancement.tableId, advancement)
     : equipmentId
       ? equipmentKey(equipmentId)
-      : injuryId
-        ? injuryKey(injuryId)
+      : injury
+        ? injuryKey(injury)
         : null
 
   const text = textFor(book, key)

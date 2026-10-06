@@ -8,7 +8,7 @@ import PhaseInjuries from './aftermath/PhaseInjuries.jsx'
 import { aftermathReaction, campaignEnd } from '../data/hank.js'
 import {
   createAftermath, phasesFor, nextPhase, firstPhase, handFor,
-  paydayBreakdown, experienceFor, withdrewEarly, boxesCrossed,
+  paydayBreakdown, experienceFor, withdrewEarly, boxesCrossed, fateTakesBack,
 } from '../lib/aftermath.js'
 import {
   weeksRemaining, isCampaignOver, gamesWon, gamesPlayed,
@@ -421,19 +421,20 @@ export default function Aftermath({
                 continue
               }
               // Fate intervenes exactly once, and the tick is the record of it.
-              if (leader.miraculousRecoveryUsed) continue
+              // The second time, the result stands (p. 19), and the arsenal
+              // has to say so or it carries on as though nothing happened
+              // (audit v0.28.1 L7).
+              if (leader.miraculousRecoveryUsed) {
+                actions.annihilateLeader()
+                continue
+              }
               actions.useMiraculousRecovery()
-              // "If your leader was annihilated due to receiving a third injury
-              // and Fate intervenes, no new injury is gained but the previous
-              // two remain." Dropped rather than healed: it was never gained,
-              // and a `removedAt` would put a visit to Dr. Mo in the ledger
-              // that never happened.
-              const justAttached = (a.injuries.flips || [])
-                .find((f) => f.isLeader && f.result?.attaches)
-              const row = justAttached && arsenal.injuries
-                .filter((i) => !i.removedAt && !i.modelId && !i.titleGroup)
-                .findLast?.((i) => i.name === justAttached.result.name)
-              if (row) actions.dropInjury(row.id)
+              // "No new injury is gained but the previous two remain." Dropped
+              // rather than healed: it was never gained, and a `removedAt`
+              // would put a visit to Dr. Mo in the ledger that never happened.
+              // The newest injury, whether a flip or the doctor gave it.
+              const rowId = fateTakesBack(a, arsenal)
+              if (rowId) actions.dropInjury(rowId)
             }
             // Keys as well as names: `annihilateModel` was called with the
             // key, so that is what a revision has to look up to bring a model

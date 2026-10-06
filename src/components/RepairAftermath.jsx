@@ -2,13 +2,12 @@ import { Label, Button } from './ui.jsx'
 import { planRepair, describeRepair } from '../lib/repair.js'
 
 /**
- * Putting back what the lost update ate.
+ * Putting back what an aftermath record names and the arsenal lacks.
  *
- * A reconcile in flight used to overwrite an arsenal with its own opening
- * snapshot (fixed in v0.24.0 by `settleAfterPush`). The bug cannot recur; the
- * damage it already did does not undo itself, and one arsenal on the database
- * is still missing a Gatling Gun, three advancements and three experience
- * boxes its own game record says were earned.
+ * Built for a loss that was later retracted as a measurement error (v0.24.1;
+ * see CLAUDE.md), and it has never shown on a real arsenal. So the copy says
+ * what is known, that the record and the arsenal disagree, and never a cause
+ * (audit v0.28.1 M5).
  *
  * ## It shows the whole bill before it does anything
  *
@@ -42,14 +41,13 @@ export default function RepairAftermath({ arsenal, campaign, onRepair }) {
 
   return (
     <section className="repair repair--drift">
-      <Label>An aftermath never reached this leader</Label>
+      <Label>A game record and this leader disagree</Label>
 
       <p className="gap-note">
         <strong>The game record holds more than the arsenal does.</strong>{' '}
-        A sync bug that has since been fixed overwrote this leader with an older
-        copy of itself, so work you did in an aftermath was recorded on the game
-        and lost from the arsenal. Nothing about the record was damaged, so all
-        of it can be put back exactly as it was.
+        An aftermath recorded the things below, and this leader does not have
+        them. The app cannot tell how that happened. The record still holds all
+        of them, so they can be put back exactly as recorded.
       </p>
 
       <ul className="repair__list">

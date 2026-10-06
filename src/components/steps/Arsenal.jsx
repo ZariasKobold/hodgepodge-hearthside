@@ -3,7 +3,7 @@ import { SLOTS, slotLabel } from '../../data/archetypes.js'
 import { getEffect } from '../../data/crewCards.js'
 import { factionLabel } from '../../data/factions.js'
 import {
-  totalFor, liveModels, activeInjuryCount, STARTING_ARSENAL_WEEK,
+  totalFor, liveModels, liveEquipment, activeInjuryCount, STARTING_ARSENAL_WEEK,
 } from '../../lib/shape/arsenal.js'
 import { exportJSON } from '../../lib/storage.js'
 import { buildSheet, sheetToPNG, printSheet } from '../../lib/recordImage.js'
@@ -26,17 +26,27 @@ import TotemCard from '../TotemCard.jsx'
  * Deliberately read-only about the roster. Models arrive through the starting
  * arsenal (creation) or the weekly hire (campaign), and leave by annihilation.
  * A delete button here would imply a fourth route that the rules do not have.
+ *
+ * Equipment is the exception, because the book gives it a route the app cannot
+ * see. Some kit annihilates itself during a game (Lucky Gremlin Foot, p. 22),
+ * and only the player knows when. So each piece has an Annihilate control, and
+ * it flags the row rather than deleting it (audit v0.28.1 M3).
  */
 export default function Arsenal({
   campaign, arsenal, leader, archetype, week, rules, fileNumber,
   onEditLeader, onHire, onSheet, onPlaceAdvancement, onRepairDrift, onSetTrigger, onSetTotem,
+  onAnnihilateEquipment,
 }) {
   const [imaging, setImaging] = useState(null)
   /** Which action each unplaced advancement is about to be given. */
   const [placing, setPlacing] = useState({})
+  /** The equipment row whose annihilation is waiting to be confirmed. */
+  const [confirming, setConfirming] = useState(null)
 
   const models = liveModels(arsenal)
   const lost = arsenal.models.filter((m) => m.annihilated)
+  const kit = liveEquipment(arsenal)
+  const lostKit = (arsenal.equipment || []).filter((e) => e.annihilated)
   const effect = getEffect(leader.crewCard.effect)
   const stem = (leader.name || 'leader').toLowerCase().replace(/\s+/g, '-')
 
@@ -71,6 +81,18 @@ export default function Arsenal({
         <span>{models.length} {models.length === 1 ? 'model' : 'models'}</span>
         {activeInjuryCount(arsenal) > 0 && <span><strong>{activeInjuryCount(arsenal)}</strong> injuries</span>}
       </div>
+
+      {leader.annihilatedWeek != null && (
+        // A gap-note, not Hank: it is a fact about the rules (§5).
+        <p className="gap-note">
+          <strong>{leader.name || 'This leader'} was annihilated in week{' '}
+          {leader.annihilatedWeek}.</strong>{' '}
+          Fate had already stepped in once, so the result stands (p. 19). The
+          book says to retire this crew and start anew (p. 37): a new arsenal,
+          with 5 extra scrip for every week the campaign has run past the first.
+          This record stays as it was, so the campaign's story is still readable.
+        </p>
+      )}
 
       <LeaderRecord leader={leader} archetype={archetype} fileNumber={fileNumber} rules={rules} />
 
@@ -163,6 +185,54 @@ export default function Arsenal({
             </div>
           )
         })}
+
+        <div style={{ marginTop: 10 }}>
+          <Label>Equipment</Label>
+          {kit.length === 0 ? (
+            <div className="empty">
+              No equipment. It is bought at the barter counter in the aftermath.
+            </div>
+          ) : kit.map((e) => (
+            <div className="pick" key={e.id} style={{ borderColor: 'var(--line)', background: 'var(--panel)' }}>
+              <span className="pick__meta" style={{ fontSize: 13, color: 'var(--text)' }}>{e.name}</span>
+              <span style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                {e.page && <span className="pick__meta">p.{e.page}</span>}
+                {onAnnihilateEquipment && (confirming === e.id ? (
+                  <>
+                    <Button ghost onClick={() => { onAnnihilateEquipment(e.id, true); setConfirming(null) }}>
+                      Yes, it is gone
+                    </Button>
+                    <Button ghost onClick={() => setConfirming(null)}>Keep it</Button>
+                  </>
+                ) : (
+                  <Button ghost onClick={() => setConfirming(e.id)}>Annihilate</Button>
+                ))}
+              </span>
+            </div>
+          ))}
+          {kit.length > 0 && (
+            <p className="note">
+              Only for kit annihilated during a game. It cannot be used until it
+              is bought again (p. 22), and no scrip comes back.
+            </p>
+          )}
+        </div>
+
+        {lostKit.length > 0 && (
+          <div style={{ marginTop: 10 }}>
+            <Label>Annihilated equipment — buy again to use</Label>
+            {lostKit.map((e) => (
+              <div className="pick" key={e.id} style={{ borderColor: 'var(--coal-wash)', background: 'var(--panel)', opacity: 0.7 }}>
+                <span className="pick__meta" style={{ fontSize: 13 }}>
+                  {e.name}{e.annihilatedWeek != null && ` · week ${e.annihilatedWeek}`}
+                </span>
+                {onAnnihilateEquipment && (
+                  <Button ghost onClick={() => onAnnihilateEquipment(e.id, false)}>Undo</Button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Its own category, and never one of the weeks.
             A totem is not hired and has no scrip price: it arrives from the

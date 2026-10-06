@@ -67,13 +67,11 @@ for (const item of [...(BARTER || []), ...(THIRST || [])]) {
   put(equipmentKey(item.id), item.page ? `p.${item.page}` : null)
 }
 
-// Injury rows vary in shape between the chart, Lucky Miss and the doctor, so
-// take whatever carries an id and a name.
-for (const [name, value] of Object.entries(injuries)) {
-  if (!Array.isArray(value)) continue
-  for (const row of value) {
-    if (row?.id) put(injuryKey(row.id), row.page ? `p.${row.page}` : `from ${name}`)
-  }
+// Every upgrade the injury chart can attach, once each, keyed by name. The
+// chart's rows carry no id, so this used to look for one and write nothing
+// (audit v0.28.1 L5). Lucky Miss results are not injuries and are not keyed.
+for (const row of injuries.INJURY_TABLE) {
+  if (row.injury) put(injuryKey(row.name), row.page ? `p.${row.page}` : null)
 }
 
 fs.mkdirSync(path.dirname(target), { recursive: true })

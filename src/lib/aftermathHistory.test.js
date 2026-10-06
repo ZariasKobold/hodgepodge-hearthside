@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest'
 import {
   describeFlip, summarisePhase, summariseAftermath, summariseGame,
 } from './aftermathHistory.js'
+import { createGame } from './shape/campaign.js'
+import { createAftermath } from './aftermath.js'
 
 describe('describeFlip', () => {
   it('names the card and its suit', () => {
@@ -144,10 +146,30 @@ describe('summariseAftermath', () => {
     expect(summariseAftermath(null)).toEqual([])
   })
 
-  /** A forfeited phase is not an empty one, and must not read as a choice. */
-  it('marks a skipped phase rather than calling it empty', () => {
-    const out = summariseAftermath({ aftermath: { skippedPhases: ['barter'] } })
-    expect(out.find((p) => p.id === 'barter').skipped).toBe(true)
+  /**
+   * A forfeited phase is not an empty one, and must not read as a choice.
+   *
+   * Built the way a real record is made. The fixture this replaced carried a
+   * `skippedPhases` field that nothing writes, so it agreed with the bug
+   * (audit v0.28.1 M2).
+   */
+  it('marks the phases an early withdrawal forfeits', () => {
+    const game = createGame({
+      withdrew: true, withdrewOnTurn: 2,
+      aftermath: createAftermath({ phase: 'determine_injuries', done: true }),
+    })
+    const out = summariseAftermath(game)
+    expect(out.filter((p) => p.skipped).map((p) => p.id)).toEqual([
+      'draw_hand', 'payday', 'barter', 'advance_leader', 'back_alley_doctor',
+    ])
+    expect(out.find((p) => p.id === 'determine_injuries').skipped).toBe(false)
+  })
+
+  it('forfeits nothing for a crew that withdrew on turn three', () => {
+    const game = createGame({
+      withdrew: true, withdrewOnTurn: 3, aftermath: createAftermath(),
+    })
+    expect(summariseAftermath(game).some((p) => p.skipped)).toBe(false)
   })
 })
 

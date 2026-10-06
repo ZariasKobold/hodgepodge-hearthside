@@ -26,6 +26,7 @@ export default function SharedArsenal({ arsenal }) {
   const live = models.filter((m) => !m.annihilated)
   const total = arsenalTotal(live)
   const activeInjuries = injuries.filter((i) => !i.removedAt)
+  const kit = equipment.filter((e) => !e.annihilated)
 
   const name = member.nickname
     || (member.isYou ? 'You' : arsenal.isHost ? 'The host' : 'unnamed player')
@@ -94,11 +95,11 @@ export default function SharedArsenal({ arsenal }) {
 
         <section>
           <div className="label">Equipment</div>
-          {equipment.length === 0
+          {kit.length === 0
             ? <p className="note">None.</p>
             : (
               <ul className="hire__list">
-                {equipment.map((e) => (
+                {kit.map((e) => (
                   <li key={e.id}>
                     <span>{e.name}</span>
                     <span className="hire__paid">{e.page ? `p.${e.page}` : ''}</span>

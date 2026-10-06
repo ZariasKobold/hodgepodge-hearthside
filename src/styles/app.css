@@ -1322,6 +1322,7 @@ body::after {
 .stock__name { flex: 1 1 160px; }
 .stock__meta { color: var(--faint); font-size: 11px; }
 .stock__cc { color: var(--brass); }
+.stock__bought { color: var(--ember); }
 
 .picklist { display: flex; flex-direction: column; gap: 2px; }
 .picklist .hire__check { margin: 0; }

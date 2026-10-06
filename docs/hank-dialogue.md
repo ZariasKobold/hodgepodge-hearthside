@@ -30,7 +30,7 @@ Reference by number when you want changes: "S-04 is too smug," "L-02 cut the las
 ---
 
 ## Aftermath — standing rotation
-*The default. One per week of a twelve-week campaign.*
+*The default. Picked by week number, so S-13 appears only on week 13, and only in a campaign long enough that week 13 is not one of its final two (those use the final-weeks pool). Moving it earlier would shift every line after it by a week.*
 
 **S-01**
 > "Well howdy again, friend. Pull up a log, fire's still hot. I been talkin' to Henrietta all week for want of better company, so yer a welcome sight. What happened out there?"
@@ -67,6 +67,9 @@ Reference by number when you want changes: "S-04 is too smug," "L-02 cut the las
 
 **S-12**
 > "Y'all again! Startin' to think you like my company more'n whatever's out there. Can't say I blame ya. Sit. Talk. How'd it turn out?"
+
+**S-13** · *was I-01, your original. It asks how things went, so it is an arrival line, and it used to fire at the injury flip after the game had been described.*
+> "Well howdy again friend, it's been a hot minute. Let's catch up. Looks like y'all have gotten into a tussle or two. I do love me a good battle story and comparin' scars. If y'all need I also have a doc friend who'll fix ya up. He ain't got a doctor's license, strictly speakin' but that's just cuz the board thought his methods were "questionable." Anyway, how'd things go?"
 
 ---
 
@@ -153,13 +156,13 @@ Reference by number when you want changes: "S-04 is too smug," "L-02 cut the las
 ---
 
 ## Aftermath — when there's an injury
-*Fires at the injury flip that produces one, not on arrival — the app can't know about injuries until the flips happen. The doc keeps his joke by being rare. I-01 is your original.*
-
-**I-01**
-> "Well howdy again friend, it's been a hot minute. Let's catch up. Looks like y'all have gotten into a tussle or two. I do love me a good battle story and comparin' scars. If y'all need I also have a doc friend who'll fix ya up. He ain't got a doctor's license, strictly speakin' but that's just cuz the board thought his methods were "questionable." Anyway, how'd things go?"
+*Fires at the injury flip that produces one, not on arrival — the app can't know about injuries until the flips happen. The doc keeps his joke by being rare. I-01 moved to the standing rotation as S-13; its number is retired rather than reused.*
 
 **I-02**
 > "Ooh. That's gonna leave a mark, and I mean that in the admirin' way. Dr. Mo's still around if y'all want patchin' — he works cheap on account of nobody else'll have him. How'd this happen?"
+
+**I-03**
+> "Well boy howdy, that is gonna leave a scar. I hope y'all have a swift recovery."
 
 ---
 
@@ -985,4 +988,4 @@ All three index by week rather than picking randomly, so week seven always
 reads the same. Two players comparing screens shouldn't see different text for
 the same week.
 
-**Counts:** 3 creation · 10 archetype · 38 selections · 6 send-off · 16 greeting · 24 reaction · 2 injury · 33 barter · 42 hire · 32 healing · 9 advancement · 14 annihilation · 12 campaign end = 241 lines
+**Counts:** 3 creation · 10 archetype · 38 selections · 6 send-off · 17 greeting · 24 reaction · 2 injury · 33 barter · 42 hire · 32 healing · 9 advancement · 14 annihilation · 12 campaign end = 242 lines

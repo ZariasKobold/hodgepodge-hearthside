@@ -1,8 +1,11 @@
+import { useRef } from 'react'
 import { Label, Field, Button } from '../ui.jsx'
 import HankSays from '../HankSays.jsx'
 import FlipInput, { RED_JOKER } from '../FlipInput.jsx'
 import { barterGreeting, barterAcquired, barterEmpty } from '../../data/hank.js'
-import { barterStock, thirstStock, reachesThirst } from '../../lib/aftermath.js'
+import {
+  barterStock, thirstStock, reachesThirst, boughtCount, purchaseReady,
+} from '../../lib/aftermath.js'
 import {
   heldEquipmentIds,
 } from '../../lib/shape/arsenal.js'
@@ -50,6 +53,14 @@ export default function PhaseBarter({ week, arsenal, record, handSize, onFlip, o
     : []
 
   const flipped = value != null
+  // The length of `bought` when the last purchase was accepted. A click before
+  // that purchase reaches the record is the same click twice (audit M1).
+  const pending = useRef(null)
+  const buy = (entry) => {
+    if (!purchaseReady(pending.current, bought)) return
+    pending.current = bought.length
+    onBuy(entry, thirstOpen)
+  }
   const boughtSomething = bought.length > 0
 
   return (
@@ -101,7 +112,7 @@ export default function PhaseBarter({ week, arsenal, record, handSize, onFlip, o
           <Label>{thirstOpen ? 'On offer' : 'On the counter'}</Label>
           <ul className="stock">
             {(thirstOpen ? relics : stock).map((e) => {
-              const owned = bought.includes(e.id)
+              const count = boughtCount(bought, e.id)
               return (
                 <li key={e.id} className="stock__row">
                   <span className="stock__name">{e.name}</span>
@@ -109,12 +120,13 @@ export default function PhaseBarter({ week, arsenal, record, handSize, onFlip, o
                     {e.br === ALWAYS ? 'always available' : `BR ${e.br}`} · p.{e.page}
                   </span>
                   <span className="stock__cc">{e.cc} scrip</span>
+                  {count > 0 && <span className="stock__bought">Bought ×{count}</span>}
                   <Button
                     ghost
-                    disabled={owned || !e.affordable}
-                    onClick={() => onBuy(e, thirstOpen)}
+                    disabled={!e.affordable}
+                    onClick={() => buy(e)}
                   >
-                    {owned ? 'Bought' : e.affordable ? 'Buy' : 'Too dear'}
+                    {e.affordable ? (count ? 'Buy another' : 'Buy') : 'Too dear'}
                   </Button>
                   {/* The player's own copy of the book, when they have supplied
                       one. Absent, this renders nothing and the row reads exactly
