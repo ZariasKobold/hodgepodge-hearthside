@@ -240,7 +240,12 @@ export function forkDocument(doc) {
  * stakes — weeks and house rules rather than twelve weeks of history — so they
  * get the two honest choices and no clever third one.
  */
-export function resolveConflict({ kind, choice, mine, theirs }, deps) {
+export function resolveConflict({ kind, mine, theirs }, choice, deps) {
+  // Its own argument since v0.33.1. It used to be read off the conflict, and
+  // the conflicts `reconcile` raises never carry one, so every button on the
+  // conflict screen threw "Unknown conflict resolution" and did nothing. The
+  // tests passed a hand-built conflict with `choice` inside it, which no real
+  // caller ever did.
   const { rememberVersion, markDirty, saveDoc } = deps
   if (!mine && !theirs) return { resolved: null }
 

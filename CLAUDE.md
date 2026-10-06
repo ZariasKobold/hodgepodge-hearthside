@@ -1,10 +1,10 @@
 # CLAUDE.md — Hodgepodge Hearthside project context
 
-<!-- HH v0.33.0 | Last updated: 2026-10-06 -->
+<!-- HH v0.33.1 | Last updated: 2026-10-06 -->
 
 ---
 
-## Current Version: 0.33.0
+## Current Version: 0.33.1
 
 ## Last Updated: 2026-10-06
 
@@ -315,7 +315,7 @@ aftermath. Shipped and live:
 | **The service worker** | v0.19.3. It cached Pages' SPA fallback under asset URLs, so a browser that loaded mid-deploy got a **permanent white screen** no reload could clear. Live since v0.14.0, observed in production on 2026-09-03. Two guards now — never write HTML under a non-navigation request, never serve it either — plus a cache-version bump that purges anyone already poisoned. |
 | **Membership** | v0.17.0. Owner-issued single-use invites, two gates (redeem → pending → host admits), per-campaign nicknames, opt-in Discord identity, and a read-only shared arsenal page. Writes were **not** widened — see below. |
 
-873 tests at v0.33.0.
+876 tests at v0.33.1.
 
 ### Unfinished business finds the player now — v0.23.0
 
@@ -1570,8 +1570,16 @@ Three rules in it worth not undoing:
 - **Identical copies settle themselves** (`sameInSubstance`), and nothing else
   ever does. That is provably lossless; everything else is the owner's call.
 
-**Still unexercised against a real conflict.** Sync has been on since v0.21.0,
-but no two devices are known to have disagreed yet. The pure layer has 38 tests and the screen was driven in a browser against an injected
+**Its buttons did nothing until v0.33.1.** The owner hit the first real
+conflict on 2026-10-06 and reported it. `resolveConflict` read the choice off
+the conflict object, `useSync` passed the conflict as `reconcile` raised it
+(which has no `choice`), and every click threw "Unknown conflict resolution".
+The tests built conflicts with `choice` inside, which no caller ever did. The
+choice is now its own argument, and a test settles a conflict in exactly the
+shape `reconcile` raises. The same report had both columns reading "Nothing the
+other copy is missing"; `differingPaths` now names the fields that differ when
+the summary cannot. **Why two copies of an unnamed arsenal disagreed is not
+known** — the next one will say, on screen. The pure layer has 38 tests and the screen was driven in a browser against an injected
 conflict; neither is the same as two devices disagreeing.
 
 **Medium:**
@@ -2090,7 +2098,7 @@ every session. `docs/VERSION_HISTORY.md` holds how it got this way.
 npm install
 cp .env.example .env
 npm run dev      # Vite only — NO Functions, NO database. useAuth degrades to signed out.
-npm run test     # 873 tests; `functions/` is in the run too, for the authz tests
+npm run test     # 876 tests; `functions/` is in the run too, for the authz tests
 npm run dialogue # hank.js and hank-dialogue.md agree (§1)
 npm run build    # production bundle — the dev proxy does NOT exist here
 npm run seed     # optional local register file; ask BiggerHat's maintainer first

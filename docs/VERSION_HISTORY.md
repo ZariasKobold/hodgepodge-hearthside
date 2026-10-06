@@ -5879,3 +5879,33 @@ UNVERIFIED: not yet used at a real table; the opponent's side is not shared
 live (each player tracks their own crew).
 NEXT: owner feedback from a real game. Live two-sided tracking would build on
 the Phase B session and needs a write path under `functions/`.
+
+#### v0.33.1 — the conflict screen's buttons work
+
+Owner report with a screenshot: a conflict on an unnamed leader, both columns
+reading "Nothing the other copy is missing", and "these buttons do nothing".
+
+They did nothing because `resolveConflict({ kind, choice, mine, theirs }, deps)`
+took the choice off the conflict, and `useSync.resolve(id, choice)` passed the
+conflict exactly as `runReconcile` raised it, `{ kind, id, mine, theirs }`, and
+dropped `choice` on the floor. Every click threw "Unknown conflict resolution"
+inside the click handler, where nobody sees it. Live since v0.20.0. Its five
+tests all passed hand-built conflicts with `choice` inside, the lesson of
+v0.22.4 again: a fixture easier than production is not a fixture.
+
+The choice is now a separate argument, `resolveConflict(conflict, choice,
+deps)`, so leaving it out cannot be silent, and a new test settles all three
+choices on a conflict in the exact shape `reconcile` raises.
+
+The empty columns: `describeConflict` summarises scrip, models, injuries and
+kit, and these two copies agree on all of them while differing somewhere else.
+`differingPaths` now lists the fields that differ (two levels deep, at most
+eight) and the screen shows them when the summary has nothing to say. What
+actually differed in this case is not known; the screen will name it next time.
+
+3 new tests, 876 total. Not reproduced in a browser: a conflict needs a server
+copy, and `npm run dev` has none. The fix is covered by the test above.
+
+Files: `src/lib/shelf.js` + test, `src/hooks/useSync.js`,
+`src/lib/shape/compare.js` + test, `src/components/ConflictNotice.jsx`,
+`CLAUDE.md`, `package.json`

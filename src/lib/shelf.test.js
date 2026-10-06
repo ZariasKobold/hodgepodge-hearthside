@@ -250,7 +250,7 @@ describe('settling a conflict', () => {
 
   it('take theirs: writes the server copy as the server, and stops being dirty', () => {
     const { calls, deps } = spy()
-    const out = resolveConflict({ kind: 'arsenal', choice: 'theirs', mine, theirs }, deps)
+    const out = resolveConflict({ kind: 'arsenal', mine, theirs }, 'theirs', deps)
     expect(out.resolved).toBe('theirs')
     expect(out.fork).toBeNull()
     // keepTimestamp: this device did not author it, so it must not claim to have.
@@ -263,7 +263,7 @@ describe('settling a conflict', () => {
     // Not a bypass of the baseVersion gate — the gate asks "have you seen the
     // copy you are replacing?", and a person was just shown it and chose.
     const { calls, deps } = spy()
-    const out = resolveConflict({ kind: 'arsenal', choice: 'mine', mine, theirs }, deps)
+    const out = resolveConflict({ kind: 'arsenal', mine, theirs }, 'mine', deps)
     expect(out.resolved).toBe('mine')
     expect(calls.saved).toEqual([])            // local copy already is what it is
     expect(calls.versions).toEqual([['ars_1', 7]])
@@ -272,7 +272,7 @@ describe('settling a conflict', () => {
 
   it('keep both: forks mine to a new id and lets theirs have the old one', () => {
     const { calls, deps } = spy()
-    const out = resolveConflict({ kind: 'arsenal', choice: 'both', mine, theirs }, deps)
+    const out = resolveConflict({ kind: 'arsenal', mine, theirs }, 'both', deps)
     expect(out.resolved).toBe('both')
     expect(out.fork.id).not.toBe('ars_1')
     expect(out.fork.forkedFrom).toBe('ars_1')
@@ -286,13 +286,24 @@ describe('settling a conflict', () => {
   it('refuses to keep both campaigns, rather than half-linking one', () => {
     const { deps } = spy()
     expect(() =>
-      resolveConflict({ kind: 'campaign', choice: 'both', mine: { id: 'cmp_1' }, theirs: { id: 'cmp_1' } }, deps)
+      resolveConflict({ kind: 'campaign', mine: { id: 'cmp_1' }, theirs: { id: 'cmp_1' } }, 'both', deps)
     ).toThrow(/only available for leaders/)
+  })
+
+  it('settles a conflict exactly as reconcile raises it, with no choice inside', () => {
+    // The shape `runReconcile` pushes: kind, id, mine, theirs. Nothing else.
+    // v0.33.0 and before read the choice off this object, so every button on
+    // the conflict screen did nothing.
+    const raised = { kind: 'arsenal', id: 'ars_1', mine, theirs }
+    for (const choice of ['theirs', 'mine', 'both']) {
+      const { deps } = spy()
+      expect(resolveConflict(raised, choice, deps).resolved).toBe(choice)
+    }
   })
 
   it('refuses a choice it does not recognise', () => {
     const { deps } = spy()
-    expect(() => resolveConflict({ kind: 'arsenal', choice: 'newest', mine, theirs }, deps))
+    expect(() => resolveConflict({ kind: 'arsenal', mine, theirs }, 'newest', deps))
       .toThrow(/Unknown conflict resolution/)
   })
 })

@@ -189,6 +189,15 @@ export function describeConflict({ kind, mine, theirs }) {
   return {
     kind,
     id: mine?.id ?? theirs?.id ?? null,
+    /**
+     * Where the two copies part, as field paths, when the summary shows no
+     * difference. Without it the screen read "Nothing the other copy is
+     * missing" on both sides of a real conflict, which leaves nothing to
+     * choose by (v0.33.1).
+     */
+    otherFields: differences.length === 0 && sets.every((s) => !s.onlyMine.length && !s.onlyTheirs.length)
+      ? differingPaths(mine, theirs)
+      : [],
     /** Nothing to choose — see `sameInSubstance`. */
     identical: sameInSubstance(mine, theirs),
     mine: { updatedAt: mine?.updatedAt ?? null, summary: mineSummary },
@@ -196,6 +205,27 @@ export function describeConflict({ kind, mine, theirs }) {
     differences,
     sets: sets.filter((s) => s.onlyMine.length > 0 || s.onlyTheirs.length > 0),
   }
+}
+
+/**
+ * The fields two documents disagree on, two levels deep: `leader.portrait`,
+ * `ownerUserId`. `updatedAt` is left out, as `canonical` leaves it out.
+ * Capped, because a list of forty paths is not something a person can weigh.
+ */
+export function differingPaths(a, b, { limit = 8 } = {}) {
+  const out = []
+  const keys = (x) => (x && typeof x === 'object' && !Array.isArray(x) ? Object.keys(x) : [])
+  const same = (x, y) => canonical(x, { drop: [] }) === canonical(y, { drop: [] })
+  for (const key of [...new Set([...keys(a), ...keys(b)])].sort()) {
+    if (key === 'updatedAt') continue
+    const x = a?.[key]
+    const y = b?.[key]
+    if (same(x, y)) continue
+    const inner = [...new Set([...keys(x), ...keys(y)])].sort().filter((k) => !same(x?.[k], y?.[k]))
+    if (inner.length && inner.length <= 3) inner.forEach((k) => out.push(`${key}.${k}`))
+    else out.push(key)
+  }
+  return out.slice(0, limit)
 }
 
 /**

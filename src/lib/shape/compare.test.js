@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   canonical, sameInSubstance, summariseArsenal, summariseCampaign,
-  describeConflict, moreRecent,
+  describeConflict, moreRecent, differingPaths,
 } from './compare.js'
 import { createArsenal, createModel, createInjury, createEquipment, createLeader, createTotem } from './arsenal.js'
 import { createCampaign, createGame, createParticipation } from './campaign.js'
@@ -158,5 +158,21 @@ describe('moreRecent', () => {
     expect(moreRecent({ mine: { updatedAt: 2 }, theirs: { updatedAt: 1 } })).toBe('mine')
     expect(moreRecent({ mine: { updatedAt: 1 }, theirs: { updatedAt: 2 } })).toBe('theirs')
     expect(moreRecent({ mine: { updatedAt: 1 }, theirs: { updatedAt: 1 } })).toBeNull()
+  })
+})
+
+describe('differingPaths — what differs when the summary cannot say', () => {
+  it('names the fields, two levels deep, and skips updatedAt', () => {
+    const a = createArsenal({ id: 'ars_1', leader: createLeader({ name: '' }) })
+    const b = { ...a, updatedAt: 5, ownerUserId: 'u_1', leader: { ...a.leader, portrait: 'data:x' } }
+    expect(differingPaths(a, b)).toEqual(['leader.portrait', 'ownerUserId'])
+  })
+
+  it('reaches the conflict screen only when the summary shows nothing', () => {
+    const a = createArsenal({ id: 'ars_1' })
+    const quiet = describeConflict({ kind: 'arsenal', mine: a, theirs: { ...a, ownerUserId: 'u_1' } })
+    expect(quiet.otherFields).toEqual(['ownerUserId'])
+    const loud = describeConflict({ kind: 'arsenal', mine: a, theirs: { ...a, scrip: 4, ownerUserId: 'u_1' } })
+    expect(loud.otherFields).toEqual([])
   })
 })

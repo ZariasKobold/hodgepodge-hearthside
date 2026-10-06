@@ -69,6 +69,13 @@ export default function ConflictNotice({ conflict, onResolve, onDownload }) {
         </table>
       )}
 
+      {c.otherFields.length > 0 && (
+        <p className="note">
+          The two copies hold the same models, scrip and history. They differ
+          only in: <code>{c.otherFields.join(', ')}</code>. Either is safe to keep.
+        </p>
+      )}
+
       {/* The escape hatch comes first, and before any choice is made. §8 treats
           portability as a requirement, and this is the moment it matters most. */}
       <p className="note" style={{ marginTop: 12 }}>

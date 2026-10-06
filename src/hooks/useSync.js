@@ -272,7 +272,7 @@ export function useSync({ user, available, onChanged }) {
     const clash = state.conflicts.find((c) => c.id === id)
     if (!clash) return
 
-    const out = resolveConflict(clash, {
+    const out = resolveConflict(clash, choice, {
       saveDoc: (kind, doc, opts) => (kind === 'arsenal' ? saveArsenal(doc, opts) : saveCampaign(doc, opts)),
       rememberVersion,
       markDirty,
