@@ -78,7 +78,7 @@ export default function Masthead({ step, onJump, fileNumber, auth, admitted = tr
         >
           Leaders
         </button>
-        {/* Creation and Campaign both edit one campaign, so they only exist
+        {/* Everything after Leaders acts on the open leader, so it only exists
             while one is open. Showing them on the shelf would be offering to
             edit nobody. */}
         {inCampaign && (
@@ -103,6 +103,16 @@ export default function Masthead({ step, onJump, fileNumber, auth, admitted = tr
               aria-current={view === 'create' ? 'page' : undefined}
             >
               Creation
+            </button>
+            {/* Its own destination by owner decision (v0.32.1): it is the
+                screen opened at the table before every game. Before Campaign,
+                because that is the order of an evening's play. */}
+            <button
+              className={`views__item${view === 'crew' ? ' views__item--on' : ''}`}
+              onClick={() => onView('crew')}
+              aria-current={view === 'crew' ? 'page' : undefined}
+            >
+              Crew
             </button>
             <button
               className={`views__item${view === 'campaign' ? ' views__item--on' : ''}`}

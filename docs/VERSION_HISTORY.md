@@ -5715,3 +5715,97 @@ Files: `src/lib/encounter.js` (new) + test (new),
 UNVERIFIED: a crew built on one device and logged on another; sync carries the
 field, but it has not been watched doing so.
 NEXT: Phase B, the shared hidden-until-revealed session (D1, one row per crew).
+
+---
+
+### Session 76 — v0.32.0
+Date: 2026-10-06
+
+**feat: the crew builder, Phase B — hire together, hidden until both reveal**
+
+Two players hire for one game on their own devices; neither sees the other's
+crew until both have revealed (p. 19, and the design doc's rule that a builder
+which leaked the list would be worse than a notebook).
+
+**The shape the owner agreed in Session 74, not the sketch's.** The sketch put
+the encounter in the host's campaign `doc`. That cannot hide anything from the
+host, who reads their own document, and it would have a member writing the
+host's row. Migration 0010 instead adds `shared_encounters` and
+`encounter_crews`, one row per seat, written only by its player.
+
+`functions/lib/encounterStore.js`, to campaignStore's three rules:
+- **Open** only at a table you sit at (owner or active), with your own
+  arsenal linked there, against another player's arsenal linked there whose
+  owner is still owner or active. At most 20 open per player.
+- **Read** only sessions you have a seat in. The other crew is selected in
+  SQL only when both have revealed. Never a user id; the other side is a
+  nickname and a leader name, both already on the shared page.
+- **Reveal** once, own seat, while still at the table. A second reveal is 409.
+  What is stored is `sanitiseCrew`'s rebuild of what was sent, field by field.
+- **Close** own seat only.
+
+**Tested on real SQLite.** `node:sqlite` with every migration applied, behind
+a 30-line D1 adapter. 38 tests, including the route over HTTP shapes. Each of
+three deliberate breakages (the hiding clause, the reveal's seat scope, the
+opponent role check) failed a test; the seat scope was caught only
+incidentally, so a direct test was added. A round-trip test fails if the client
+summary and the server's sanitiser drift apart.
+
+Client: `src/lib/sharedCrew.js` (summary, stage, rating fill, size
+disagreement, the fetches), `useSharedCrew` (polls every 10 s only while the
+Crew tab is open and visible, and on becoming visible), `SharedCrewPanel`. A
+revealed crew locks its controls with one `fieldset`. Discarding a linked crew
+or recording its game closes the seat, best effort.
+
+**Proven with two accounts.** `wrangler pages dev` on a local D1, the host on
+`localhost:8788` and the member on `127.0.0.1:8788` (separate cookie jars),
+sessions already in the local database. Fish revealed first: the host's raw
+`GET /api/encounters` said `revealed: true, crew: null`, with no model name
+and no user id in the body. Then the host revealed: both saw both crews, the
+host's opponent rating filled in as 0, Fish's pool took the +1 bonus (7).
+Fish recorded the game and her seat closed.
+
+Two things found in the browser and fixed:
+- A hidden tab skipped its polls and showed a stale stage on return. It now
+  refreshes on `visibilitychange`.
+- Once Fish recorded the game, the host's panel switched to "left" and hid her
+  revealed crew, which the host still needed. Both-revealed now outranks left.
+
+And one before shipping: production does not have 0010, so the route answers
+an empty list and a plain 503 on writes until it does (the L6 pattern), rather
+than a 500 on every poll.
+
+44 new tests, 852 total.
+
+Files: `migrations/0010_shared_encounters.sql` (new),
+`functions/lib/encounterStore.js` (new) + test (new),
+`functions/api/encounters/[[path]].js` (new), `src/lib/sharedCrew.js` (new)
++ test (new), `src/hooks/useSharedCrew.js` (new),
+`src/components/SharedCrewPanel.jsx` (new),
+`src/components/steps/Encounter.jsx`, `src/components/steps/Campaign.jsx`,
+`src/components/Aftermath.jsx`, `src/styles/app.css`, `docs/data-model-v3.md`,
+`CLAUDE.md`, `package.json`
+Migration 0010 applied to remote on 2026-10-06 by owner go-ahead, before the
+push, so the code never met a database without its tables. Verified after:
+`shared_encounters` and `encounter_crews` present and empty; 6 users and 8
+arsenals, unchanged.
+UNVERIFIED: no shared hire has run in production yet.
+NEXT: watch the first real shared hire.
+
+#### v0.32.1 — Crew is a top-level view
+
+Owner request: the crew builder should not be buried in Campaign; drop Creation
+from the menu only if six items did not fit. They fit. The navigation reads
+Leaders · Arsenal · Sheet · Creation · Crew · Campaign, Crew before Campaign
+because that is the order of a game night. `steps/Crew.jsx` holds the shared
+session's polling, so it runs only on that view. "Played it" opens Campaign on
+its Aftermath tab through a new `initialTab` prop; any other route to Campaign
+still opens on the hire.
+
+The phone bar had equal slots, which clipped "Campaign" by 3px at 375px and
+"Creation" too at 320px. Slots are sized to their labels now, with 12px type
+below 360px; measured in the browser, nothing clips at 375 or 320.
+
+Files added to this entry: `src/components/steps/Crew.jsx` (new),
+`src/components/Masthead.jsx`, `src/App.jsx`,
+`src/components/steps/Campaign.jsx`, `src/styles/app.css`.

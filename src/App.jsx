@@ -20,6 +20,7 @@ import BuildStamp from './components/BuildStamp.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import ArsenalLibrary from './components/ArsenalLibrary.jsx'
 import Campaign from './components/steps/Campaign.jsx'
+import Crew from './components/steps/Crew.jsx'
 import Arsenal from './components/steps/Arsenal.jsx'
 import ArsenalSheet from './components/ArsenalSheet.jsx'
 import OutstandingBar from './components/OutstandingBar.jsx'
@@ -46,6 +47,8 @@ export default function App() {
   // Five views. `library` is the shelf of leaders; the other four are only
   // reachable with a campaign open, because they all edit or read one.
   const [view, setView] = useState('library')
+  /** Which Campaign sub-tab to open on: the aftermath when arriving from Crew. */
+  const [campaignTab, setCampaignTab] = useState('hire')
   // Held here rather than inside the badge so there is exactly one /api/auth/me
   // per load, and so the storage adapter has it to hand when it lands.
   //
@@ -310,7 +313,7 @@ export default function App() {
         auth={auth}
         admitted={admitted}
         view={view}
-        onView={setView}
+        onView={(v) => { setCampaignTab('hire'); setView(v) }}
         inCampaign={inCampaign}
         onLibrary={toLibrary}
       />
@@ -399,7 +402,7 @@ export default function App() {
             covered, and the other two rendered a page containing nothing but
             the Back button and the legal line (audit v0.11.0, M2). */}
         {admitted && inCampaign && !archetype &&
-          (view === 'arsenal' || view === 'sheet' || view === 'campaign' ||
+          (view === 'arsenal' || view === 'sheet' || view === 'campaign' || view === 'crew' ||
            (view === 'create' && step === 3)) && (
           <div className="empty">
             This leader isn't finished yet — no archetype chosen.{' '}
@@ -409,8 +412,21 @@ export default function App() {
           </div>
         )}
 
+        {admitted && inCampaign && view === 'crew' && archetype && (
+          <Crew
+            campaign={campaign}
+            arsenal={arsenal}
+            leader={leader}
+            membership={membership}
+            actions={campaignActions}
+            signedIn={Boolean(auth.user)}
+            onToTable={() => { setCampaignTab('aftermath'); setView('campaign') }}
+          />
+        )}
+
         {admitted && inCampaign && view === 'campaign' && archetype && (
           <Campaign
+            initialTab={campaignTab}
             campaign={campaign}
             arsenal={arsenal}
             leader={leader}

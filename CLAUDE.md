@@ -1,10 +1,10 @@
 # CLAUDE.md — Hodgepodge Hearthside project context
 
-<!-- HH v0.31.0 | Last updated: 2026-10-06 -->
+<!-- HH v0.32.1 | Last updated: 2026-10-06 -->
 
 ---
 
-## Current Version: 0.31.0
+## Current Version: 0.32.1
 
 ## Last Updated: 2026-10-06
 
@@ -119,40 +119,65 @@ audits had to invent the check by hand and one got it wrong.
 
 ## ⚠️ NEXT SESSION — pending
 
-### The crew builder — Phase A shipped v0.31.0; Phase B is next
+### The crew builder — both phases built (v0.31.0, v0.32.0)
 
-**Phase A is the Crew tab** (Campaign view, between Weekly hire and Aftermath):
-`src/lib/encounter.js` (pure, 25 tests) and `components/steps/Encounter.jsx`.
-One side, on this device, offline-capable. Pick the crew from the arsenal,
-leader always in at 0 and the totem optional at 0 (p. 19), equipment onto a
-holder, the opponent picked off the table's shared page or typed. It computes
-the cap, the cost, the rating and the starting pool. "Played it" hands the game
-log the crew's facts, and logging the game closes the encounter in the same
-write. Verified in a browser end to end.
+> **Migration 0010 is applied on remote** — 2026-10-06, by owner go-ahead,
+> with `d1 execute --file`. Verified after: both tables present and empty,
+> users and arsenals unchanged. Not yet exercised by two real players; watch
+> the first shared hire.
 
-Rules in it that should not be undone:
+**Crew is a top-level view** (v0.32.1, owner decision): Leaders · Arsenal ·
+Sheet · Creation · **Crew** · Campaign. It was a Campaign sub-tab at first, which
+buried the screen opened at the table before every game. `steps/Crew.jsx` owns
+the shared session's polling; "Played it" opens Campaign on its Aftermath tab
+(`initialTab`). The phone bar sizes each slot to its label, so all six fit at
+320px; equal slots clipped "Campaign" at 375px. Removing Creation was the
+owner's fallback if they did not fit, and was not needed.
+
+**Phase A is the crew itself**:
+`src/lib/encounter.js` (pure) and `components/steps/Encounter.jsx`. One side,
+on this device, offline-capable. Pick the crew from the arsenal, leader always
+in at 0 and the totem optional at 0 (p. 19), equipment onto a holder, the
+opponent picked off the table's shared page or typed. It computes the cap, the
+cost, the rating and the starting pool. "Played it" hands the game log the
+crew's facts, and logging the game closes the encounter in the same write.
+
+**Phase B is hiring together**, hidden until both reveal:
+`functions/lib/encounterStore.js` + `/api/encounters`, migration 0010,
+`src/lib/sharedCrew.js`, `useSharedCrew`, `SharedCrewPanel`. With the opponent
+picked from the table, "Invite … to hire with you" opens a session; the other
+player finds it on their Crew tab and hires on their own device. Each reveals
+once. Proven end to end against a local D1 with two accounts in two cookie jars
+(`localhost` and `127.0.0.1`): the raw API held Fish's crew back from the host
+until both had revealed, then both saw both, the rating and pool bonus filled
+in, and recording the game closed the seat.
+
+Rules that should not be undone:
 
 - **The rating counts the hired crew** (owner decision, Session 74): kit
   taken, leader advancements, totem advancements only if the totem came, minus
-  injuries on the leader and the hired models. p. 19 works it out "after hiring
-  and revealing crews". **A game logged by hand**, with no crew, still uses the
-  whole-arsenal `ratingForGame`, because it does not know who was hired.
-- **Out of keyword is +1, Versatile exempt** (owner decision), and **ticked by
-  the player per model.** The arsenal stores no keywords for its models (§4
-  keeps the stored model to slug, name and cost), so the app cannot know.
+  injuries on the leader and the hired models. A game logged by hand still uses
+  the whole-arsenal `ratingForGame`, because it does not know who was hired.
+- **Out of keyword is +1, Versatile exempt** (owner decision), **ticked by the
+  player per model**: the arsenal stores no keywords for its models (§4).
 - **The pool takes the leftover to six**; the lower rating's bonus, up to
   three, may go past six. Excess hiring stones are never scrip (p. 19).
-- **Encounters live on the player's own campaign document**, beside `games`,
-  as `campaign.encounters`. Optional on read: a campaign from before v0.31.0
-  has none. A played encounter is a record and cannot be discarded.
-
-**Phase B, the shared session**, builds on this. **Not** inside the host's
-campaign document, as the design sketch has it: the host could read a hidden
-crew, and a member would be writing the host's row. Owner agreed: a small D1
-table, **one row per crew, owned by the player hiring it**, and the server
-returns the other side only once both are revealed. That is a `functions/`
-change and a new persisted shape, so §5's third trigger fires: give the new
-store attack tests in the `campaignStore.test.js` style before it ships.
+- **Hidden is enforced in SQL.** `listSharedEncounters` selects the other
+  crew inside `CASE WHEN me.revealed_at IS NOT NULL AND them.revealed_at IS NOT
+  NULL`. Never move that check to the client, and never select `crew` without it.
+- **One row per seat, written only by its player.** Not the host's campaign
+  document, as the design sketch had it: the host could read a hidden crew, and
+  a member would write the host's row (§12, the `arsenal_models` hole).
+- **A reveal is final.** Changing a crew after seeing theirs is the cheat the
+  whole thing exists to prevent. The local crew locks too.
+- **The server stores what `sanitiseCrew` rebuilds, never what it was sent.**
+  A round-trip test fails if `crewSummary` and `sanitiseCrew` drift apart.
+- **`encounterStore.test.js` runs on real SQLite** (`node:sqlite`, every
+  migration applied), not a string-matching fake. It was mutation-checked:
+  loosening the hiding clause, the seat scope or the opponent's role check each
+  fails a test. Keep it that way for anything that reads across players.
+- **Polled every ten seconds, only while the Crew tab is open and visible**,
+  and refreshed the moment the tab is looked at again.
 
 ### Book text — what is still to do before any is loaded
 
@@ -254,7 +279,7 @@ aftermath. Shipped and live:
 | **The service worker** | v0.19.3. It cached Pages' SPA fallback under asset URLs, so a browser that loaded mid-deploy got a **permanent white screen** no reload could clear. Live since v0.14.0, observed in production on 2026-09-03. Two guards now — never write HTML under a non-navigation request, never serve it either — plus a cache-version bump that purges anyone already poisoned. |
 | **Membership** | v0.17.0. Owner-issued single-use invites, two gates (redeem → pending → host admits), per-campaign nicknames, opt-in Discord identity, and a read-only shared arsenal page. Writes were **not** widened — see below. |
 
-807 tests at v0.31.0.
+852 tests at v0.32.0.
 
 ### Unfinished business finds the player now — v0.23.0
 
@@ -1644,7 +1669,9 @@ hodgepodge-hearthside/
 │   ├── lib/
 │   │   ├── auth.js         OAuth, sessions, sameOrigin; may hold secrets
 │   │   ├── campaignStore.js  ALL authorization lives here — read the header
-│   │   └── campaignStore.test.js  16 attack tests; the most important here
+│   │   ├── campaignStore.test.js  16 attack tests; the most important here
+│   │   ├── encounterStore.js  hiring together; the other crew stays hidden in SQL
+│   │   └── encounterStore.test.js  attacks it on real SQLite (node:sqlite)
 │   └── api/
 │       ├── v1/[[path]].js  BiggerHat proxy (scoped to /v1 so it can't eat /auth)
 │       ├── campaigns/      list, read, upsert, delete — scoped to the caller
@@ -1667,6 +1694,7 @@ hodgepodge-hearthside/
 │   │   ├── remote.js       the D1 client + planSync, the merge that can lose data
 │   │   ├── reconcile.js    runReconcile — the sync loops, injectable and tested
 │   │   ├── encounter.js    the crew builder: hiring a crew out of the arsenal (p. 19)
+│   │   ├── sharedCrew.js   hiring together: the revealed summary + /api/encounters
 │   │   ├── rewind.js       going back through an aftermath, and what it costs
 │   │   ├── advancement.js  which action an advancement went on, and what it did
 │   │   └── recordImage.js  canvas PNG + the LEGAL constant
@@ -2025,7 +2053,7 @@ every session. `docs/VERSION_HISTORY.md` holds how it got this way.
 npm install
 cp .env.example .env
 npm run dev      # Vite only — NO Functions, NO database. useAuth degrades to signed out.
-npm run test     # 807 tests; `functions/` is in the run too, for the authz tests
+npm run test     # 852 tests; `functions/` is in the run too, for the authz tests
 npm run dialogue # hank.js and hank-dialogue.md agree (§1)
 npm run build    # production bundle — the dev proxy does NOT exist here
 npm run seed     # optional local register file; ask BiggerHat's maintainer first
@@ -2172,7 +2200,8 @@ Two rules it establishes that are easy to violate:
 - **Never loop a query per arsenal or per model.** D1's free plan caps a Worker
   invocation at 50 queries. Fetch sets.
 
-**Five views, and Leaders is not an exit.** `library` (the shelf of *arsenals*),
+**Six views, and Leaders is not an exit.** `crew` (v0.32.1, hiring for a game)
+joined the five below. `library` (the shelf of *arsenals*),
 `arsenal` (the standing view of one — leader record, roster by week, crew cards),
 `sheet` (the arsenal sheet), `create` (the wizard) and `campaign` — which since
 v0.16.0 holds the weekly hire *and* the aftermath as two sub-tabs under one

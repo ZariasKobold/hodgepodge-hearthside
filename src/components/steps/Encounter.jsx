@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Label, Field, Button, Input, Select } from '../ui.jsx'
 import {
   liveModels, liveEquipment, injuryCountForModel, injuriesFor, totalFor,
@@ -10,6 +10,8 @@ import {
   LEADER, TOTEM,
 } from '../../lib/encounter.js'
 import { arsenalTotal } from '../../lib/campaign.js'
+import { invitations, sessionFor, ratingPatch } from '../../lib/sharedCrew.js'
+import SharedCrewPanel from '../SharedCrewPanel.jsx'
 
 /**
  * Hire a crew for this week's game, out of the arsenal (p. 19).
@@ -17,8 +19,12 @@ import { arsenalTotal } from '../../lib/campaign.js'
  * Phase A of the crew builder: one side, on this device, kept on the player's
  * own campaign document so a closed tab loses nothing. It works offline (§6).
  * The opponent's numbers are typed, or read off the table's shared page when
- * the player sits at one. Phase B, the shared hidden-until-revealed session,
- * builds on this rather than replacing it.
+ * the player sits at one.
+ *
+ * Phase B sits on top (`SharedCrewPanel`, `useSharedCrew`): when the opponent
+ * is at the same table, both can hire at once, hidden from each other until
+ * both reveal. Revealing locks the crew here, because it can no longer change
+ * on the server either.
  *
  * No Hank. Picking a crew is data entry, and he is silent through it (§3).
  * Everything that is a rule rather than a number is a `.gap-note`, so it shows
@@ -26,13 +32,51 @@ import { arsenalTotal } from '../../lib/campaign.js'
  *
  * The arithmetic is all in `lib/encounter.js`. This file only renders it.
  */
-export default function Encounter({ campaign, arsenal, leader, membership, actions, onToTable }) {
+export default function Encounter({ campaign, arsenal, leader, membership, actions, shared, onToTable }) {
   const encounter = openEncounter(campaign, arsenal.id)
   const [discarding, setDiscarding] = useState(false)
+  const session = sessionFor(encounter, shared?.sessions)
+
+  // Once both have revealed, their rating is a fact: fill it in, unless the
+  // player already typed one. Before the early return, as hooks must be.
+  const theirCrew = session?.theirs?.crew
+  useEffect(() => {
+    if (!encounter) return
+    const patch = ratingPatch(encounter, session)
+    if (patch) actions.updateEncounter(encounter.id, patch)
+  }, [encounter?.id, theirCrew]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const totalOf = (a) => arsenalTotal((a.models || []).filter((m) => !m.annihilated))
 
   if (!encounter) {
+    const asked = invitations(shared?.sessions, campaign)
     return (
       <>
+        {asked.map((s) => {
+          const theirArsenal = (membership?.arsenals || []).find((a) => a.id === s.theirs.arsenalId)
+          return (
+            <div className="gap-note" key={s.id}>
+              <strong>{s.theirs.nickname || 'A player at your table'}</strong>
+              {s.theirs.leader ? ` (${s.theirs.leader})` : ''} has asked you to hire for a game
+              {s.week ? ` in week ${s.week}` : ''}. Neither crew is visible until you both reveal.
+              <div className="export">
+                <Button onClick={() => actions.startEncounter({
+                  sharedId: s.id,
+                  opponent: {
+                    name: s.theirs.nickname || '',
+                    arsenalId: s.theirs.arsenalId,
+                    arsenalTotal: theirArsenal ? totalOf(theirArsenal) : null,
+                    rating: null,
+                  },
+                })}
+                >
+                  Hire for it
+                </Button>
+                <Button ghost onClick={() => shared.close(s.id).catch(() => {})}>Not playing</Button>
+              </div>
+            </div>
+          )
+        })}
         <Field>
           <Label>Hire a crew</Label>
           <p className="note">
@@ -48,6 +92,8 @@ export default function Encounter({ campaign, arsenal, leader, membership, actio
   }
 
   const set = (patch) => actions.updateEncounter(encounter.id, patch)
+  // A revealed crew is fixed on the server, so it is fixed here too.
+  const locked = Boolean(encounter.revealedAt || session?.mine?.revealed)
   const setOpponent = (patch) => set((e) => ({ opponent: { ...e.opponent, ...patch } }))
 
   const models = liveModels(arsenal)
@@ -66,7 +112,6 @@ export default function Encounter({ campaign, arsenal, leader, membership, actio
   // Everyone else at the table, read off the shared page. Totals are computed
   // from their live models, the same way `totalFor` does for this arsenal.
   const others = (membership?.arsenals || []).filter((a) => !a.isMine && !a.member?.isYou)
-  const totalOf = (a) => arsenalTotal((a.models || []).filter((m) => !m.annihilated))
   const pickOpponent = (id) => {
     const a = others.find((x) => x.id === id)
     if (!a) { setOpponent({ arsenalId: null }); return }
@@ -95,10 +140,32 @@ export default function Encounter({ campaign, arsenal, leader, membership, actio
         {pool && <span>pool <strong>{pool.total ?? `${pool.fromHire}+`}</strong></span>}
       </div>
 
+      {shared && (
+        <SharedCrewPanel
+          encounter={encounter}
+          arsenal={arsenal}
+          leader={leader}
+          shared={shared}
+          ready={encounterReady(encounter, arsenal)}
+          onLinked={(sharedId) => set({ sharedId })}
+          onRevealed={() => set({ revealedAt: Date.now() })}
+        />
+      )}
+
+      {/* Everything that shapes the crew, disabled at once when it is revealed.
+          A fieldset is the one element that does that for every control in it. */}
+      <fieldset className="crew__fieldset" disabled={locked}>
+
       <Field>
         <Label>Who you are playing</Label>
         {others.length > 0 && (
-          <Select value={encounter.opponent.arsenalId || ''} onChange={(e) => pickOpponent(e.target.value)}>
+          <Select
+            value={encounter.opponent.arsenalId || ''}
+            onChange={(e) => pickOpponent(e.target.value)}
+            // A shared game is with this opponent; changing it would leave the
+            // session pointing at somebody else.
+            disabled={Boolean(encounter.sharedId)}
+          >
             <option value="">Someone not at this table, typed below</option>
             {others.map((a) => (
               <option key={a.id} value={a.id}>
@@ -245,6 +312,8 @@ export default function Encounter({ campaign, arsenal, leader, membership, actio
         </p>
       </Field>
 
+      </fieldset>
+
       <Field>
         <Label>Campaign rating — {rating}</Label>
         <div className="hire__breakdown">
@@ -304,7 +373,16 @@ export default function Encounter({ campaign, arsenal, leader, membership, actio
         </Button>
         {discarding ? (
           <>
-            <Button ghost onClick={() => { actions.discardEncounter(encounter.id); setDiscarding(false) }}>
+            <Button
+              ghost
+              onClick={() => {
+                // Leave the shared game too, so the other side is told rather
+                // than left waiting. Best effort: the local crew goes either way.
+                if (encounter.sharedId && shared) shared.close(encounter.sharedId).catch(() => {})
+                actions.discardEncounter(encounter.id)
+                setDiscarding(false)
+              }}
+            >
               Yes, throw this crew away
             </Button>
             <Button ghost onClick={() => setDiscarding(false)}>Keep it</Button>

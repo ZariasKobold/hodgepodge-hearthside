@@ -333,8 +333,9 @@ lived inside a campaign.
 
 ### The Encounter
 
-> **Phase A is built (v0.31.0)** as one side on the player's own campaign
-> document: `src/lib/encounter.js`. The sketch below is the original; where
+> **Both phases are built.** Phase A (v0.31.0) is one side on the player's own
+> campaign document: `src/lib/encounter.js`. Phase B (v0.32.0) is the shared
+> session: `functions/lib/encounterStore.js`, migration 0010. The sketch below is the original; where
 > they differ, the code wins. The shared session (Phase B) will **not** live
 > inside the host's campaign document as sketched here: one D1 row per crew,
 > owned by the player hiring it, revealed by the server only when both are
