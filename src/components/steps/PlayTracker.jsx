@@ -24,7 +24,7 @@ import TotemCard from '../TotemCard.jsx'
  * No Hank: a game in progress is the last place for narration (§3).
  */
 export default function PlayTracker({
-  encounter, arsenal, leader, archetype, rules, roster, tracker, onBackToHire, onFinish,
+  encounter, arsenal, leader, archetype, rules, roster, tracker, onBackToHire, onFinish, reference = null,
 }) {
   const { play, change, clear } = tracker
   const [clearing, setClearing] = useState(false)
@@ -105,6 +105,8 @@ export default function PlayTracker({
         </div>
       </div>
 
+      {reference}
+
       <div className="play__units">
         {units.map((u) => (
           <Unit
@@ -149,7 +151,7 @@ export default function PlayTracker({
         <Button onClick={() => onFinish(playFacts(play, { hiredModels: hired }))}>
           Game over — record it
         </Button>
-        <Button ghost onClick={onBackToHire}>Back to the hire</Button>
+        <Button ghost onClick={onBackToHire}>Back to setup</Button>
         {clearing ? (
           <>
             <Button ghost onClick={() => { clear(); setClearing(false) }}>Yes, wipe the tracker</Button>

@@ -101,6 +101,19 @@ describe('cost and size (p. 19)', () => {
     expect(paysKeywordTax(outsider, { ...a, keywords: ['', ''] })).toBe(false)
   })
 
+  it('allows two models outside both keywords and refuses a third (core rules, Hire Crew)', () => {
+    const a = arsenalFixture()
+    const out = (id, name) => createModel({ id, name, cost: 3, keywords: ['tidal'] })
+    a.models.push(out('o1', 'One'), out('o2', 'Two'), out('o3', 'Three'),
+      createModel({ id: 'v1', name: 'Vers', cost: 3, keywords: ['tidal'], characteristics: ['versatile'] }))
+    const two = enc({ modelIds: ['o1', 'o2', 'v1'], opponent: { arsenalTotal: 40 } })
+    expect(encounterProblems(two, a)).toEqual([])
+    const three = enc({ modelIds: ['o1', 'o2', 'o3'], opponent: { arsenalTotal: 40 } })
+    expect(encounterProblems(three, a)).toEqual([
+      '3 hired models share neither of your keywords (One, Two, Three); at most 2 may be hired. Versatile models do not count.',
+    ])
+  })
+
   it('ignores a taxed list left on an older encounter', () => {
     const a = arsenalFixture()
     expect(crewCost(enc({ modelIds: ['m_swash'], taxed: ['m_swash'] }), a)).toBe(4)

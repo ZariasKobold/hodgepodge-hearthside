@@ -294,8 +294,52 @@ export function fetchCard(slug, opts) {
   return pending
 }
 
+/* ── strategies and schemes, the same way ───────────────────────────── */
+
+/**
+ * The current season's strategy and scheme text, read live and held for the
+ * tab only, exactly as the cards are (§4). Names and suits are in
+ * `data/gainingGrounds.js` so setup works without this; this is the text.
+ *
+ * Kept to the four text fields each carries, plus the name. `image` and ids are
+ * dropped: nothing here needs them.
+ */
+const scenario = { strategies: new Map(), schemes: new Map(), pending: null }
+
+const scenarioText = (x, fields) => {
+  const out = { name: x.name, slug: x.slug, suit: x.suit ?? null }
+  for (const f of fields) out[f] = x[f] || ''
+  return out
+}
+
+export function fetchScenarioText(opts) {
+  if (scenario.strategies.size && scenario.schemes.size) return Promise.resolve(true)
+  if (scenario.pending) return scenario.pending
+  scenario.pending = Promise.all([registry.strategies(opts), registry.schemes(opts)])
+    .then(([strategies, schemes]) => {
+      for (const s of strategies) {
+        scenario.strategies.set(s.slug, scenarioText(s, ['setup', 'rules', 'scoring', 'additional_scoring']))
+      }
+      for (const s of schemes) {
+        scenario.schemes.set(s.slug, scenarioText(s, ['selector', 'prerequisite', 'reveal', 'scoring']))
+      }
+      scenario.pending = null
+      return true
+    })
+    .catch((err) => {
+      scenario.pending = null
+      throw err
+    })
+  return scenario.pending
+}
+
+export const cachedStrategy = (slug) => scenario.strategies.get(slug) || null
+export const cachedScheme = (slug) => scenario.schemes.get(slug) || null
+
 /** For tests, and for sign-out, where holding someone's text around is rude. */
 export function forgetCards() {
   cache.clear()
   inflight.clear()
+  scenario.strategies.clear()
+  scenario.schemes.clear()
 }

@@ -5909,3 +5909,77 @@ copy, and `npm run dev` has none. The fix is covered by the test above.
 Files: `src/lib/shelf.js` + test, `src/hooks/useSync.js`,
 `src/lib/shape/compare.js` + test, `src/components/ConflictNotice.jsx`,
 `CLAUDE.md`, `package.json`
+
+---
+
+### Session 78 — v0.34.0
+Date: 2026-10-06
+
+**feat: the crew builder grows into cards, crews and a game set up by the rules**
+
+Owner requests, one message:
+
+1. **The ledger sticks once you scroll**, and **hired turns red** over the size.
+   `crew/CrewPicker.jsx`'s ledger is sticky under `--masthead-h`. Over the
+   size it reads "hired 33ss · 8 over" in `--coal-lit`.
+2. **A caret beside every name opens its card.** BiggerHat for models, the
+   totem off its table row (`TotemCard`), and the leader as a **leader card**:
+   `LeaderRecord variant="card"`, the record at a crew card's scale, in this
+   app's own handbill and not Wyrd's stat card layout (§8). Cards stay viewable
+   after a crew is locked, so locking moved from a `fieldset` to each control.
+3. **Three modes.** Crew now has Cards, Crews and Play tabs. Crews
+   (`lib/crews.js`, 5 tests) are saved on the arsenal; every encounter function
+   reads a crew because a crew is exactly the hiring half of an encounter. Play
+   starts a game with a new crew or a saved one; "Play this crew" does it from
+   the list; a saved crew can also be loaded at the hire step, and a hire saved
+   as a crew.
+4. **Play follows encounter setup A–K** from the pasted core rules, with the
+   campaign's p. 19 changes: size capped by the arsenals, faction and leader
+   fixed, hiring from the arsenal, and the added Campaign Rating step after the
+   reveal. `lib/scenario.js` (9 tests) and `crew/EncounterSetup.jsx`: a rail of
+   twelve steps, any order, a panel each, and "Start of game" lists what is still
+   open and starts anyway. The tracker shows the strategy and the chosen scheme.
+5. **Gaining Grounds One for strategies and schemes.** The PDF in `docs/` lists
+   only names (p. 6: six strategies, 21 schemes); the text is on the card pack.
+   BiggerHat serves all of it, tagged `gaining_grounds_1`, with suits. So
+   `data/gainingGrounds.js` holds names, slugs and suits, and the text is read
+   live into `rules.js` (memory only, §4). Deployment by suit comes from the
+   suit glyphs beside each deployment in the core rules: Ram standard, Crow
+   corner, Tome flank, Mask wedge.
+
+**A rule found on the way:** the core rules allow at most two hired models
+outside the leader's keywords, Versatile excepted, and p. 19 leaves the step
+otherwise unchanged. It was not enforced. It is now a problem in
+`encounterProblems` and a red "off keyword 3/2" in the ledger.
+
+**A trap avoided:** `crews: []` was first added as a default in
+`createArsenal`. Every v3 arsenal passes through it on load, so one device's
+copy would have gained a field the account's lacked, and sync compares them.
+Removed before it shipped; CLAUDE.md now says so.
+
+Proven in a browser on a seeded Bayou arsenal: a saved crew at 25ss going red
+at 33 and flagging three off-keyword models; both cards opening; "Play this
+crew" starting setup with the crew hired; Tome and Crow giving Map the Area
+(text from BiggerHat) and Corner Deployment; a drawn pool of three schemes with
+their text; reveal; their rating 2 against 0 giving a pool of 6 + 2 = 8; a
+chosen scheme; "Still open: E, I"; and the tracker opening with pool 8 and the
+strategy and scheme to hand. Phone width: no horizontal scroll, the rail
+scrolls sideways with letters only.
+
+Vite missed an edit to `useCampaign.js` (the project is in OneDrive) and served
+a module without its new import; touching the file fixed it. Not a code fault.
+
+15 new tests, 891 total.
+
+Files: `src/data/gainingGrounds.js` (new), `src/lib/scenario.js` (new) + test
+(new), `src/lib/crews.js` (new) + test (new), `src/hooks/useScenarioText.js`
+(new), `src/components/crew/CrewPicker.jsx` (new), `crew/EncounterSetup.jsx`
+(new), `crew/SavedCrews.jsx` (new), `crew/ArsenalCards.jsx` (new),
+`crew/PlayTab.jsx` (new), `steps/Encounter.jsx` (deleted), `steps/Crew.jsx`,
+`steps/PlayTracker.jsx`, `LeaderRecord.jsx`, `src/lib/encounter.js` + test,
+`src/lib/sharedCrew.js`, `src/lib/rules.js`, `src/lib/api.js`,
+`src/lib/shape/arsenal.js` (comment only), `src/hooks/useCampaign.js`,
+`src/App.jsx`, `src/styles/app.css`, `CLAUDE.md`, `package.json`
+UNVERIFIED: not used at a real table; strategy and scheme text not checked
+against the printed cards.
+NEXT: owner feedback from a real game.

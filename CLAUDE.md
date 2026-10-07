@@ -1,10 +1,10 @@
 # CLAUDE.md — Hodgepodge Hearthside project context
 
-<!-- HH v0.33.1 | Last updated: 2026-10-06 -->
+<!-- HH v0.34.0 | Last updated: 2026-10-06 -->
 
 ---
 
-## Current Version: 0.33.1
+## Current Version: 0.34.0
 
 ## Last Updated: 2026-10-06
 
@@ -120,6 +120,42 @@ audits had to invent the check by hand and one got it wrong.
 ## ⚠️ NEXT SESSION — pending
 
 ### The crew builder — both phases built (v0.31.0, v0.32.0), played with (v0.33.0)
+
+**Three tabs since v0.34.0** (owner request): **Cards** (every card in the
+arsenal, the leader as this app's own leader card), **Crews** (saved crews,
+built without a game in mind, `lib/crews.js`, on `arsenal.crews`), and **Play**
+(a game from setup to "Game over"). Play walks **encounter setup A–K** as the
+core rules lay it out, with the campaign's changes from p. 19 and its Campaign
+Rating step after the reveal (`lib/scenario.js`, `crew/EncounterSetup.jsx`).
+The hire step and the saved-crew editor are one component, `crew/CrewPicker`:
+a ledger that sticks under the masthead, hired in red when over the size, and a
+caret on every row that opens that model's card.
+
+Rules that should not be undone:
+
+- **At most two hired models outside both keywords**, Versatile not counted.
+  Core rules, Hire Crew; p. 19 says a step it does not list is unchanged.
+  `encounterProblems` reports it, and the ledger shows "off keyword n/2".
+- **Strategy and scheme text is read live from BiggerHat**, held in `rules.js`
+  for the tab and never stored, exactly like card text (§4). Owner said
+  Gaining Grounds One is free to use; reading it live was chosen anyway so a
+  revision or a new season needs no retyping. `data/gainingGrounds.js` holds
+  only names, slugs and suits (and the four deployments, by the suit glyphs in
+  the core rules), so setup works offline.
+- **The app flips nothing.** Attacker, strategy suit and deployment suit are
+  typed from real flips. The one exception is "Draw three for us" for the
+  scheme pool: a separate deck many players do not own.
+- **A joker for the strategy offers both suitless strategies** (Greased Pigs,
+  Aetheric Conduit). Gaining Grounds One does not say which joker gives which.
+- **The chosen scheme stays on the player's own campaign document** and is never
+  in `crewSummary`, so a shared game never sends it.
+- **`arsenal.crews` is not defaulted in `createArsenal`.** Every v3 arsenal
+  passes through it on load (`migrateArsenal`), so a new default would appear on
+  one device's copy and not the account's, and they would stop comparing equal.
+  Absent reads as none. Apply the same care to any field added to an arsenal.
+- **A local reveal tick can be undone; a shared reveal cannot.** The rule "a
+  reveal is final" is about the server copy. A mis-tap on this device alone must
+  not be a trap.
 
 > **Audit note.** v0.33.0 writes two new persisted shapes:
 > `encounter.playFacts` on the campaign document, and `play:<encounterId>` in
@@ -315,7 +351,7 @@ aftermath. Shipped and live:
 | **The service worker** | v0.19.3. It cached Pages' SPA fallback under asset URLs, so a browser that loaded mid-deploy got a **permanent white screen** no reload could clear. Live since v0.14.0, observed in production on 2026-09-03. Two guards now — never write HTML under a non-navigation request, never serve it either — plus a cache-version bump that purges anyone already poisoned. |
 | **Membership** | v0.17.0. Owner-issued single-use invites, two gates (redeem → pending → host admits), per-campaign nicknames, opt-in Discord identity, and a read-only shared arsenal page. Writes were **not** widened — see below. |
 
-876 tests at v0.33.1.
+891 tests at v0.34.0.
 
 ### Unfinished business finds the player now — v0.23.0
 
@@ -1740,6 +1776,8 @@ hodgepodge-hearthside/
 │   │   ├── encounter.js    the crew builder: hiring a crew out of the arsenal (p. 19)
 │   │   ├── sharedCrew.js   hiring together: the revealed summary + /api/encounters
 │   │   ├── play.js         the crew at the table: health, conditions, turn, score
+│   │   ├── crews.js        saved crews, built ahead of a game, on arsenal.crews
+│   │   ├── scenario.js     encounter setup A–K: strategy, deployment, schemes
 │   │   ├── rewind.js       going back through an aftermath, and what it costs
 │   │   ├── advancement.js  which action an advancement went on, and what it did
 │   │   └── recordImage.js  canvas PNG + the LEGAL constant
@@ -2098,7 +2136,7 @@ every session. `docs/VERSION_HISTORY.md` holds how it got this way.
 npm install
 cp .env.example .env
 npm run dev      # Vite only — NO Functions, NO database. useAuth degrades to signed out.
-npm run test     # 876 tests; `functions/` is in the run too, for the authz tests
+npm run test     # 891 tests; `functions/` is in the run too, for the authz tests
 npm run dialogue # hank.js and hank-dialogue.md agree (§1)
 npm run build    # production bundle — the dev proxy does NOT exist here
 npm run seed     # optional local register file; ask BiggerHat's maintainer first

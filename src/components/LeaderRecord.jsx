@@ -21,7 +21,14 @@ import { PrintLegal } from './ui.jsx'
  * handful of models, so this is bounded; the arsenal is not, which is why crew
  * cards stay behind a button.
  */
-export default function LeaderRecord({ leader, archetype, fileNumber, rules }) {
+/**
+ * `variant="card"` is the leader as a crew card (v0.34.0, owner request): the
+ * same content, laid out like the other cards in the crew builder so a leader
+ * reads beside its hires. It is this app's own handbill, like every card here,
+ * and deliberately not a copy of Wyrd's stat card (§8).
+ */
+export default function LeaderRecord({ leader, archetype, fileNumber, rules, variant = 'record' }) {
+  const asCard = variant === 'card'
   const effect = getEffect(leader.crewCard.effect)
   /**
    * The book's text for the advancements this leader holds — and only those.
@@ -107,12 +114,12 @@ export default function LeaderRecord({ leader, archetype, fileNumber, rules }) {
   )
 
   return (
-    <article className="record">
+    <article className={asCard ? 'record record--card' : 'record'}>
       <div className="record__head">
         <span className="record__eyebrow">
-          {factionLabel(leader.faction)} · {archetype.name}
+          {factionLabel(leader.faction)} · {asCard ? `Leader · ${archetype.name}` : archetype.name}
         </span>
-        <span className="record__file">{fileNumber}</span>
+        <span className="record__file">{asCard ? '0ss' : fileNumber}</span>
       </div>
 
       {/* The picture belongs on the document, not only on the shelf card it

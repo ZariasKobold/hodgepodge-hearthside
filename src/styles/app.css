@@ -822,6 +822,11 @@ body::after {
   flex-wrap: wrap; gap: 8px;
 }
 .crewcard__name { font-family: var(--display); font-size: 25px; font-weight: 700; margin: 0; line-height: 1.1; }
+/* The leader as a crew card: the record, at a crew card's scale. */
+.record--card { padding: 24px 24px 18px; margin-bottom: 16px; }
+.record--card .record__head { border-bottom-width: 1px; border-bottom-color: var(--card-line); padding-bottom: 7px; margin-bottom: 12px; }
+.record--card .record__name { font-size: 25px; }
+.record--card .record__portrait { width: 64px; height: 64px; }
 .crewcard__entry { margin-bottom: 11px; }
 .crewcard .record__stats { margin: 15px 0; }
 .crewcard .record__stat-v small { font-size: 12px; color: var(--card-mute); }
@@ -1726,3 +1731,64 @@ body::after {
   .play__long { display: none; }
   .play__short { display: inline; }
 }
+
+/* The crew builder, v0.34.0: the picker's ledger sticks under the masthead,
+   and the running total goes red when it is over the size. */
+.crew__ledger { position: sticky; top: var(--masthead-h, 0px); z-index: 5; background: var(--ground); }
+.crew__over, .crew__over strong { color: var(--coal-lit); }
+.crew__entry { border-bottom: 1px solid var(--line-soft); }
+.crew__entry .crew__row { border-bottom: 0; }
+.crew__caret {
+  border: 1px solid var(--line); border-radius: var(--r); background: none;
+  color: var(--mute); font-family: var(--data); font-size: 11px; letter-spacing: 1px;
+  text-transform: uppercase; padding: 5px 9px; cursor: pointer; min-height: 30px;
+}
+.crew__caret span { display: inline-block; transition: transform .15s ease; }
+.crew__caret--open span { transform: rotate(90deg); }
+.crew__caret:hover { border-color: var(--brass); color: var(--text); }
+.crew__caret:focus-visible { outline: 2px solid var(--ember); outline-offset: 2px; }
+.crew__card { padding: 6px 0 12px; }
+.crew__card .crewcard, .crew__card .record { margin: 0; }
+
+.crews__list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 18px; }
+.crews__item { border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); padding: 12px 14px; }
+.crews__head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px 14px; flex-wrap: wrap; }
+.crews__name { font-family: var(--display); font-size: 19px; margin: 0; }
+.crews__item .export { margin-top: 8px; }
+
+/* Encounter setup: the steps as a rail, then one step's panel. */
+.setup__rail { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 18px; }
+.setup__step {
+  display: flex; align-items: center; gap: 6px;
+  border: 1px solid var(--line); border-radius: var(--r); background: var(--panel);
+  color: var(--mute); font-family: var(--body); font-size: 13px; padding: 5px 9px; cursor: pointer;
+}
+.setup__step:hover { border-color: var(--brass); color: var(--text); }
+.setup__step:focus-visible { outline: 2px solid var(--ember); outline-offset: 2px; }
+.setup__step--done .setup__letter { background: var(--brass-wash); color: var(--brass); border-color: var(--brass); }
+.setup__step--on { border-color: var(--ember-deep); color: var(--text); background: var(--ember-wash); }
+.setup__letter {
+  display: inline-grid; place-items: center; min-width: 20px; height: 20px;
+  border: 1px solid var(--line); border-radius: 50%;
+  font-family: var(--data); font-size: 11px; color: var(--faint);
+}
+.setup__title { font-family: var(--display); font-size: 24px; margin: 0 0 14px; display: flex; align-items: center; gap: 10px; }
+.setup__title .setup__letter { min-width: 28px; height: 28px; font-size: 14px; color: var(--brass); border-color: var(--brass); }
+.setup__tag { font-family: var(--data); font-size: 11px; color: var(--faint); letter-spacing: 1px; text-transform: uppercase; }
+.setup__list { margin: 0 0 12px; padding-left: 20px; color: var(--text); line-height: 1.55; }
+.setup__fact { margin: 8px 0 12px; color: var(--text); }
+.setup__schemes { margin: 12px 0; }
+.setup__card { margin-top: 12px; }
+.setup__text { margin: 2px 0 0; white-space: pre-line; }
+.setup__num { width: 80px; }
+.setup__nav { margin-top: 22px; }
+
+@media (max-width: 767px) {
+  /* Twelve steps do not fit on a phone; they scroll sideways, names hidden
+     except the current one, so the letters stay a map of where you are. */
+  .setup__rail { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .setup__rail::-webkit-scrollbar { display: none; }
+  .setup__step { flex: none; }
+  .setup__step:not(.setup__step--on) .setup__name { display: none; }
+}
+.export + .setup__rail { margin-top: 14px; }

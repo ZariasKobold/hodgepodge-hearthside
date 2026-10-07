@@ -108,9 +108,11 @@ export const registry = {
 
   factions: (opts) => request('/factions', opts).then((j) => j.data || []),
 
-  strategies: (opts) => request('/strategies', opts).then((j) => j.data || []),
+  // per_page on both: the list is small (10 and 36 in Gaining Grounds One),
+  // and one page is one request (see the /characters per_page trap above).
+  strategies: (opts) => request('/strategies?per_page=100', opts).then((j) => j.data || []),
 
-  schemes: (opts) => request('/schemes', opts).then((j) => j.data || []),
+  schemes: (opts) => request('/schemes?per_page=100', opts).then((j) => j.data || []),
 }
 
 /**

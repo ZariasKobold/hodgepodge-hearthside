@@ -38,6 +38,7 @@ import {
 } from './shape/arsenal.js'
 import { isVersatile } from './indexing.js'
 import { campaignRating, soulstoneBonus, maxEncounterSize } from './campaign.js'
+import { createSetup, strategyBySlug } from './scenario.js'
 
 /** The two holders that are not rows of `arsenal.models`. */
 export const LEADER = 'leader'
@@ -45,6 +46,14 @@ export const TOTEM = 'totem'
 
 /** Out-of-keyword surcharge at an encounter hire. The same 1 as a weekly hire. */
 export const KEYWORD_TAX = 1
+
+/**
+ * "When hiring, you may not include more than two models that do not share a
+ * keyword with your leader. Versatile models do not count toward this limit."
+ * Core rules, Hire Crew. The campaign book does not change it (p. 19: a step
+ * not listed is not changed).
+ */
+export const OUT_OF_KEYWORD_LIMIT = 2
 
 /** "The usual maximum of 6 soulstones" in a starting pool. */
 export const POOL_MAX = 6
@@ -79,6 +88,10 @@ export function createEncounter(patch = {}) {
     totem: false,
     /** `{ rowId, holder }` — an equipment row of the arsenal, and who carries it. */
     equipment: [],
+    /** The saved crew this hire started from, if any (`lib/crews.js`). */
+    crewId: null,
+    /** Steps A to K (`lib/scenario.js`). */
+    setup: createSetup(),
     gameId: null,
     ...patch,
   }
@@ -108,6 +121,11 @@ export function paysKeywordTax(model, arsenal) {
 /** What one model costs at this hire. */
 export function hireCostOf(model, arsenal) {
   return (model.cost || 0) + (paysKeywordTax(model, arsenal) ? KEYWORD_TAX : 0)
+}
+
+/** The hired models that pay the surcharge, which are the ones the limit counts. */
+export function outOfKeywordModels(encounter, arsenal) {
+  return hiredModels(encounter, arsenal).filter((m) => paysKeywordTax(m, arsenal))
 }
 
 /** Soulstones spent on the crew. Leader and totem are free. */
@@ -214,6 +232,11 @@ export function encounterProblems(encounter, arsenal) {
     problems.push(`The crew costs ${spent}ss, ${spent - size} over the ${size}ss encounter.`)
   }
 
+  const outsiders = outOfKeywordModels(encounter, arsenal)
+  if (outsiders.length > OUT_OF_KEYWORD_LIMIT) {
+    problems.push(`${outsiders.length} hired models share neither of your keywords (${outsiders.map((m) => m.name).join(', ')}); at most ${OUT_OF_KEYWORD_LIMIT} may be hired. Versatile models do not count.`)
+  }
+
   const live = new Set(liveModels(arsenal).map((m) => m.id))
   const gone = (encounter?.modelIds || []).filter((id) => !live.has(id))
   if (gone.length) {
@@ -263,6 +286,14 @@ export function attachEquipment(encounter, rowId, holder) {
 /* ── into the game ──────────────────────────────────────────────── */
 
 /**
+ * The strategy by name: the one setup settled (step C), else whatever was
+ * typed on an encounter from before setup existed.
+ */
+export function strategyNameOf(encounter) {
+  return strategyBySlug(encounter?.setup?.strategy)?.name || encounter?.strategy || ''
+}
+
+/**
  * The fields of the game this crew became.
  *
  * The aftermath used to ask for the rating, the encounter size and a *count*
@@ -276,7 +307,7 @@ export function gameFieldsFrom(encounter, arsenal) {
     encounterId: encounter.id,
     opponent: encounter.opponent?.name || '',
     opponentArsenalId: encounter.opponent?.arsenalId || null,
-    strategy: encounter.strategy || '',
+    strategy: strategyNameOf(encounter),
     encounterSize: encounterSizeOf(encounter, arsenal),
     campaignRatingSelf: crewRating(encounter, arsenal),
     campaignRatingOpponent: theirs != null && theirs !== '' ? Number(theirs) || 0 : 0,

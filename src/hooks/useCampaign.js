@@ -23,6 +23,7 @@ import { unwindArsenal } from '../lib/rewind.js'
 import { planRepair, repairPatch } from '../lib/repair.js'
 import { readBundle, refileForImport } from '../lib/shape/migrate.js'
 import { createEncounter } from '../lib/encounter.js'
+import { upsertCrew, removeCrew } from '../lib/crews.js'
 import { getArchetype } from '../data/archetypes.js'
 
 /**
@@ -456,6 +457,15 @@ export function useCampaign({ userId = null, userReady = true, onSaved, onArsena
     }))
   }, [setCampaign])
 
+  /** Add or update a saved crew on the arsenal (`lib/crews.js`). */
+  const saveCrew = useCallback((crew) => {
+    setArsenal((a) => ({ crews: upsertCrew(a.crews || [], crew) }))
+  }, [setArsenal])
+
+  const deleteCrew = useCallback((id) => {
+    setArsenal((a) => ({ crews: removeCrew(a.crews || [], id) }))
+  }, [setArsenal])
+
   /** Throw away a crew that was never played. A played one is a record. */
   const discardEncounter = useCallback((id) => {
     setCampaign((prev) => ({
@@ -628,7 +638,7 @@ export function useCampaign({ userId = null, userReady = true, onSaved, onArsena
     owedStartingScrip: arsenal ? owedStartingScrip(arsenal) : 0,
     // games and the aftermath
     logGame, updateGame, removeGame,
-    startEncounter, updateEncounter, discardEncounter,
+    startEncounter, updateEncounter, discardEncounter, saveCrew, deleteCrew,
     buyEquipment, annihilateEquipment,
     addInjury, healInjury, dropInjury, annihilateModel,
     advanceLeader, advanceTotem, setTotem, addCrewCardAdvancement, placeAdvancementAt,

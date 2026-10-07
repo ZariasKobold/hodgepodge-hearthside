@@ -13,7 +13,7 @@
  */
 
 import {
-  hiredModels, hireCostOf, paysKeywordTax, hiredEquipment, crewCost, crewRating, encounterSizeOf,
+  hiredModels, hireCostOf, paysKeywordTax, hiredEquipment, strategyNameOf, crewCost, crewRating, encounterSizeOf,
   LEADER, TOTEM,
 } from './encounter.js'
 
@@ -45,7 +45,7 @@ export function crewSummary(encounter, arsenal, leader) {
     cost: crewCost(encounter, arsenal),
     rating: crewRating(encounter, arsenal),
     encounterSize: encounterSizeOf(encounter, arsenal),
-    strategy: encounter.strategy || '',
+    strategy: strategyNameOf(encounter),
   }
 }
 

@@ -249,6 +249,10 @@ export function createArsenal(patch = {}) {
     injuries: [],
     equipment: [],
     totem: null,
+    /* `crews` (lib/crews.js) is deliberately not defaulted here. Every v3
+       arsenal passes through this function on load (`migrateArsenal`), so a
+       new default would appear on one device's copy and not on the account's,
+       and the two would stop comparing equal. Absent reads as none. */
     createdAt: Date.now(),
     ...patch,
   }
