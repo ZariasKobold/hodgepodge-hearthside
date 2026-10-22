@@ -1,25 +1,20 @@
 import { currentUser, json, sameOrigin } from '../lib/auth.js'
-import { getBookText, getChallenge, answerChallenge, grantedTitles } from '../lib/bookStore.js'
+import { getBookText } from '../lib/bookStore.js'
 
 /**
- * The campaign book's text, for signed-in players, for what they hold.
+ * The campaign book's text, for signed-in players.
  *
  *   POST /api/book   { keys: [...] }  →  { key: text, ... }
  *
- * **POST for a read, deliberately.** The key list is long and would not fit a
- * query string comfortably, and — more to the point — a GET with the keys in
- * the URL would put fragments of the book into browser history, proxy logs and
- * any referrer. A body is neither cached nor logged by default, and the service
- * worker is already forbidden from caching anything under `/api/` (§4).
+ * **POST for a read, deliberately.** The key list is long, and a GET with the
+ * keys in the URL would put fragments of the book into browser history, proxy
+ * logs and any referrer. The service worker is already forbidden from caching
+ * anything under `/api/` (§4).
  *
- * The request is a **filter, not a grant**. `bookStore` computes what this
- * caller has actually earned from their own rows and answers only the
- * intersection, so asking for all 340 keys returns the handful you hold. See
- * that file's header for why entitlement is "what your arsenal holds" rather
- * than "you are signed in".
+ * Open to anyone signed in since v0.37.0 (owner decision). See `bookStore.js`
+ * for what was retired and what is left.
  *
- * Its own namespace under `/api/`, per §11 — the register proxy is scoped to
- * `/api/v1/` precisely so surfaces can sit beside it.
+ * Its own namespace under `/api/`, per §11.
  */
 export async function onRequest(context) {
   const { request, env } = context
@@ -40,9 +35,8 @@ export async function onRequest(context) {
 
   const user = await currentUser(request, env)
   if (!user) {
-    // Not an error the client should surface: it simply means no text. The app
-    // is fully usable signed out on a device that has played before (§12b).
-    return json({ message: 'Sign in to read the book text you have earned.' }, 401)
+    // Not an error the client should surface: it simply means no text.
+    return json({ message: 'Sign in to read the book text.' }, 401)
   }
 
   let body
@@ -54,49 +48,15 @@ export async function onRequest(context) {
 
   const noStore = { 'Cache-Control': 'no-store, private' }
 
-  /**
-   * Three actions on one route, chosen by `action` in the body.
-   *
-   * One file because they are one subject and share every guard above — a
-   * second route would be a second place to forget the session check. See
-   * `bookStore.js` for what each is allowed to answer.
-   */
-  const action = body?.action || 'text'
-
   try {
-    if (action === 'status') {
-      const titles = [...await grantedTitles(user.id, env)]
-      return json({ titles }, 200, noStore)
-    }
-
-    if (action === 'challenge') {
-      // Null means "already proved, or nothing to ask" — the client shows no gate
-      // either way, which is what "asked once" means.
-      const challenge = await getChallenge(user.id, body?.title, env)
-      return json({ challenge }, 200, noStore)
-    }
-
-    if (action === 'answer') {
-      const result = await answerChallenge(user.id, body?.challengeId, body?.answer, env)
-      return json(result, 200, noStore)
-    }
-
-    const text = await getBookText(user.id, body?.keys, env)
-    // Never cached anywhere between here and the tab. The text is licensed to
-    // the reader, not to the network.
-    return json(text, 200, noStore)
+    return json(await getBookText(user.id, body?.keys, env), 200, noStore)
   } catch (err) {
     /*
-     * The book tables (0007–0009) are not applied to every database. Until
-     * they are, the honest answer is the empty one each action already gives
-     * when nothing is loaded, not a 500 on every signed-in page load (audit
-     * v0.28.1 L6). Anything else is a real failure and still throws.
+     * Until migration 0007 is applied the honest answer is the empty one, not a
+     * 500 on every signed-in page load (audit v0.28.1 L6). Anything else is a
+     * real failure and still throws.
      */
     if (!/no such table/i.test(String(err?.message || err))) throw err
-    const empty = action === 'status' ? { titles: [] }
-      : action === 'challenge' ? { challenge: null }
-        : action === 'answer' ? { ok: false }
-          : {}
-    return json(empty, 200, noStore)
+    return json({}, 200, noStore)
   }
 }

@@ -95,7 +95,7 @@ export function plainText(text) {
 
 /* ── normalising a register record ─────────────────────────────────── */
 
-function toTrigger(t) {
+export function toTrigger(t) {
   return {
     name: t.name,
     slug: t.slug,
@@ -105,7 +105,7 @@ function toTrigger(t) {
   }
 }
 
-function toAction(a) {
+export function toAction(a) {
   return {
     name: a.name,
     slug: a.slug,
@@ -127,7 +127,7 @@ function toAction(a) {
   }
 }
 
-function toAbility(a) {
+export function toAbility(a) {
   return {
     name: a.name,
     slug: a.slug,

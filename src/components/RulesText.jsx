@@ -1,6 +1,7 @@
 import { useState, useId } from 'react'
 import { iconSegments, statLine, findEntry } from '../lib/rules.js'
-import { advancedAction, SUIT_LABEL } from '../lib/advancement.js'
+import { advancedAction, rowFor, TRIGGER, SUIT_LABEL } from '../lib/advancement.js'
+import BookText from './BookText.jsx'
 
 /**
  * Rendering for text this app displays but never stores.
@@ -112,9 +113,15 @@ export function RulesState({ rules, slug, slot, name, quiet, showTriggers = true
  * A Skl modifier's `statTo` is absolute — "change its Skl to 6" — so the final
  * number is known here even with no card to read it off.
  */
-export function ActionAdvancements({ advancements = [] }) {
+export function ActionAdvancements({ advancements = [], book }) {
   if (advancements.length === 0) return null
   const { stat, statChanged, madeSignature, triggers } = advancedAction(null, advancements)
+  // The advancements behind `triggers`, in the same order, so each earned
+  // trigger can print what it does (v0.37.0). `book` comes from `useBookText`.
+  const triggerAdvancements = advancements.filter((a) => {
+    const row = rowFor(a)
+    return !row || row.type === TRIGGER
+  })
 
   return (
     <ul className="rules__triggers rules__triggers--earned">
@@ -136,6 +143,7 @@ export function ActionAdvancements({ advancements = [] }) {
             {t.suit ? `${SUIT_LABEL[t.suit] || t.suit} — ` : ''}{t.name}
           </span>{' '}
           earned{t.page ? ` · p.${t.page} of the book` : ''}.
+          {book && <BookText book={book} advancement={triggerAdvancements[i]} bare />}
         </li>
       ))}
     </ul>

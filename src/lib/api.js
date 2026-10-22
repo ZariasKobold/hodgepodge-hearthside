@@ -113,6 +113,10 @@ export const registry = {
   strategies: (opts) => request('/strategies?per_page=100', opts).then((j) => j.data || []),
 
   schemes: (opts) => request('/schemes?per_page=100', opts).then((j) => j.data || []),
+
+  /** One action, ability or trigger by slug — a book entry the register also carries. */
+  entry: (endpoint, slug, opts) =>
+    request(`/${endpoint}/${encodeURIComponent(slug)}`, opts).then((j) => j.data),
 }
 
 /**

@@ -25,7 +25,6 @@ import Crew from './components/steps/Crew.jsx'
 import Arsenal from './components/steps/Arsenal.jsx'
 import ArsenalSheet from './components/ArsenalSheet.jsx'
 import OutstandingBar from './components/OutstandingBar.jsx'
-import BookGate from './components/BookGate.jsx'
 import { outstandingFor, outstandingAcross } from './lib/outstanding.js'
 import './styles/app.css'
 
@@ -337,11 +336,6 @@ export default function App() {
             onGo={goToFix}
           />
         )}
-
-        {/* Asked once per account, and only when a question is loaded and the
-            title is unproved. An offer rather than a wall — nothing else in the
-            app is gated on it. */}
-        {admitted && Boolean(auth.user) && <BookGate />}
 
         {!admitted && <SignInGate auth={auth} />}
 

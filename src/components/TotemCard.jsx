@@ -1,6 +1,9 @@
 import { useState } from 'react'
 import { Button, Input, Select } from './ui.jsx'
 import { totemPicks, totemRow, advancementsOn, advancedAction, gainedActionKey } from '../lib/advancement.js'
+import { advancementKey, entryFor } from '../lib/book.js'
+import { useBookText } from '../hooks/useBook.js'
+import BookText, { BookEntry } from './BookText.jsx'
 
 /**
  * The totem on the Arsenal view: what it is, and what it can do.
@@ -11,13 +14,22 @@ import { totemPicks, totemRow, advancementsOn, advancedAction, gainedActionKey }
  * starting abilities and actions. Those are on its row of the totem table, and
  * `totemPicks` reads them from there on every render.
  *
- * Names only, with the page: what an action does is on the book's page (§4).
+ * Since v0.37.0 each one also says what it does, read from BiggerHat where the
+ * register carries it and from the book otherwise (`lib/book.js`).
  */
 export default function TotemCard({ totem, onSetTotem }) {
   const row = totemRow(totem)
   const own = totemPicks(totem)
   const gained = (totem.advancements || []).filter((a) => a.tableId === 'action')
   const page = row?.page ?? 52
+  const totemKey = row ? advancementKey('totem', row) : null
+  const book = useBookText([totemKey, ...gained.map((a) => advancementKey(a.tableId, a))])
+  const printed = entryFor(book, totemKey)
+  /** The totem row's own text for one of its parts, matched by name. */
+  const partText = (kind, name) => {
+    const list = kind === 'ability' ? printed?.abilities : printed?.actions
+    return (list || []).find((p) => sameName(p?.name, name)) || null
+  }
 
   const line = (pick) => {
     const { stat, statChanged, triggers } = advancedAction(pick.base, advancementsOn(totem, pick.key))
@@ -29,6 +41,7 @@ export default function TotemCard({ totem, onSetTotem }) {
         {pick.base?.resistedBy ? ` vs ${pick.base.resistedBy}` : ''}
         {pick.chosen ? ' · chosen from a master' : ''}
         {all.length > 0 && <span className="pick__meta"> — {all.join(', ')}</span>}
+        {!pick.chosen && <BookEntry entry={partText('action', pick.name)} />}
       </li>
     )
   }
@@ -47,7 +60,7 @@ export default function TotemCard({ totem, onSetTotem }) {
           <p className="pick__meta">
             Df {totem.stats.df} · Wp {totem.stats.wp} · Sp {totem.stats.sp} · Health {totem.stats.health}
           </p>
-          <TotemList label="Abilities" items={own.ability.map((a) => <li key={a.key}>{a.name}</li>)} />
+          <TotemList label="Abilities" items={own.ability.map((a) => <li key={a.key}>{a.name}<BookEntry entry={partText('ability', a.name)} /></li>)} />
           <TotemList label="Attack actions" items={own.attack.map(line)} />
           <TotemList label="Tactical actions" items={own.tactical.map(line)} />
           {gained.length > 0 && (
@@ -59,6 +72,7 @@ export default function TotemCard({ totem, onSetTotem }) {
                   <li key={gainedActionKey(a)}>
                     {a.name}{a.page ? ` (p.${a.page})` : ''}
                     {triggers.length > 0 && <span className="pick__meta"> — {triggers.map((t) => t.name).join(', ')}</span>}
+                    <BookText book={book} advancement={a} />
                   </li>
                 )
               })}
@@ -67,7 +81,8 @@ export default function TotemCard({ totem, onSetTotem }) {
           {row.chooseAction && onSetTotem && (
             <MiniMasterChoice chosen={totem.chosenAction} onChoose={(chosenAction) => onSetTotem({ chosenAction })} />
           )}
-          <p className="note">What each one does is on p.{page} of the book.</p>
+          <BookEntry entry={printed} />
+          {!printed && <p className="note">What each one does is on p.{page} of the book.</p>}
         </div>
       ) : (
         <p className="note">
@@ -111,4 +126,10 @@ function MiniMasterChoice({ chosen, onChoose }) {
       </Button>
     </div>
   )
+}
+
+/** Names as the book prints them and as the data file spells them: quotes aside. */
+function sameName(a, b) {
+  const plain = (s) => String(s || '').replace(/[‘’“”"']/g, '').toLowerCase().trim()
+  return plain(a) === plain(b)
 }

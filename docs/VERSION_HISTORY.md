@@ -6139,3 +6139,101 @@ UNVERIFIED: version 2 has not been imported into the Adjudicator. No real
 player has answered yet, so every live export says `signature: null` until
 they do.
 NEXT: the audit (entry 81). The owner answers for their leaders and re-exports.
+
+---
+
+### Session 81 — v0.37.0
+Date: 2026-10-22
+
+**feat: show what a leader gains from the book, read from BiggerHat wherever it carries it**
+
+Owner decision: hiding the advancement text behind a gate that could not be
+enforced (audit v0.28.1 H2) was not worth it, and nothing else serves
+campaign play this way. The owner will offer Wyrd the option of switching it
+off in the tool's description when submitting it to Community Creators. Second
+instruction, given mid-task: wherever an advancement is the same as something
+on BiggerHat, read it from there.
+
+What changed:
+
+- **The gate is gone.** `book_access`, the challenge questions, the
+  per-arsenal entitlement, the plausibility check and the daily allowance are
+  all removed: `BookGate.jsx`, `scripts/book-challenges.mjs`,
+  `bookAccess.test.js`, and migrations 0008 and 0009, which were never applied
+  to remote. `POST /api/book` answers any signed-in player for any key.
+  0007's header was rewritten while still unapplied.
+- **The text was extracted from the PDF, not typed.** `scripts/book-extract.py`
+  (PyMuPDF) reads all 249 rows of the six advancement tables, by font: the
+  suit, range and defence symbols are letters in the M4ESymbols face, so
+  pdftotext cannot tell a Crow from a "c". Each becomes BiggerHat's `{{token}}`.
+  Stat cells are matched to the nearest column header, because values are
+  centred under left-aligned headings. Checked: every totem's abilities and
+  actions match `data/advancements.js` by name, and every gained action's Skl
+  and resist match the data file.
+- **188 of them come from BiggerHat.** `scripts/book-sources.mjs` searches the
+  register for each entry and accepts a match only when the name, the stats
+  (range, Skl, resist, TN, Dmg), the suit or defence symbol and the text all
+  agree. 21 share a name but not the rules (Hand Cannon is Skl 6 in the book
+  and 5 on its card; Evasive's register text has a typo) and stay on the
+  book's copy. The result is `src/data/bookSources.js`: slugs only, no text.
+- **Only the other 74 go into D1.** `book-to-sql.mjs` skips register-carried
+  keys, cuts a totem's register-carried parts to a name, and deletes rows it
+  is no longer loading.
+- **The text lives at `book/book.json`, gitignored, outside `public/`.** No
+  build can serve it. `npm run dev` reads it as the fallback when there is no
+  `/api/book`.
+- **Shown on** the leader record (gained actions and abilities, loose
+  advancements, and a trigger under the action it was placed on) and the totem
+  card (each ability and action, and the Mini-Master's note). Rendered through
+  `EntryBody` / `TriggerBody`, the components card text already uses.
+
+Decisions:
+
+- **D1, not the repository** (owner's choice when asked). A public commit
+  cannot be un-published; a table can be emptied. That is the switch-off if
+  Wyrd asks: `DELETE FROM book_text`.
+- **A register-carried key is never asked of the server.** If BiggerHat is
+  down, it shows its name and page, as card text does (§6). Hosting it as a
+  fallback would mean hosting everything.
+- **Signature comes from the book**, never the register's `is_signature`,
+  which is wrong (v0.36.0). A register action's triggers are dropped: they
+  belong to its source card (§4).
+- **Equipment and injury text are not extracted.** The keys and the barter
+  counter's wiring are in place; the Silent Catalogue is the next source.
+
+A bug found in the browser, older than this change: `ensureBookText` marked
+keys "asked" before fetching, and React's development double-mount discarded
+the first effect, so the second call returned the empty cache and no text ever
+appeared. Nobody saw it because no text had ever been loaded. A later caller
+now waits on the request in flight. Pinned by a test.
+
+Proven in a browser on `npm run dev` with a seeded leader: Healing Energy,
+Ruthless, Dismember and Gravehand's Command Corpse came from BiggerHat; Hand
+Cannon (Skl 6), Evasive (Fortitude), Heavy Fall, Formed of Blood and Grave's
+Curse from the book; Dismember placed on Hand Cannon printed under it.
+
+**§5's audit was due at this entry and did not run.** This session is the
+ordinal 81. It also changed `functions/`, the third trigger.
+
+894 tests (the gate's tests went with it; 13 new).
+
+Files: `functions/lib/bookStore.js` + test, `functions/api/book.js`,
+`functions/lib/bookRoute.test.js`, `migrations/0007_book_text.sql`,
+`src/lib/book.js` + test, `src/lib/api.js`, `src/lib/rules.js`,
+`src/data/bookSources.js` (new), `src/hooks/useBook.js`,
+`src/components/BookText.jsx`, `src/components/RulesText.jsx`,
+`src/components/LeaderRecord.jsx`, `src/components/TotemCard.jsx`,
+`src/components/aftermath/PhaseBarter.jsx`, `src/App.jsx`,
+`scripts/book-extract.py` (new), `scripts/book-extract.mjs` (new),
+`scripts/book-sources.mjs` (new), `scripts/book-to-sql.mjs`,
+`scripts/book-template.mjs`, `.gitignore`, `CLAUDE.md`, `package.json`.
+Deleted: `src/components/BookGate.jsx`, `functions/lib/bookAccess.test.js`,
+`scripts/book-challenges.mjs`, `migrations/0008_book_access.sql`,
+`migrations/0009_book_served.sql`.
+Applied the same day, by owner go-ahead: 0007 on remote with `d1 execute
+--file`, then the 74 rows. Checked by query: 74 rows, all valid JSON, no
+BiggerHat-carried key among them, Gravehand's Command Corpse stored as a name
+only, and users, arsenals and campaigns unchanged (6, 7, 7). `book.sql` deleted.
+UNVERIFIED: not tried through `wrangler pages dev` or production with a real
+session.
+NEXT: the audit (now entry 82).

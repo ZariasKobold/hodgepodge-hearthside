@@ -2,14 +2,13 @@ import { useEffect, useState } from 'react'
 import { ensureBookText } from '../lib/book.js'
 
 /**
- * The book's text for a set of keys, if this player has earned them.
+ * The text for a set of book keys, from BiggerHat or the book (`lib/book.js`).
  *
  * Pass every key the component might display; one request covers the lot, and
  * keys already answered for this session are not asked about again. Resolves to
- * an empty map when the player is signed out, when nothing has been loaded into
- * D1, or when they have not earned the entry — all of which are ordinary and
- * none of which is an error. `BookText` then renders nothing and the screen
- * reads as it always has.
+ * an empty map when signed out, offline, or with nothing loaded — all ordinary,
+ * none an error. `BookText` then renders nothing and the screen reads as it
+ * always has.
  *
  * The keys are joined into the dependency rather than passed as an array,
  * because a caller building the list inline creates a new array every render

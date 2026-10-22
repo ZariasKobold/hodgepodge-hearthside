@@ -38,15 +38,10 @@ const post = (body) => new Request('https://hodgepodgehearthside.com/api/book', 
 })
 
 describe('the book route before its tables exist', () => {
-  it.each([
-    [{ action: 'status' }, { titles: [] }],
-    [{ action: 'challenge', title: 'index-of-the-untold' }, { challenge: null }],
-    [{ action: 'answer', challengeId: 'c', answer: '6' }, { ok: false }],
-    [{ keys: ['equipment:coffee'] }, {}],
-  ])('answers %j with the empty result, not a 500', async (body, expected) => {
-    const res = await onRequest({ request: post(body), env: signedIn() })
+  it('answers with the empty result, not a 500', async () => {
+    const res = await onRequest({ request: post({ keys: ['equipment:coffee'] }), env: signedIn() })
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual(expected)
+    expect(await res.json()).toEqual({})
   })
 
   it('still fails loudly on any other database error', async () => {
@@ -63,6 +58,6 @@ describe('the book route before its tables exist', () => {
         },
       },
     }
-    await expect(onRequest({ request: post({ action: 'status' }), env })).rejects.toThrow(/locked/)
+    await expect(onRequest({ request: post({ keys: ['equipment:coffee'] }), env })).rejects.toThrow(/locked/)
   })
 })

@@ -22,9 +22,8 @@ docs/*.pdf
 
 # The book's *text*, retyped. Same reasoning as the PDF above and the same
 # answer: a personal copy is permitted, distributing one is not, and this
-# repository is public. `scripts/book-template.mjs` writes the scaffold and
-# `src/lib/book.js` reads it at runtime; each player supplies their own from
-# the book they bought. Removing this line republishes the book, so it is not a
+# repository is public. Its old location; since v0.37.0 the text lives in
+# `book/` (below). Removing this line republishes the book, so it is not a
 # line to remove casually — and note that a public commit cannot be undone by a
 # later deletion, because the git history keeps it.
 public/book.json
@@ -50,3 +49,7 @@ challenges.sql
 # moment when a dump existed and was committable.
 backups/
 *.d1.sql
+
+# The extracted book text (scripts/book-extract.mjs). Outside public/, so no
+# build can ever serve it; loaded into D1 by hand, never committed.
+book/

@@ -32,11 +32,10 @@ export default function PhaseBarter({ week, arsenal, record, handSize, onFlip, o
   const { value, suit, cheated, bought = [] } = record
   const held = heldEquipmentIds(arsenal)
   /**
-   * Only what this arsenal already holds is entitled, so the counter can show
-   * text for something bought earlier and never for something still on offer.
-   * That is `bookStore.js`'s rule, not an oversight: entitling an item you have
-   * merely been *offered* would let anyone enumerate the table by claiming
-   * flips, which is the scrape the whole design exists to prevent.
+   * Text for kit already held. Equipment text has not been extracted from the
+   * book yet (v0.37.0 did the advancement tables), so this shows nothing until
+   * it is; the server no longer limits it to what is held, so offered items
+   * could be added here when it is.
    */
   const book = useBookText(held.map((id) => equipmentKey(id)))
 

@@ -6,7 +6,7 @@ import { sourceSlug, findEntry, findTrigger } from '../lib/rules.js'
 import { RulesState, TriggerBody, ActionAdvancements } from './RulesText.jsx'
 import BookText from './BookText.jsx'
 import { useBookText } from '../hooks/useBook.js'
-import { advancementKey, textFor } from '../lib/book.js'
+import { advancementKey, entryFor } from '../lib/book.js'
 import { advancementsOn, gainedActionKey } from '../lib/advancement.js'
 import { pickSignature } from '../lib/signature.js'
 import { PrintLegal } from './ui.jsx'
@@ -32,11 +32,9 @@ export default function LeaderRecord({ leader, archetype, fileNumber, rules, var
   const asCard = variant === 'card'
   const effect = getEffect(leader.crewCard.effect)
   /**
-   * The book's text for the advancements this leader holds — and only those.
-   *
-   * The server entitles on what the arsenal actually has, so this asks for
-   * exactly the keys on screen. Empty when signed out or unearned, which is
-   * ordinary and renders as the app always did. See `lib/book.js`.
+   * What each of this leader's advancements does: from BiggerHat where the
+   * register carries it, from the book otherwise (`lib/book.js`). Empty when
+   * signed out or offline, which renders as the app always did.
    */
   const advancementKeys = (leader.advancements || [])
     .map((a) => advancementKey(a.tableId, a))
@@ -175,7 +173,7 @@ export default function LeaderRecord({ leader, archetype, fileNumber, rules, var
                     advancements={earned}
                     signature={slot === 'ability' ? undefined : pickSignature(p)}
                   />
-                  <ActionAdvancements advancements={earned} />
+                  <ActionAdvancements advancements={earned} book={book} />
                 </div>
               )
             })}
@@ -194,22 +192,20 @@ export default function LeaderRecord({ leader, archetype, fileNumber, rules, var
                   {g.name} <span>— {g.tableName}{g.page ? `, p.${g.page}` : ''}</span>
                 </div>
                 <BookText book={book} advancement={g.source} />
-                <ActionAdvancements advancements={earned} />
+                <ActionAdvancements advancements={earned} book={book} />
               </div>
             )
           })}
-          {/* Without a `book.json` a gained action shows its name and its page
-              and nothing else, and a player read that as the app having lost
-              the details: "Balanced Sword doesn't have any of the details, so I
-              totally missed adding that properly." It is a boundary, not a gap
-              — the text is the campaign book's — so the note says where it is
-              and how to have it here instead of leaving a blank to interpret. */}
-          {!gained.some((g) => textFor(book, advancementKey(g.source?.tableId, g.source))) && (
+          {/* A gained action with only its name and page read to a player as
+              the app having lost the details: "Balanced Sword doesn't have any
+              of the details, so I totally missed adding that properly." Since
+              v0.37.0 the text is shown; when it cannot be read, say why rather
+              than leave a blank to interpret. */}
+          {!gained.some((g) => entryFor(book, advancementKey(g.source?.tableId, g.source))) && (
             <p className="gap-note">
-              Gained actions are printed in the book at the page shown. This app
-              records what your leader has, not what it does — the text is
-              Wyrd's to publish, not ours. Sign in and it appears here for the
-              advancements this leader has actually earned.
+              What these do is read from BiggerHat or the campaign book while
+              you are signed in and online, and it could not be read just now.
+              Each is printed in the book at the page shown.
             </p>
           )}
         </section>

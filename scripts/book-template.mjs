@@ -1,18 +1,18 @@
 #!/usr/bin/env node
 /**
- * Write the empty scaffold for `public/book.json`.
+ * Write the empty scaffold for `book/book.json`.
  *
  * Every advancement row, every piece of equipment and every injury gets a key
  * with an empty string beside it, in reading order with the page number in a
- * comment field. Filling it in is typing values from the book you own; you
- * never have to work out a key or worry about the three "Skill Boost" rows.
+ * comment field. The advancement rows are filled by `scripts/book-extract.mjs`
+ * from the PDF; equipment and injuries are still typed by hand, if at all.
  *
  *   node scripts/book-template.mjs
  *
  * **It will not overwrite an existing file** — pass --force if you really mean
- * to, and expect to lose whatever you had typed. It writes to `public/`, which
- * is gitignored for `book.json`, so the text stays on your machine. See
- * `src/lib/book.js` for why.
+ * to, and expect to lose whatever you had typed. `book/` is gitignored and
+ * outside `public/`, so the text stays on your machine and no build serves it.
+ * See `src/lib/book.js` for why.
  *
  * Run it again after a data file gains rows: it merges, keeping every value you
  * have already written and adding only the keys that are new.
@@ -23,7 +23,7 @@ import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const target = path.join(root, 'public', 'book.json')
+const target = path.join(root, 'book', 'book.json')
 const force = process.argv.includes('--force')
 
 const load = async (rel) => import(pathToFileURL(path.join(root, rel)).href)
