@@ -7,6 +7,8 @@ import { Label, Stamp } from './ui.jsx'
 import HankSays from './HankSays.jsx'
 import ManualPick from './ManualPick.jsx'
 import { RulesTip, RulesState } from './RulesText.jsx'
+import { SignatureAnswer } from './SignatureRepair.jsx'
+import { SIGNATURE_SLOTS, withPickSignature } from '../lib/signature.js'
 
 export default function SelectionSlot({ slot, archetype, leader, roster, rules, onChange }) {
   const config = archetype.slots[slot]
@@ -72,6 +74,13 @@ export default function SelectionSlot({ slot, archetype, leader, roster, rules, 
               <button className="pick__drop" onClick={() => drop(pick.key)}>REMOVE</button>
             </div>
           </RulesTip>
+          {/* Outside the tip, so answering does not open the card over it. */}
+          {SIGNATURE_SLOTS.includes(slot) && (
+            <SignatureAnswer
+              pick={pick}
+              onAnswer={(value) => onChange(slot, withPickSignature(chosen, pick.key, value))}
+            />
+          )}
           <HankSays tone="quiet">
             {selectReaction({ cost: pick.cost, cap: config.cap, index: i })}
           </HankSays>

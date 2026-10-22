@@ -191,7 +191,9 @@ describe('the outstanding bar reports them where the player is', () => {
   it('says nothing about a healthy leader', () => {
     const adv = attackTrigger({ key: 'skulker-skin::attack::Blowdart', name: 'Blowdart', slot: 'attack' })
     const arsenal = arsenalWith({ advancements: [adv] })
-    expect(outstandingFor({ arsenal })).toEqual([])
+    // The fixture's picks were never asked whether they are signature, which
+    // is a real item since v0.36.0 and not a placement false alarm.
+    expect(outstandingFor({ arsenal }).filter((i) => i.kind !== 'unanswered-signatures')).toEqual([])
   })
 })
 

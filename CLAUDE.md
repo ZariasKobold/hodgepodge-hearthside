@@ -1,10 +1,10 @@
 # CLAUDE.md — Hodgepodge Hearthside project context
 
-<!-- HH v0.34.0 | Last updated: 2026-10-06 -->
+<!-- HH v0.36.0 | Last updated: 2026-10-22 -->
 
 ---
 
-## Current Version: 0.35.0
+## Current Version: 0.36.0
 
 ## Last Updated: 2026-10-22
 
@@ -119,15 +119,57 @@ audits had to invent the check by hand and one got it wrong.
 
 ## ⚠️ NEXT SESSION — pending
 
-### The full arsenal export — v0.35.0
+### ⚠ The audit is due — entry 81 is the next session
+
+This was entry 80 by `grep -c`. §5 calls an overdue audit blocking. v0.36.0
+also wrote a new persisted field (`pick.signature`), §5's third trigger, so it
+joins `encounter.playFacts` and `play:<encounterId>` on the audit's list.
+
+### Signature actions — v0.36.0
+
+**BiggerHat's `is_signature` is wrong, and it is the only signature field
+their API has.** It comes back `false` for Aunty Mel's Inclement Weather and
+Life Raft, which are printed signature, and for every action on four Bayou
+masters (checked 2026-10-22). So the app never reads it for a leader.
+`src/lib/signature.js` asks three sources instead:
+
+- **A Signature advancement** on the action (book data). Always wins.
+- **The book, for gained tier-2 actions.** 26 of 73 carry `isSignature` in
+  `data/advancements.js`, read by **font** (the glyph is an `f` in the
+  M4ESymbols face; pdftotext sometimes glues it to the name, so a text match
+  missed half). Named `isSignature`, not `signature`, because on the tier-1
+  tables `signature` means "this modifier makes an action signature".
+- **The player, for chosen actions.** `pick.signature`, asked as Yes/No under
+  every attack and tactical pick in the wizard, and by `SignatureRepair` on
+  the arsenal view for leaders built before (reported on the outstanding bar).
+
+Rules that should not be undone:
+
+- **Unanswered is `null`, never false.** Two buttons, not a checkbox, so no
+  answer is never read as no. The export says `signature: null`.
+- **The record prints the player's answer, not the register's.** `EntryBody`
+  takes `signature`; crew cards pass nothing and still read the register.
+- **A fact, not rules text** (§4), so it lives on the pick and in the export.
+  Not defaulted anywhere: absent reads as unasked.
+
+### The full arsenal export — v0.35.0, version 2 since v0.36.0
 
 Every Export JSON button (sheet, arsenal view, creation record) writes
 `lib/arsenalExport.js`'s file: the bundle `readBundle` imports, plus a resolved
 view with every id named, for the owner's Adjudicator Engine. Until v0.35.0
 the arsenal view and record exported **the campaign alone**, which has held no
-leader or models since v3. Not yet tried in the Adjudicator. If that tool needs
-a field changed, bump `FULL_EXPORT_VERSION`, and never read the resolved half
-back on import.
+leader or models since v3. If that tool needs a field changed, bump
+`FULL_EXPORT_VERSION`, and never read the resolved half back on import.
+
+**Version 2 (v0.36.0):** every attack and tactical action, chosen or in the new
+`leader.gainedActions`, carries `signature` / `signatureSource`
+(`advancement`, `book`, `player`, or null) and `skl` / `sklSource`
+(`advancement`, `register`, `book`, or null). The buttons go through
+`components/exportWholeArsenal.js`, which fetches the picks' cards first for
+their Skl. A register that is down leaves Skl null; the export still runs.
+Imported into the Adjudicator at v0.35.0 (Santa Muerte, Cletus and Duke
+Carcinus). The owner found signature missing, which is what this version
+answers. **Version 2 has not been imported yet.**
 
 ### The crew builder — both phases built (v0.31.0, v0.32.0), played with (v0.33.0)
 
@@ -361,7 +403,7 @@ aftermath. Shipped and live:
 | **The service worker** | v0.19.3. It cached Pages' SPA fallback under asset URLs, so a browser that loaded mid-deploy got a **permanent white screen** no reload could clear. Live since v0.14.0, observed in production on 2026-09-03. Two guards now — never write HTML under a non-navigation request, never serve it either — plus a cache-version bump that purges anyone already poisoned. |
 | **Membership** | v0.17.0. Owner-issued single-use invites, two gates (redeem → pending → host admits), per-campaign nicknames, opt-in Discord identity, and a read-only shared arsenal page. Writes were **not** widened — see below. |
 
-901 tests at v0.35.0.
+925 tests at v0.36.0.
 
 ### Unfinished business finds the player now — v0.23.0
 
@@ -1789,6 +1831,7 @@ hodgepodge-hearthside/
 │   │   ├── crews.js        saved crews, built ahead of a game, on arsenal.crews
 │   │   ├── scenario.js     encounter setup A–K: strategy, deployment, schemes
 │   │   ├── arsenalExport.js  the whole arsenal as one file: bundle + every id named
+│   │   ├── signature.js    which leader actions are signature — never from the register
 │   │   ├── rewind.js       going back through an aftermath, and what it costs
 │   │   ├── advancement.js  which action an advancement went on, and what it did
 │   │   └── recordImage.js  canvas PNG + the LEGAL constant
@@ -2147,7 +2190,7 @@ every session. `docs/VERSION_HISTORY.md` holds how it got this way.
 npm install
 cp .env.example .env
 npm run dev      # Vite only — NO Functions, NO database. useAuth degrades to signed out.
-npm run test     # 901 tests; `functions/` is in the run too, for the authz tests
+npm run test     # 925 tests; `functions/` is in the run too, for the authz tests
 npm run dialogue # hank.js and hank-dialogue.md agree (§1)
 npm run build    # production bundle — the dev proxy does NOT exist here
 npm run seed     # optional local register file; ask BiggerHat's maintainer first

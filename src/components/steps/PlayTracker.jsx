@@ -218,7 +218,7 @@ function Unit({ unit, state, left, max, kit, change, loadingCard, onRemove }) {
             <>
               <strong>{left}</strong><span>/{max}</span>
               <div className="play__meter" aria-hidden="true">
-                <div className={`play__fill${pct <= 34 ? ' play__fill--low' : ''}`} style={{ width: `${pct}%` }} />
+                <div className={`play__fill${pct <= 34 ? ' play__fill--low' : ''}`} style={{ transform: `scaleX(${pct / 100})` }} />
               </div>
             </>
           ) : (

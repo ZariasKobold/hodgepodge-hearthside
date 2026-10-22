@@ -5,8 +5,7 @@ import { factionLabel } from '../../data/factions.js'
 import {
   totalFor, liveModels, liveEquipment, activeInjuryCount, STARTING_ARSENAL_WEEK,
 } from '../../lib/shape/arsenal.js'
-import { exportJSON } from '../../lib/storage.js'
-import { fullArsenalExport, fullExportFilename } from '../../lib/arsenalExport.js'
+import { exportWholeArsenal } from '../exportWholeArsenal.js'
 import { buildSheet, sheetToPNG, printSheet } from '../../lib/recordImage.js'
 import { Label, Button } from '../ui.jsx'
 import LeaderRecord from '../LeaderRecord.jsx'
@@ -14,6 +13,7 @@ import CrewCards from '../CrewCards.jsx'
 import UnplacedAdvancements from '../UnplacedAdvancements.jsx'
 import RepairAftermath from '../RepairAftermath.jsx'
 import KeptTriggerRepair from '../KeptTriggerRepair.jsx'
+import SignatureRepair from '../SignatureRepair.jsx'
 import TotemCard from '../TotemCard.jsx'
 
 /**
@@ -35,7 +35,7 @@ import TotemCard from '../TotemCard.jsx'
  */
 export default function Arsenal({
   campaign, arsenal, leader, archetype, week, rules, fileNumber,
-  onEditLeader, onHire, onSheet, onPlaceAdvancement, onRepairDrift, onSetTrigger, onSetTotem,
+  onEditLeader, onHire, onSheet, onPlaceAdvancement, onRepairDrift, onSetTrigger, onSetSignature, onSetTotem,
   onAnnihilateEquipment,
 }) {
   const [imaging, setImaging] = useState(null)
@@ -112,6 +112,8 @@ export default function Arsenal({
           the catch-all list and up onto the card a few inches above. */}
       <KeptTriggerRepair leader={leader} onSetTrigger={onSetTrigger} />
 
+      <SignatureRepair leader={leader} onAnswer={onSetSignature} />
+
       {onPlaceAdvancement && (
         <UnplacedAdvancements
           arsenal={arsenal}
@@ -144,10 +146,7 @@ export default function Arsenal({
             models and no scrip — only ids pointing at an arsenal it did not
             carry — so this button exported a file nobody could read a crew
             out of, this app included. Same file as the sheet's export. */}
-        <Button ghost onClick={() => exportJSON(
-          fullArsenalExport({ arsenal, campaign, build: typeof __BUILD__ === 'undefined' ? null : __BUILD__ }),
-          fullExportFilename(arsenal)
-        )}>Export JSON</Button>
+        <Button ghost onClick={() => exportWholeArsenal({ arsenal, campaign, rules })}>Export JSON</Button>
         <Button ghost onClick={saveImage} disabled={imaging === 'working'}>
           {imaging === 'working' ? 'Drawing…' : 'Export image'}
         </Button>

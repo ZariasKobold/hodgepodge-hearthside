@@ -851,6 +851,14 @@ body::after {
    control until it is opened, so it has to read as one. */
 .repair summary, .repair__move summary { cursor: pointer; color: var(--text); font-weight: 600; }
 .repair__move { margin-top: 18px; }
+.repair__row { margin-top: 16px; }
+
+/* Is a chosen action signature? Asked under the pick, in the wizard and the
+   repair alike. Two buttons rather than a box, so unanswered never reads as no. */
+.signature {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
+  margin-top: 6px;
+}
 
 /* Wyrd's disclaimer follows anything that leaves the screen (§8) -------- */
 .legal-print { display: none; }
@@ -1694,7 +1702,8 @@ body::after {
 .play__hp strong { font-size: 30px; font-weight: normal; color: var(--text); }
 .play__hp span { font-size: 14px; color: var(--faint); }
 .play__meter { height: 6px; background: var(--night); border-radius: 3px; margin-top: 4px; overflow: hidden; }
-.play__fill { height: 100%; background: var(--ember); transition: width .15s ease; }
+/* Scaled, not resized, so a tap on health does not re-lay the card out. */
+.play__fill { height: 100%; background: var(--ember); transform-origin: left; transition: transform .15s ease; }
 .play__fill--low { background: var(--coal-lit); }
 .play__max { width: 96px; text-align: center; }
 

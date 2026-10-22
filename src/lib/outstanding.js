@@ -41,6 +41,7 @@ import { owedStartingScrip, startingArsenalSpend } from './shape/arsenal.js'
 import { advancementsToRepair, placementProblem } from './advancement.js'
 import { keptTriggerProblem } from './validation.js'
 import { aftermathDrift } from './repair.js'
+import { unansweredSignatures } from './signature.js'
 
 /** English for a list of names, so the bar can say what it actually found. */
 function nameList(names) {
@@ -185,6 +186,32 @@ export function outstandingFor({ arsenal, campaign } = {}) {
         + 'what it did.',
       where: 'arsenal',
       names: toRepair.map((a) => a.name),
+    })
+  }
+
+  /**
+   * Chosen actions nobody has said are signature or not (v0.36.0).
+   *
+   * Every leader built before then has these, because the question was never
+   * asked, and the register's own flag is wrong (lib/signature.js). Medium, not
+   * high: nothing on the card is wrong, it is incomplete, and the export says
+   * "unknown" for it rather than guessing.
+   */
+  const unanswered = unansweredSignatures(arsenal.leader)
+  if (unanswered.length) {
+    items.push({
+      id: 'unanswered-signatures',
+      kind: 'unanswered-signatures',
+      severity: 'medium',
+      count: unanswered.length,
+      title: unanswered.length === 1
+        ? 'An action does not say whether it is a signature action'
+        : `${unanswered.length} actions do not say whether they are signature actions`,
+      detail: 'A chosen action keeps any signature symbol from the card it came '
+        + 'from (p. 17). The card data this app reads does not say reliably, so '
+        + 'check the card and answer on the arsenal view.',
+      where: 'arsenal',
+      names: unanswered.map((u) => u.pick.name),
     })
   }
 

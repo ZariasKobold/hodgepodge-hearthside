@@ -6,8 +6,7 @@ import { startingScrip, STARTING_SOULSTONES } from '../../lib/campaign.js'
 import {
   createModel, STARTING_ARSENAL_WEEK, startingArsenalSpend,
 } from '../../lib/shape/arsenal.js'
-import { exportJSON } from '../../lib/storage.js'
-import { fullArsenalExport, fullExportFilename } from '../../lib/arsenalExport.js'
+import { exportWholeArsenal } from '../exportWholeArsenal.js'
 import { isVersatile } from '../../lib/indexing.js'
 import { buildSheet, sheetToPNG, printSheet } from '../../lib/recordImage.js'
 import { Label, Button, Select } from '../ui.jsx'
@@ -108,10 +107,7 @@ export default function Record({
       <div className="export noprint">
         {/* Both documents, as on the arsenal view: the campaign alone has held
             no leader since v3 (audit v0.11.0 H2 was the earlier half of this). */}
-        <Button ghost onClick={() => exportJSON(
-          fullArsenalExport({ arsenal, campaign, build: typeof __BUILD__ === 'undefined' ? null : __BUILD__ }),
-          fullExportFilename(arsenal)
-        )}>Export JSON</Button>
+        <Button ghost onClick={() => exportWholeArsenal({ arsenal, campaign, rules })}>Export JSON</Button>
         <Button ghost onClick={saveImage} disabled={imaging === 'working'}>
           {imaging === 'working' ? 'Drawing…' : 'Export image'}
         </Button>

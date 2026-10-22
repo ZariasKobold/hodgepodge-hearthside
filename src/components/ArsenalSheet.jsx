@@ -14,8 +14,7 @@ import {
   advancementsOn, advancedAction, gainedActionKey, SUIT_LABEL, totemPicks,
 } from '../lib/advancement.js'
 import { PrintLegal, Button } from './ui.jsx'
-import { exportJSON } from '../lib/storage.js'
-import { fullArsenalExport, fullExportFilename } from '../lib/arsenalExport.js'
+import { exportWholeArsenal } from './exportWholeArsenal.js'
 
 /**
  * The arsenal sheet — everything the official one records, in this app's own
@@ -498,13 +497,7 @@ export default function ArsenalSheet({ arsenal, leader, archetype, campaign, rul
           tool can read: the two documents, plus the same facts with every id
           resolved to a name (lib/arsenalExport.js). It imports back here too. */}
       <div className="export noprint">
-        <Button onClick={() => exportJSON(
-          fullArsenalExport({
-            arsenal, campaign,
-            build: typeof __BUILD__ === 'undefined' ? null : __BUILD__,
-          }),
-          fullExportFilename(arsenal)
-        )}>
+        <Button onClick={() => exportWholeArsenal({ arsenal, campaign, rules })}>
           Export the whole arsenal
         </Button>
         <span className="pick__meta">

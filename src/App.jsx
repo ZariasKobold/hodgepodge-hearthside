@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { getArchetype } from './data/archetypes.js'
 import { checkStructure } from './lib/validation.js'
+import { withPickSignature } from './lib/signature.js'
 import { useCampaign } from './hooks/useCampaign.js'
 import { useRoster } from './hooks/useRoster.js'
 import { useRules } from './hooks/useRules.js'
@@ -381,6 +382,7 @@ export default function App() {
             onPlaceAdvancement={placeAdvancementAt}
             onRepairDrift={repairAftermathDrift}
             onSetTrigger={(trigger) => set({ trigger })}
+            onSetSignature={(slot, key, value) => setPick(slot, withPickSignature(leader.picks[slot], key, value))}
             onSetTotem={setTotem}
             onAnnihilateEquipment={annihilateEquipment}
           />

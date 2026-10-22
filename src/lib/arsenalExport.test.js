@@ -167,6 +167,86 @@ describe('fullArsenalExport', () => {
   })
 })
 
+describe('signature and Skl on every action (version 2)', () => {
+  const DART = 'skulker-skin::attack::Blowdart'
+  const RAFT = 'aunty-mel::tactical::Life Raft'
+  const WEATHER = 'aunty-mel::tactical::Inclement Weather'
+
+  /** Cletus and Duke Carcinus as they are on the database, with one answer given. */
+  function cletus() {
+    return createArsenal({
+      id: 'ars_cletus',
+      leader: createLeader({
+        name: 'Cletus and Duke Carcinus',
+        archetype: 'heavy_hitter',
+        picks: {
+          attack: [{ key: DART, name: 'Blowdart', model: 'Skulker Skin', cost: 5 }],
+          tactical: [
+            { key: WEATHER, name: 'Inclement Weather', model: 'Aunty Mel', cost: 8, signature: true },
+            { key: RAFT, name: 'Life Raft', model: 'Aunty Mel', cost: 8 },
+          ],
+          ability: [],
+        },
+        advancements: [
+          { id: 'adv_boost', tableId: 'attack', name: 'Skill Boost', tableValue: 7, appliesTo: { key: DART, name: 'Blowdart' } },
+          { id: 'adv_cage', tableId: 'action', name: 'A Cage for All', tableValue: 10, page: 47 },
+        ],
+      }),
+    })
+  }
+
+  /** The register's card, `is_signature` as wrongly false as BiggerHat sends it. */
+  const cards = {
+    'skulker-skin': { name: 'Skulker Skin', actions: [{ name: 'Blowdart', stat: '5', isSignature: false }], abilities: [] },
+    'aunty-mel': {
+      name: 'Aunty Mel',
+      actions: [
+        { name: 'Inclement Weather', stat: '0', isSignature: false },
+        { name: 'Life Raft', stat: '0', isSignature: false },
+      ],
+      abilities: [],
+    },
+  }
+
+  it('is version 2', () => {
+    expect(fullArsenalExport({ arsenal: cletus() }).kindVersion).toBe(2)
+  })
+
+  it('carries the player’s answer and leaves an unanswered one null, never false', () => {
+    const { picks } = fullArsenalExport({ arsenal: cletus(), cards }).leader
+    const [weather, raft] = picks.tactical
+    expect(weather).toMatchObject({ name: 'Inclement Weather', signature: true, signatureSource: 'player' })
+    // The register says false. The export must not repeat it.
+    expect(raft).toMatchObject({ name: 'Life Raft', signature: null, signatureSource: null })
+  })
+
+  it('reads Skl off the card, and an advancement’s Skl over it', () => {
+    const { picks } = fullArsenalExport({ arsenal: cletus(), cards }).leader
+    expect(picks.attack[0]).toMatchObject({ skl: 5, sklSource: 'advancement' })
+    expect(picks.tactical[1]).toMatchObject({ skl: 0, sklSource: 'register' })
+  })
+
+  it('leaves Skl null without the card, rather than failing or guessing', () => {
+    const { picks } = fullArsenalExport({ arsenal: cletus() }).leader
+    expect(picks.tactical[1]).toMatchObject({ skl: null, sklSource: null })
+    // An advancement's Skl is absolute, so it survives the register being down.
+    expect(picks.attack[0]).toMatchObject({ skl: 5, sklSource: 'advancement' })
+  })
+
+  it('lists gained tier-2 actions with the book’s signature and Skl', () => {
+    const { gainedActions } = fullArsenalExport({ arsenal: cletus() }).leader
+    expect(gainedActions).toEqual([{
+      key: 'adv::adv_cage', name: 'A Cage for All', slot: 'tactical', page: 47,
+      signature: true, signatureSource: 'book', skl: 0, sklSource: 'book',
+    }])
+  })
+
+  it('names only the chosen actions’ cards to fetch', async () => {
+    const { exportCardSlugs } = await import('./arsenalExport.js')
+    expect(exportCardSlugs(cletus())).toEqual(['skulker-skin', 'aunty-mel'])
+  })
+})
+
 describe('fullExportFilename', () => {
   it('slugs the leader name', () => {
     expect(fullExportFilename({ leader: { name: 'Cletus & Duke!' } })).toBe('cletus-duke-arsenal.json')

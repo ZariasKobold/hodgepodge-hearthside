@@ -19,8 +19,9 @@
  * file to who it is.
  *
  * Everything resolved is derived on export and never stored (arsenal.js: NOTHING
- * derived is stored). No rules text goes in (§4): names, costs, pages and the
- * archetype's stat line, which are facts, and nothing a card says.
+ * derived is stored). No rules text goes in (§4): names, costs, pages, the
+ * archetype's stat line and each action's Skl and signature, which are facts,
+ * and nothing a card says.
  */
 
 import { getArchetype } from '../data/archetypes.js'
@@ -32,12 +33,23 @@ import {
 } from './shape/arsenal.js'
 import { currentWeek, gamesWon, gamesFor } from './shape/campaign.js'
 import { bundle } from './shape/migrate.js'
-import { totemPicks } from './advancement.js'
+import {
+  totemPicks, advancedAction, advancementsOn, gainedActions, gainedActionKey,
+} from './advancement.js'
+import { leaderSignature, gainedSignature } from './signature.js'
+import { findEntry } from './rules.js'
 
 export const FULL_EXPORT_KIND = 'full-arsenal'
 
-/** Bumped when the resolved half changes shape. The bundle half has its own. */
-export const FULL_EXPORT_VERSION = 1
+/**
+ * Bumped when the resolved half changes shape. The bundle half has its own.
+ *
+ * 2 (v0.36.0): every attack and tactical action, chosen or gained, carries
+ * `signature` and `skl`, each with a `…Source` saying where it came from, and
+ * `leader.gainedActions` lists the tier-2 actions. `signature: null` means
+ * nobody has said, never "not signature".
+ */
+export const FULL_EXPORT_VERSION = 2
 
 /** Which model card a pick came from, by name, whether picked or typed. */
 function sourceName(pick) {
@@ -61,6 +73,51 @@ function resolvePick(pick) {
     fromSlug: sourceSlugOf(pick),
     manual: Boolean(pick.manual),
   }
+}
+
+/**
+ * Skl as the leader rolls it, and where the number came from.
+ *
+ * An advancement's `statTo` is absolute and wins (`advancement`). Otherwise a
+ * chosen action keeps its card's Skl (p. 17), read off the register card if
+ * the caller fetched it (`register`), and a gained action has the book's
+ * (`book`). With none of those it is null: unknown, never 0.
+ */
+function sklOf(base, baseSource, earned) {
+  const { stat, statChanged } = advancedAction(base, earned)
+  if (statChanged) return { skl: stat, sklSource: 'advancement' }
+  if (base?.stat == null || base.stat === '') return { skl: null, sklSource: null }
+  return { skl: Number.isNaN(Number(base.stat)) ? base.stat : Number(base.stat), sklSource: baseSource }
+}
+
+/** A chosen attack or tactical action, with its signature and Skl. */
+function resolveActionPick(pick, slot, leader, cardFor) {
+  const slug = sourceSlugOf(pick)
+  const entry = slug ? findEntry(cardFor(slug), slot, pick.name) : null
+  const { signature, source } = leaderSignature(leader, pick)
+  return {
+    ...resolvePick(pick),
+    signature,
+    signatureSource: source,
+    ...sklOf(entry, 'register', advancementsOn(leader, pick.key)),
+  }
+}
+
+/** Actions from the tier-2 Action table, which are lines on the card too. */
+function resolveGained(leader) {
+  const byKey = new Map((leader.advancements || []).map((a) => [gainedActionKey(a), a]))
+  return gainedActions(leader).map((g) => {
+    const { signature, source } = gainedSignature(leader, byKey.get(g.key))
+    return {
+      key: g.key,
+      name: g.name,
+      slot: g.slot,
+      page: g.page,
+      signature,
+      signatureSource: source,
+      ...sklOf(g.base, 'book', advancementsOn(leader, g.key)),
+    }
+  })
 }
 
 function resolveAdvancement(adv, subjects) {
@@ -123,7 +180,7 @@ function holderOf(e, subjects) {
   return null
 }
 
-function resolveLeader(arsenal, subjects) {
+function resolveLeader(arsenal, subjects, cardFor) {
   const leader = arsenal.leader || {}
   const archetype = getArchetype(leader.archetype)
   const effect = getEffect(arsenal.crewCard?.effect)
@@ -144,10 +201,11 @@ function resolveLeader(arsenal, subjects) {
     representingModel: leader.representingModel || null,
     advancementPath: leader.advancementPath || null,
     picks: {
-      attack: (leader.picks?.attack || []).map(resolvePick),
-      tactical: (leader.picks?.tactical || []).map(resolvePick),
+      attack: (leader.picks?.attack || []).map((p) => resolveActionPick(p, 'attack', leader, cardFor)),
+      tactical: (leader.picks?.tactical || []).map((p) => resolveActionPick(p, 'tactical', leader, cardFor)),
       ability: (leader.picks?.ability || []).map(resolvePick),
     },
+    gainedActions: resolveGained(leader),
     trigger: leader.trigger || null,
     crewCard: {
       effect: effect ? { id: effect.id, name: effect.name, page: effect.page } : null,
@@ -263,8 +321,12 @@ function resolveCampaign(campaign, arsenal, subjects, now) {
 /**
  * The file. `arsenal` is required; `campaign` may be null for an arsenal not at
  * a table, which still exports everything about itself.
+ *
+ * `cards` is `{ slug: card }` from `rules.js`, for the chosen actions' Skl. It
+ * stays pure by being handed in: the caller fetches, and a card that could not
+ * be read leaves that Skl null rather than failing the export.
  */
-export function fullArsenalExport({ arsenal, campaign = null, now = Date.now(), build = null }) {
+export function fullArsenalExport({ arsenal, campaign = null, now = Date.now(), build = null, cards = null }) {
   if (!arsenal) throw new Error('Nothing to export: no arsenal is open.')
   const subjects = subjectsOf(arsenal)
   const models = liveModels(arsenal)
@@ -276,7 +338,7 @@ export function fullArsenalExport({ arsenal, campaign = null, now = Date.now(), 
     kindVersion: FULL_EXPORT_VERSION,
     app: build ? { version: build.version ?? null, commit: build.commit ?? null } : null,
     arsenalId: arsenal.id,
-    leader: resolveLeader(arsenal, subjects),
+    leader: resolveLeader(arsenal, subjects, (slug) => cards?.[slug] ?? null),
     totem: resolveTotem(arsenal, subjects),
     state: {
       scrip: arsenal.scrip ?? 0,
@@ -309,6 +371,12 @@ export function fullArsenalExport({ arsenal, campaign = null, now = Date.now(), 
     campaign: resolveCampaign(campaign, arsenal, subjects, now),
     subjects,
   }
+}
+
+/** The register cards whose Skl the export reads: one per chosen action's source. */
+export function exportCardSlugs(arsenal) {
+  const picks = arsenal?.leader?.picks || {}
+  return [...new Set([...(picks.attack || []), ...(picks.tactical || [])].map(sourceSlugOf).filter(Boolean))]
 }
 
 /** A filename that says what it is and for whom. */

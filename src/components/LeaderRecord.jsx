@@ -8,6 +8,7 @@ import BookText from './BookText.jsx'
 import { useBookText } from '../hooks/useBook.js'
 import { advancementKey, textFor } from '../lib/book.js'
 import { advancementsOn, gainedActionKey } from '../lib/advancement.js'
+import { pickSignature } from '../lib/signature.js'
 import { PrintLegal } from './ui.jsx'
 
 /**
@@ -172,6 +173,7 @@ export default function LeaderRecord({ leader, archetype, fileNumber, rules, var
                     quiet
                     showTriggers={false}
                     advancements={earned}
+                    signature={slot === 'ability' ? undefined : pickSignature(p)}
                   />
                   <ActionAdvancements advancements={earned} />
                 </div>

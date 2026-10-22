@@ -6046,3 +6046,96 @@ Files: `src/lib/arsenalExport.js` (new) + test (new),
 `src/components/steps/Record.jsx`, `src/App.jsx`, `CLAUDE.md`, `package.json`
 UNVERIFIED: not yet imported into the Adjudicator Engine.
 NEXT: the owner re-exports and tries the import.
+
+---
+
+### Session 80 — v0.36.0
+Date: 2026-10-22
+
+**feat: signature actions — asked of the player, read from the book, carried in the export**
+
+The owner imported three v0.35.0 exports (Santa Muerte, Cletus and Duke
+Carcinus) into the Adjudicator Engine and found every signature action missing.
+The export carried pick names and nothing about the symbol.
+
+**The register was the wrong source, and this session first said otherwise.**
+Asked whether Cletus had any, the answer given was "none", read straight off
+BiggerHat's `is_signature`. The owner corrected it: Inclement Weather and Life
+Raft are both signature. The register returns `false` for both, and for every
+action on four Bayou masters, and its API spec has no other signature field.
+The flag is effectively never true. That one unchecked read is the whole
+lesson: **a field being present is not a field being populated.** §6 says to
+fetch the register instead of reasoning about it. Fetching it is not enough
+when the value is wrong; it has to be checked against a card.
+
+p. 17 is what makes this matter: a chosen action "retains the same skill (Skl)
+and any signature symbol". So `src/lib/signature.js` takes signature from three
+places, none of them the register:
+
+- **A Signature advancement** (pp. 40, 43). Book data, always wins.
+- **The book, for the 73 gained tier-2 actions.** 26 are printed with the
+  glyph. Read by font with PyMuPDF: the glyph is `f` in the M4ESymbols face. A
+  pdftotext text match found 10, because the extraction sometimes glues the
+  glyph to the name ("fLeap") and splits the pages differently. By font, all 73
+  matched on their recorded page with no ambiguity. Stored as `isSignature`, not
+  `signature`, which on the tier-1 tables means "this modifier makes an action
+  signature". Sharing the key would leave a trap for any future caller that
+  hands `advancedAction` a tier-2 row.
+- **The player, for chosen actions.** `pick.signature`, Yes/No under every
+  attack and tactical pick in the wizard. Leaders built before get
+  `SignatureRepair` on the arsenal view and an item on the outstanding bar
+  (v0.23.0's rule: a repair on a panel nobody visits is invisible).
+
+Decisions:
+
+- **Unanswered is null, never false.** Two buttons rather than a checkbox,
+  because an unticked box reads as "no". The export says `signature: null`.
+  Exporting the register's `false` would have been worse than exporting
+  nothing, because the Adjudicator would believe it.
+- **The leader's record prints the player's answer.** `EntryBody` takes
+  `signature` and replaces the register's flag with it. Crew cards pass nothing
+  and read the register as before. They describe the hired model and are out of
+  scope, though the same wrong flag is behind them.
+- **Skl rides along with a source.** `advancement` (a `statTo`, absolute),
+  `register` (the picked card's stat, fetched at export), `book` (a gained
+  action), or null. The three Export JSON buttons now share
+  `components/exportWholeArsenal.js`, which fetches the cards first.
+  `fullArsenalExport` stays pure by being handed `cards`.
+- **`FULL_EXPORT_VERSION` is 2.** `leader.gainedActions` is new as well.
+- **A fact, not rules text** (§4). The symbol is of a kind with Skl and cost.
+
+Proven in a browser against Santa Muerte's live documents, seeded locally from
+one joined read of D1 (arsenal v43, campaign v89; the joined read is the
+measurement-error lesson). The bar said "2 actions do not say whether they are
+signature actions" and its button reached the repair. Answering No and Yes
+removed each row, then the panel and the bar item. Both answers reached
+localStorage. The record printed "Signature · Rg 6" · Stat 2 · TN 6" on Carry
+the Flame (Stat 2 from her Skill Boost), and the wizard showed both answers
+pressed. The real Export JSON button wrote kindVersion 2: Breath of Fire
+`signature: false, player`, `skl 5, register`; Carry the Flame `true, player`,
+`skl 2, advancement`; gained Balanced Sword `false, book`, `skl 6, book`. The
+answers given were test values on a local copy that never synced. The seed lived
+in gitignored `backups/` and was deleted after.
+
+A new persisted field is §5's third trigger. The audit due at entry 81 is the
+next session; it should cover `pick.signature` as well.
+
+Also: the play tracker's health bar scaled instead of animating `width`,
+so a health tap no longer re-lays the card out (flagged by the design hook;
+not looked at in a browser).
+
+24 new tests, 925 total.
+
+Files: `src/lib/signature.js` (new) + test (new),
+`src/components/SignatureRepair.jsx` (new),
+`src/components/exportWholeArsenal.js` (new), `src/data/advancements.js`,
+`src/lib/arsenalExport.js` + test, `src/lib/outstanding.js` + test,
+`src/lib/triggerPlacement.test.js`, `src/components/SelectionSlot.jsx`,
+`src/components/RulesText.jsx`, `src/components/LeaderRecord.jsx`,
+`src/components/ArsenalSheet.jsx`, `src/components/steps/Arsenal.jsx`,
+`src/components/steps/Record.jsx`, `src/components/steps/PlayTracker.jsx`,
+`src/App.jsx`, `src/styles/app.css`, `CLAUDE.md`, `package.json`
+UNVERIFIED: version 2 has not been imported into the Adjudicator. No real
+player has answered yet, so every live export says `signature: null` until
+they do.
+NEXT: the audit (entry 81). The owner answers for their leaders and re-exports.

@@ -34,11 +34,16 @@ export function IconText({ text }) {
  * leader's record would be inventing rules the leader does not have. Crew
  * cards, which describe the actual hired model, pass it on.
  */
-export function EntryBody({ entry, slot, showTriggers = true, advancements = [] }) {
+export function EntryBody({ entry, slot, showTriggers = true, advancements = [], signature }) {
   if (!entry) return null
+  // A leader's action passes `signature`: the player's answer, or null when
+  // unanswered. It replaces the register's flag, which is wrong for actions
+  // that are printed signature (lib/signature.js). Crew cards pass nothing and
+  // read the register as before.
+  const base = signature === undefined ? entry : { ...entry, isSignature: signature === true }
   // The action as the leader's advancements leave it, so the stat line reads
   // Stat 6 rather than reading Stat 5 beside a note saying it is really 6.
-  const { action } = advancedAction(entry, advancements)
+  const { action } = advancedAction(base, advancements)
   const stats = slot === 'ability' ? [] : statLine(action)
   const extras = []
   if (slot === 'ability') {
@@ -74,7 +79,7 @@ export function EntryBody({ entry, slot, showTriggers = true, advancements = [] 
  * the record, the hover tip and the crew cards all need the same four answers
  * and it would be easy for them to drift into three different vocabularies.
  */
-export function RulesState({ rules, slug, slot, name, quiet, showTriggers = true, advancements = [] }) {
+export function RulesState({ rules, slug, slot, name, quiet, showTriggers = true, advancements = [], signature }) {
   if (!slug) {
     return quiet ? null : <div className="rules rules--absent">Entered by hand — no register record to read.</div>
   }
@@ -91,7 +96,7 @@ export function RulesState({ rules, slug, slot, name, quiet, showTriggers = true
   if (!entry) {
     return <div className="rules rules--absent">Not on {card.name}'s record — the register may have renamed it.</div>
   }
-  return <EntryBody entry={entry} slot={slot} showTriggers={showTriggers} advancements={advancements} />
+  return <EntryBody entry={entry} slot={slot} showTriggers={showTriggers} advancements={advancements} signature={signature} />
 }
 
 /**

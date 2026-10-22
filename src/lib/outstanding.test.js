@@ -230,7 +230,8 @@ describe('unplaced advancements', () => {
         // The action has to be one this leader really holds. A placeholder key
         // reads, correctly, as an advancement attached to nothing (v0.29.0).
         picks: {
-          attack: [{ key: 'bokor::attack::Breath of Fire', name: 'Breath of Fire', model: 'Bokor' }],
+          // Answered, so the signature question (v0.36.0) stays out of this test.
+          attack: [{ key: 'bokor::attack::Breath of Fire', name: 'Breath of Fire', model: 'Bokor', signature: false }],
           tactical: [],
           ability: [],
         },
@@ -240,6 +241,27 @@ describe('unplaced advancements', () => {
         }],
       },
     })
+    expect(outstandingFor({ arsenal })).toEqual([])
+  })
+})
+
+describe('unanswered signatures', () => {
+  const withPicks = (attack, tactical = []) => {
+    const base = built()
+    return built({ leader: { ...base.leader, picks: { attack, tactical, ability: [] } } })
+  }
+  const RAFT = { key: 'aunty-mel::tactical::Life Raft', name: 'Life Raft', model: 'Aunty Mel' }
+  const DART = { key: 'skulker-skin::attack::Blowdart', name: 'Blowdart', model: 'Skulker Skin' }
+
+  it('names every chosen action nobody has answered for', () => {
+    const item = outstandingFor({ arsenal: withPicks([DART], [RAFT]) })
+      .find((i) => i.kind === 'unanswered-signatures')
+    expect(item.names).toEqual(['Blowdart', 'Life Raft'])
+    expect(item.where).toBe('arsenal')
+  })
+
+  it('a "no" is an answer, and the item goes', () => {
+    const arsenal = withPicks([{ ...DART, signature: false }], [{ ...RAFT, signature: true }])
     expect(outstandingFor({ arsenal })).toEqual([])
   })
 })
