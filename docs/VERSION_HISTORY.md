@@ -5983,3 +5983,66 @@ Files: `src/data/gainingGrounds.js` (new), `src/lib/scenario.js` (new) + test
 UNVERIFIED: not used at a real table; strategy and scheme text not checked
 against the printed cards.
 NEXT: owner feedback from a real game.
+
+---
+
+### Session 79 — v0.35.0
+Date: 2026-10-22
+
+**feat: export the whole arsenal from the sheet, and the JSON export carries the arsenal again**
+
+Owner request: a complete export, from the Arsenal sheet, that the owner's
+Adjudicator Engine can import. That tool had been handed the Arsenal view's
+"Export JSON" file and reported that it had no leader, a roster of bare ids,
+no current state, and an `arsenalId` naming a record it did not include.
+
+**The cause was a real bug, not a missing feature.** That button exported
+`campaign` alone, with a comment from audit v0.11.0 H2 explaining why: in v2
+the campaign held the arsenal. Since the v3 cutover (v0.19.2) it holds only
+ids. So for sixteen versions the escape hatch §8 requires saved a file that
+named a crew without containing one: no leader, no models, no scrip, no kit.
+`Record.jsx` (the creation wizard's last step) had the same line. Only the
+shelf's per-leader Export was right, because it was written after the split.
+
+`src/lib/arsenalExport.js` builds one file that is two things:
+
+- **The bundle, untouched.** `format`, `campaigns: [campaign]`,
+  `arsenals: [arsenal]`, so `readBundle` imports it like any other export.
+  Nothing resolved is read back in, so nothing resolved can corrupt an import.
+- **A resolved view beside it**, derived on export and stored nowhere:
+  the leader (archetype, its p. 17 stat line, faction, keywords, which card
+  each pick came from, crew card effect, experience, advancements with their
+  table names, the leader's live injuries); the totem; the current scrip,
+  soulstones, standing rating and week; every model by name, starting arsenal
+  and the annihilated included, each with its live injuries; equipment held and
+  lost; every injury with what it is on and whether it is healed; the
+  campaign's games for this arsenal with hired, killed and kit-holder ids
+  turned back into names; and `subjects`, one lookup from every id in the file
+  to who it is.
+
+Decisions:
+
+- **A leader has no base card, and the file says so** (`builtFrom:
+  'archetype'`). The Adjudicator asked which Malifaux card Cletus and Duke are
+  built on; the answer is none. The archetype gives the stat line, the picks
+  name the cards their actions came from, `representingModel` is the miniature.
+- **Current state is stated, not left to a replay.** Replaying aftermaths
+  cannot see the starting arsenal or anything done outside an aftermath (a
+  defector, an annihilated Lucky Gremlin Foot, the starting-scrip claim).
+- **No rules text** (§4): names, costs, pages and stat lines only. A test
+  asserts no `description` or `text` key in the resolved half.
+- **All three Export JSON buttons write the same file.** One format to read.
+
+Proven in a browser: a seeded arsenal's sheet showed the button, and the
+downloaded `cletus-and-duke-arsenal.json` carried the leader as Heavy Hitter
+Df 6 / Wp 4 / Sp 6 / Hp 14, Ten Thunders, the roster by name with Skulker Skin
+on Shorebound Sentinel, scrip 4, week 2, and the game's killed id resolved to
+Shorebound Sentinel.
+
+10 new tests, 901 total.
+
+Files: `src/lib/arsenalExport.js` (new) + test (new),
+`src/components/ArsenalSheet.jsx`, `src/components/steps/Arsenal.jsx`,
+`src/components/steps/Record.jsx`, `src/App.jsx`, `CLAUDE.md`, `package.json`
+UNVERIFIED: not yet imported into the Adjudicator Engine.
+NEXT: the owner re-exports and tries the import.

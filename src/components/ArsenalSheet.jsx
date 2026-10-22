@@ -13,7 +13,9 @@ import { sourceSlug, findEntry, actionColumns } from '../lib/rules.js'
 import {
   advancementsOn, advancedAction, gainedActionKey, SUIT_LABEL, totemPicks,
 } from '../lib/advancement.js'
-import { PrintLegal } from './ui.jsx'
+import { PrintLegal, Button } from './ui.jsx'
+import { exportJSON } from '../lib/storage.js'
+import { fullArsenalExport, fullExportFilename } from '../lib/arsenalExport.js'
 
 /**
  * The arsenal sheet — everything the official one records, in this app's own
@@ -491,6 +493,24 @@ export default function ArsenalSheet({ arsenal, leader, archetype, campaign, rul
           <PrintLegal />
         </div>
       </article>
+
+      {/* Everything on this sheet and everything behind it, in one file another
+          tool can read: the two documents, plus the same facts with every id
+          resolved to a name (lib/arsenalExport.js). It imports back here too. */}
+      <div className="export noprint">
+        <Button onClick={() => exportJSON(
+          fullArsenalExport({
+            arsenal, campaign,
+            build: typeof __BUILD__ === 'undefined' ? null : __BUILD__,
+          }),
+          fullExportFilename(arsenal)
+        )}>
+          Export the whole arsenal
+        </Button>
+        <span className="pick__meta">
+          JSON: the leader, every model, kit, injuries, scrip and the campaign so far.
+        </span>
+      </div>
     </div>
   )
 }

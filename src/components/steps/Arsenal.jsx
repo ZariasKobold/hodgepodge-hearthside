@@ -6,6 +6,7 @@ import {
   totalFor, liveModels, liveEquipment, activeInjuryCount, STARTING_ARSENAL_WEEK,
 } from '../../lib/shape/arsenal.js'
 import { exportJSON } from '../../lib/storage.js'
+import { fullArsenalExport, fullExportFilename } from '../../lib/arsenalExport.js'
 import { buildSheet, sheetToPNG, printSheet } from '../../lib/recordImage.js'
 import { Label, Button } from '../ui.jsx'
 import LeaderRecord from '../LeaderRecord.jsx'
@@ -139,10 +140,14 @@ export default function Arsenal({
         <Button onClick={onEditLeader}>Edit this leader</Button>
         {onSheet && <Button ghost onClick={onSheet}>Arsenal sheet</Button>}
         <Button ghost onClick={onHire}>Weekly hire</Button>
-        {/* The campaign, not the arsenal. An arsenal has no `arsenals` array,
-            so `adopt` refused every file this button used to produce — a backup
-            the app itself could not read (audit v0.11.0, H2). */}
-        <Button ghost onClick={() => exportJSON(campaign, `${stem}.json`)}>Export JSON</Button>
+        {/* Both documents. Since v3 the campaign alone holds no leader, no
+            models and no scrip — only ids pointing at an arsenal it did not
+            carry — so this button exported a file nobody could read a crew
+            out of, this app included. Same file as the sheet's export. */}
+        <Button ghost onClick={() => exportJSON(
+          fullArsenalExport({ arsenal, campaign, build: typeof __BUILD__ === 'undefined' ? null : __BUILD__ }),
+          fullExportFilename(arsenal)
+        )}>Export JSON</Button>
         <Button ghost onClick={saveImage} disabled={imaging === 'working'}>
           {imaging === 'working' ? 'Drawing…' : 'Export image'}
         </Button>

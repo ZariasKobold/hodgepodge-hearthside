@@ -453,6 +453,7 @@ export default function App() {
         {admitted && inCampaign && view === 'create' && step === 3 && archetype && (
           <Record
             campaign={campaign}
+            arsenal={arsenal}
             leader={leader}
             set={set}
             archetype={archetype}

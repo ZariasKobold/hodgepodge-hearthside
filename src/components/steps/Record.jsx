@@ -7,6 +7,7 @@ import {
   createModel, STARTING_ARSENAL_WEEK, startingArsenalSpend,
 } from '../../lib/shape/arsenal.js'
 import { exportJSON } from '../../lib/storage.js'
+import { fullArsenalExport, fullExportFilename } from '../../lib/arsenalExport.js'
 import { isVersatile } from '../../lib/indexing.js'
 import { buildSheet, sheetToPNG, printSheet } from '../../lib/recordImage.js'
 import { Label, Button, Select } from '../ui.jsx'
@@ -26,7 +27,7 @@ const byCost = (models) => [...models].sort((a, b) => a.cost - b.cost)
  * the two cannot drift into different documents.
  */
 export default function Record({
-  campaign, leader, set, archetype, roster, rules, fileNumber,
+  campaign, arsenal, leader, set, archetype, roster, rules, fileNumber,
   owedStartingScrip = 0, onCreditStartingScrip, onDone,
 }) {
   // Week 0 only. This used to total the whole roster, which is the same number
@@ -105,8 +106,12 @@ export default function Record({
       <LeaderRecord leader={leader} archetype={archetype} fileNumber={fileNumber} rules={rules} />
 
       <div className="export noprint">
-        {/* The campaign, not the flat wizard adapter — see audit v0.11.0 H2. */}
-        <Button ghost onClick={() => exportJSON(campaign, `${stem}.json`)}>Export JSON</Button>
+        {/* Both documents, as on the arsenal view: the campaign alone has held
+            no leader since v3 (audit v0.11.0 H2 was the earlier half of this). */}
+        <Button ghost onClick={() => exportJSON(
+          fullArsenalExport({ arsenal, campaign, build: typeof __BUILD__ === 'undefined' ? null : __BUILD__ }),
+          fullExportFilename(arsenal)
+        )}>Export JSON</Button>
         <Button ghost onClick={saveImage} disabled={imaging === 'working'}>
           {imaging === 'working' ? 'Drawing…' : 'Export image'}
         </Button>
