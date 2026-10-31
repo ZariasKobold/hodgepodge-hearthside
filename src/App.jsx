@@ -62,7 +62,7 @@ export default function App() {
     creditStartingScrip, owedStartingScrip, repairAftermathDrift,
     setWeek, stepWeek, setWeekMode, resetWeek, setStartedAt, setWeeksTotal,
     setHouseRules,
-    logGame, updateGame, buyEquipment, annihilateEquipment, addInjury,
+    logGame, updateGame, buyEquipment, annihilateEquipment, loseModel, addInjury,
     startEncounter, updateEncounter, discardEncounter, saveCrew, deleteCrew, healInjury, dropInjury, annihilateModel,
     advanceLeader, advanceTotem, setTotem, addCrewCardAdvancement, placeAdvancementAt,
     useMiraculousRecovery, annihilateLeader, rewindPhases,
@@ -379,6 +379,7 @@ export default function App() {
             onSetSignature={(slot, key, value) => setPick(slot, withPickSignature(leader.picks[slot], key, value))}
             onSetTotem={setTotem}
             onAnnihilateEquipment={annihilateEquipment}
+            onLoseModel={loseModel}
           />
         )}
 

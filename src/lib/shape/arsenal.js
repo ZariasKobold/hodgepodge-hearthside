@@ -369,6 +369,33 @@ export function annihilateEquipmentPatch(arsenal, rowId, week, annihilated = tru
   }
 }
 
+/**
+ * A model lost to something that happened in a game rather than to the injury
+ * phase — the player knows, the app cannot see it. Flagged like any other
+ * annihilation, so the week it arrived and the scrip it cost stay legible.
+ *
+ * `lostInGame` says which route took it, and only that route may be undone
+ * here: an injury-phase annihilation is phase six's verdict, cleared only by
+ * rewinding phase six (`rewind.js`). The two keys are removed on undo rather
+ * than blanked, and never defaulted in `createModel`, because every arsenal
+ * passes through it on load and a new default would make one device's copy
+ * differ from the account's.
+ */
+export function loseModelPatch(arsenal, modelId, week, lost = true) {
+  return {
+    models: (arsenal?.models || []).map((m) => {
+      if (m.id !== modelId) return m
+      if (lost) {
+        if (m.annihilated) return m
+        return { ...m, annihilated: true, lostInGame: true, lostWeek: week ?? null }
+      }
+      if (!m.lostInGame) return m
+      const { lostInGame: _l, lostWeek: _w, ...rest } = m
+      return { ...rest, annihilated: false }
+    }),
+  }
+}
+
 export function totalFor(arsenal) {
   return arsenalTotal(liveModels(arsenal))
 }

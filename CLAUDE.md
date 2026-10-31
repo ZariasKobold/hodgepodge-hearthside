@@ -1,12 +1,12 @@
 # CLAUDE.md — Hodgepodge Hearthside project context
 
-<!-- HH v0.37.0 | Last updated: 2026-10-22 -->
+<!-- HH v0.37.1 | Last updated: 2026-10-31 -->
 
 ---
 
-## Current Version: 0.37.0
+## Current Version: 0.37.1
 
-## Last Updated: 2026-10-22
+## Last Updated: 2026-10-31
 
 **Live at hodgepodgehearthside.com** (Cloudflare Pages, auto-deploys on push to
 `main`). Repo: `ZariasKobold/hodgepodge-hearthside`.
@@ -97,8 +97,8 @@ of these fire:
   that restarted at 40 and again at 41, so the history holds two 40s and three
   each of 41–47, and an audit due at entry 64 ran at entry 71
   (`docs/audits/audit-v0.28.1.md`, M4). Old headings keep their wrong numbers,
-  because other entries cite them. **Next audit: entry 82** (it was due at 81,
-  and Session 81 shipped a feature instead).
+  because other entries cite them. **Next audit: entry 83** (it was due at 81,
+  and Sessions 81 and 82 shipped features instead).
 - Before any milestone that widens blast radius: first D1 write, first
   non-you user, submitting to Wyrd's Community Creators page
 - **A new top-level module, a change under `functions/`, or the first write of a
@@ -123,12 +123,25 @@ audits had to invent the check by hand and one got it wrong.
 
 ## ⚠️ NEXT SESSION — pending
 
-### ⚠ The audit is overdue — entry 82 is the next session
+### ⚠ The audit is overdue — entry 83 is the next session
 
-It was due at entry 81, and Session 81 (v0.37.0) shipped a feature instead.
-§5 calls an overdue audit blocking. On its list: `pick.signature` (v0.36.0),
-`encounter.playFacts` and `play:<encounterId>` (v0.33.0), and v0.37.0's
-change under `functions/` (the book route, now open to any signed-in player).
+It was due at entry 81, and Sessions 81 (v0.37.0) and 82 (v0.37.1) shipped
+features instead. §5 calls an overdue audit blocking. On its list:
+`pick.signature` (v0.36.0), `encounter.playFacts` and `play:<encounterId>`
+(v0.33.0), v0.37.0's change under `functions/` (the book route, now open to
+any signed-in player), and v0.37.1's `lostInGame` / `lostWeek` on a model.
+
+### A model can be marked lost during a game — v0.37.1
+
+Owner request (Santa Muerte's Shieldbearer). The Arsenal view's roster has a
+**Lost** control on every live model, confirmed before it lands, beside the
+equipment's Annihilate. `loseModelPatch` flags it annihilated with
+`lostInGame` and `lostWeek`; no scrip moves.
+
+- **Only a model lost this way has Undo.** An injury-phase annihilation is
+  phase six's, undone only by rewinding phase six.
+- **`lostInGame` / `lostWeek` are not defaulted in `createModel`** and are
+  removed, not blanked, on undo, for the same reason as `arsenal.crews`.
 
 ### The book's text is shown, from BiggerHat where it can be — v0.37.0
 
@@ -437,7 +450,7 @@ aftermath. Shipped and live:
 | **The service worker** | v0.19.3. It cached Pages' SPA fallback under asset URLs, so a browser that loaded mid-deploy got a **permanent white screen** no reload could clear. Live since v0.14.0, observed in production on 2026-09-03. Two guards now — never write HTML under a non-navigation request, never serve it either — plus a cache-version bump that purges anyone already poisoned. |
 | **Membership** | v0.17.0. Owner-issued single-use invites, two gates (redeem → pending → host admits), per-campaign nicknames, opt-in Discord identity, and a read-only shared arsenal page. Writes were **not** widened — see below. |
 
-894 tests at v0.37.0.
+899 tests at v0.37.1.
 
 ### Unfinished business finds the player now — v0.23.0
 
@@ -2226,7 +2239,7 @@ every session. `docs/VERSION_HISTORY.md` holds how it got this way.
 npm install
 cp .env.example .env
 npm run dev      # Vite only — NO Functions, NO database. useAuth degrades to signed out.
-npm run test     # 894 tests; `functions/` is in the run too, for the authz tests
+npm run test     # 899 tests; `functions/` is in the run too, for the authz tests
 npm run dialogue # hank.js and hank-dialogue.md agree (§1)
 npm run build    # production bundle — the dev proxy does NOT exist here
 npm run seed     # optional local register file; ask BiggerHat's maintainer first

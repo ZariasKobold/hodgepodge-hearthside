@@ -11,7 +11,7 @@ import {
 import {
   createModel, createEquipment, createInjury, createTotem,
   totalFor, mustHireThisWeek, startingScripPatch, owedStartingScrip, defectorPatch,
-  annihilateEquipmentPatch,
+  annihilateEquipmentPatch, loseModelPatch,
 } from '../lib/shape/arsenal.js'
 import {
   createCampaign, createGame, currentWeek, joinedWeekFor,
@@ -502,6 +502,15 @@ export function useCampaign({ userId = null, userReady = true, onSaved, onArsena
     setArsenal((a) => annihilateEquipmentPatch(a, rowId, week, annihilated))
   }, [setArsenal, week])
 
+  /**
+   * A model lost to a game effect the app cannot see, outside the injury
+   * phase. Flagged, not deleted, like every annihilation. Pass `false` to undo
+   * a misclick; only a model lost this way can be brought back here.
+   */
+  const loseModel = useCallback((modelId, lost = true) => {
+    setArsenal((a) => loseModelPatch(a, modelId, week, lost))
+  }, [setArsenal, week])
+
   /* ── injuries ─────────────────────────────────────────────────── */
 
   const addInjury = useCallback((entry) => {
@@ -639,7 +648,7 @@ export function useCampaign({ userId = null, userReady = true, onSaved, onArsena
     // games and the aftermath
     logGame, updateGame, removeGame,
     startEncounter, updateEncounter, discardEncounter, saveCrew, deleteCrew,
-    buyEquipment, annihilateEquipment,
+    buyEquipment, annihilateEquipment, loseModel,
     addInjury, healInjury, dropInjury, annihilateModel,
     advanceLeader, advanceTotem, setTotem, addCrewCardAdvancement, placeAdvancementAt,
     rewindPhases,

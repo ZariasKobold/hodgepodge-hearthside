@@ -7,7 +7,7 @@ import {
   activeInjuryCount, standingRating, ratingForGame, heldEquipmentIds,
   injuryNamesFor, isOutOfKeyword, hiresInWeek, mustHireThisWeek,
   startingArsenalSpend, startingScripPatch, owedStartingScrip, defectorPatch,
-  liveEquipment, annihilateEquipmentPatch,
+  liveEquipment, annihilateEquipmentPatch, loseModelPatch,
 } from './arsenal.js'
 
 describe('createArsenal', () => {
@@ -306,6 +306,53 @@ describe('defectorPatch — the Traitor, received (p. 34)', () => {
     const a = { ...base(), ...defectorPatch(base(), { name: 'Shieldbearer', cost: 5 }, week) }
     expect(hiresInWeek(a, week)).toEqual([])
     expect(mustHireThisWeek(a, week)).toBe(true)
+  })
+})
+
+/* ── a model lost during a game ────────────────────────────────── */
+
+describe('loseModelPatch', () => {
+  const arsenal = () => createArsenal({
+    scrip: 4,
+    models: [
+      createModel({ id: 'mdl_shield', name: 'Shieldbearer', cost: 5, addedWeek: 2, scripPaid: 0 }),
+      createModel({ id: 'mdl_other', name: 'Ronin', cost: 6 }),
+      createModel({ id: 'mdl_dead', name: 'Hans', cost: 8, annihilated: true }),
+    ],
+  })
+
+  it('flags the model and keeps it, with the week it went', () => {
+    const a = arsenal()
+    const next = { ...a, ...loseModelPatch(a, 'mdl_shield', 4) }
+    expect(next.models).toHaveLength(3)
+    expect(next.models[0]).toMatchObject({
+      id: 'mdl_shield', annihilated: true, lostInGame: true, lostWeek: 4, addedWeek: 2,
+    })
+    expect(liveModels(next).map((m) => m.id)).toEqual(['mdl_other'])
+    expect(totalFor(next)).toBe(6)
+  })
+
+  it('moves no scrip', () => {
+    expect(loseModelPatch(arsenal(), 'mdl_shield', 4)).not.toHaveProperty('scrip')
+  })
+
+  it('undoes to exactly the model it was', () => {
+    const a = arsenal()
+    const gone = { ...a, ...loseModelPatch(a, 'mdl_shield', 4) }
+    const back = { ...gone, ...loseModelPatch(gone, 'mdl_shield', 5, false) }
+    expect(back.models[0]).toEqual(a.models[0])
+  })
+
+  it('never undoes an injury-phase annihilation', () => {
+    const a = arsenal()
+    const next = { ...a, ...loseModelPatch(a, 'mdl_dead', 4, false) }
+    expect(next.models[2]).toEqual(a.models[2])
+  })
+
+  it('leaves an already-annihilated model as it was', () => {
+    const a = arsenal()
+    const next = { ...a, ...loseModelPatch(a, 'mdl_dead', 4) }
+    expect(next.models[2]).toEqual(a.models[2])
   })
 })
 

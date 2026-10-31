@@ -24,24 +24,26 @@ import TotemCard from '../TotemCard.jsx'
  * is grouped by when each model arrived, so week eight reads as a history
  * rather than a list.
  *
- * Deliberately read-only about the roster. Models arrive through the starting
- * arsenal (creation) or the weekly hire (campaign), and leave by annihilation.
- * A delete button here would imply a fourth route that the rules do not have.
+ * Models arrive through the starting arsenal (creation) or the weekly hire
+ * (campaign), and leave by annihilation. There is still no delete button: a
+ * delete would imply a route the rules do not have.
  *
- * Equipment is the exception, because the book gives it a route the app cannot
- * see. Some kit annihilates itself during a game (Lucky Gremlin Foot, p. 22),
- * and only the player knows when. So each piece has an Annihilate control, and
- * it flags the row rather than deleting it (audit v0.28.1 M3).
+ * Annihilation has routes the app cannot see, for models and equipment both.
+ * Some kit annihilates itself during a game (Lucky Gremlin Foot, p. 22), and a
+ * model can be lost to a game effect outside the injury phase; only the player
+ * knows when. So each row has a control that flags it rather than deleting it
+ * (audit v0.28.1 M3), and a model lost that way can be undone here. One the
+ * injury phase annihilated cannot: that is phase six's to rewind.
  */
 export default function Arsenal({
   campaign, arsenal, leader, archetype, week, rules, fileNumber,
   onEditLeader, onHire, onSheet, onPlaceAdvancement, onRepairDrift, onSetTrigger, onSetSignature, onSetTotem,
-  onAnnihilateEquipment,
+  onAnnihilateEquipment, onLoseModel,
 }) {
   const [imaging, setImaging] = useState(null)
   /** Which action each unplaced advancement is about to be given. */
   const [placing, setPlacing] = useState({})
-  /** The equipment row whose annihilation is waiting to be confirmed. */
+  /** The equipment or model row whose annihilation is waiting to be confirmed. */
   const [confirming, setConfirming] = useState(null)
 
   const models = liveModels(arsenal)
@@ -178,17 +180,34 @@ export default function Arsenal({
               {inWeek.map((m) => (
                 <div className="pick" key={m.id} style={{ borderColor: 'var(--line)', background: 'var(--panel)' }}>
                   <span className="pick__meta" style={{ fontSize: 13, color: 'var(--text)' }}>{m.name}</span>
-                  <span style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                  <span style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
                     {w !== STARTING_ARSENAL_WEEK && (
                       <span className="pick__meta">{m.scripPaid} scrip</span>
                     )}
                     <span className="pick__meta">{m.cost}ss</span>
+                    {onLoseModel && (confirming === m.id ? (
+                      <>
+                        <Button ghost onClick={() => { onLoseModel(m.id, true); setConfirming(null) }}>
+                          Yes, it is gone
+                        </Button>
+                        <Button ghost onClick={() => setConfirming(null)}>Keep it</Button>
+                      </>
+                    ) : (
+                      <Button ghost onClick={() => setConfirming(m.id)}>Lost</Button>
+                    ))}
                   </span>
                 </div>
               ))}
             </div>
           )
         })}
+        {onLoseModel && models.length > 0 && (
+          <p className="note">
+            Lost is only for a model taken by something in a game, outside the
+            injury phase. The aftermath annihilates models with three injuries
+            by itself. No scrip comes back.
+          </p>
+        )}
 
         <div style={{ marginTop: 10 }}>
           <Label>Equipment</Label>
@@ -265,8 +284,15 @@ export default function Arsenal({
             <Label>Annihilated — no longer hirable</Label>
             {lost.map((m) => (
               <div className="pick" key={m.id} style={{ borderColor: 'var(--coal-wash)', background: 'var(--panel)', opacity: 0.7 }}>
-                <span className="pick__meta" style={{ fontSize: 13 }}>{m.name}</span>
-                <span className="pick__meta">{m.cost}ss</span>
+                <span className="pick__meta" style={{ fontSize: 13 }}>
+                  {m.name}{m.lostInGame && m.lostWeek != null && ` · lost in week ${m.lostWeek}`}
+                </span>
+                <span style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                  <span className="pick__meta">{m.cost}ss</span>
+                  {onLoseModel && m.lostInGame && (
+                    <Button ghost onClick={() => onLoseModel(m.id, false)}>Undo</Button>
+                  )}
+                </span>
               </div>
             ))}
           </div>

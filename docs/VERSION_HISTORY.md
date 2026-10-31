@@ -6237,3 +6237,43 @@ only, and users, arsenals and campaigns unchanged (6, 7, 7). `book.sql` deleted.
 UNVERIFIED: not tried through `wrangler pages dev` or production with a real
 session.
 NEXT: the audit (now entry 82).
+
+### Session 82 — v0.37.1
+Date: 2026-10-31
+
+**feat: a model lost during a game can be marked lost on the Arsenal view**
+
+Owner request: Santa Muerte's Shieldbearer was lost to a game effect, and the
+app had no way to say so. A model left an arsenal only through the injury
+phase's three-injury annihilation; equipment already had a manual Annihilate
+control (audit v0.28.1 M3), models did not.
+
+- **`loseModelPatch`** (`lib/shape/arsenal.js`) flags `annihilated: true` and
+  adds `lostInGame: true` and `lostWeek`. Flagged, never deleted, like every
+  annihilation: the week it arrived and the scrip it cost stay legible, and
+  `liveModels` already drops it from the total and the hire.
+- **Only a model lost this way can be undone here.** An injury-phase
+  annihilation is phase six's verdict, cleared only by rewinding phase six.
+  `lostInGame` is what tells the two apart.
+- **The two new keys are removed on undo, never blanked, and not defaulted in
+  `createModel`.** Every arsenal passes through it on load, so a new default
+  would make one device's copy differ from the account's (the `arsenal.crews`
+  rule). An undone model is key-for-key what it was; a test asserts it.
+- **Confirmed before it lands**, like the equipment control: "Lost", then
+  "Yes, it is gone" / "Keep it". No scrip moves.
+
+Proven in a browser on `npm run dev` with a seeded arsenal: Lost, confirm, the
+model moved to "Annihilated — no longer hirable" reading "lost in week 1" with
+Undo; Undo restored it with exactly its original keys.
+
+**§5's audit is still overdue.** This is entry 82, where it was due; the owner
+asked for this fix first. A new optional field on a persisted model is arguably
+the third trigger as well. Next audit: entry 83.
+
+899 tests (5 new).
+
+Files: `src/lib/shape/arsenal.js` + test, `src/hooks/useCampaign.js`,
+`src/App.jsx`, `src/components/steps/Arsenal.jsx`, `CLAUDE.md`.
+UNVERIFIED: not yet used on the real Santa Muerte arsenal; the owner does that
+from the Arsenal view after deploy.
+NEXT: the audit (now entry 83).
