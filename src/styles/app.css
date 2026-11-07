@@ -95,7 +95,13 @@ body::after {
   background:
     radial-gradient(122% 72% at 50% 118%, rgba(240,160,75,.22) 0%, rgba(201,114,44,.10) 34%, rgba(0,0,0,0) 68%),
     radial-gradient(84% 52% at 50% -12%, rgba(217,171,82,.07) 0%, rgba(0,0,0,0) 70%);
-  animation: hearth 7s cubic-bezier(.4,0,.5,1) infinite alternate;
+  /* Stepped, twice a second, and that is load-bearing. Eased smoothly this
+     recomposited the whole window sixty times a second forever, and redrew the
+     nav's backdrop blur with it: 22% of a core in Firefox with the page sitting
+     idle, against 6.5% stepped, measured. The glow is so faint that the full swing is about ten
+     levels of 8-bit colour, so one step is under one level and cannot be seen.
+     Do not put an easing back on it. See v0.37.2. */
+  animation: hearth 7s steps(14) infinite alternate;
 }
 @keyframes hearth { from { opacity: .8 } to { opacity: 1 } }
 

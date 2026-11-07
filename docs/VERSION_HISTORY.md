@@ -6277,3 +6277,58 @@ Files: `src/lib/shape/arsenal.js` + test, `src/hooks/useCampaign.js`,
 UNVERIFIED: not yet used on the real Santa Muerte arsenal; the owner does that
 from the Arsenal view after deploy.
 NEXT: the audit (now entry 83).
+
+---
+
+### Session 83 — v0.37.2
+Date: 2026-11-06
+
+**fix: the fire's glow steps twice a second instead of animating every frame**
+
+A friend of the owner reported the site worked well in Edge and Chrome but was
+slow and laggy in Firefox. No API or CSS feature turned out to be missing, so
+this was rendering cost, and the cause was not the one a code reading suggested.
+
+- **Measured, not guessed, and the guess was wrong.** `background-attachment:
+  fixed` on the wood grain was the prime suspect. Turning it off, and turning
+  the grain off altogether, changed nothing beyond noise. Keep it.
+- **`requestAnimationFrame` cannot see this.** Pacing read a flat 16.7ms in
+  every phase, because the cost is in the graphics process, not the main
+  thread. CPU time summed across all of Firefox's processes is what moved.
+- **The cause was `body::after`, the hearth animation.** It was a full-window
+  opacity animation that ran forever, so the window recomposited sixty times a
+  second with nobody touching the page, and the nav's `backdrop-filter` was
+  redrawn with it.
+- **Stepped rather than removed.** It is the app's one authored motion, and the
+  glow is faint enough that the whole swing is about ten levels of 8-bit colour.
+  `steps(14)` on a 7s run is two updates a second, each under one level. It
+  loses the old easing, which at that amplitude could not be seen. The moving
+  opacity was confirmed in Firefox and Edge after the change.
+
+Playwright Firefox 159, 1600x950, a real leader imported (3810px Arsenal page),
+old and new alternated over four rounds in one session. Percent of one core,
+averaged:
+
+| | Idle | Scrolling | Header shrink |
+|---|---|---|---|
+| Smooth (before) | 22 | 49 | 44 |
+| `steps(14)` | 6.5 | 31 | 40 |
+| No animation (floor) | 1 | 26 | 36 |
+
+Idle remains noisy after the change (3–12 across rounds). `steps(7)` was not
+clearly better, so the slower rate was not taken.
+
+- **The blur stays.** It looked expensive (idle halved without it), but only
+  because the animation sat behind it. Once stepped, removing it gained nothing
+  beyond noise.
+- **The header transition stays.** Dropping `background-position` or the title's
+  `font-size` from it did not help. Only removing the transition entirely did,
+  and it runs for .3s at a threshold; the 44% is a test crossing it constantly.
+
+Files: `src/styles/app.css`, `package.json`, `CLAUDE.md`.
+UNVERIFIED: not yet confirmed by the friend who reported it, on their machine.
+Forced software rendering (`gfx.webrender.software`) measured the same as GPU
+mode, but `about:support` would not open under Playwright, so whether that pref
+took effect is unknown. Firefox's printed sheet was not tested (Playwright can
+only make PDFs in Chromium). All measured on the dev server, not production.
+NEXT: the audit, still overdue (now entry 84).

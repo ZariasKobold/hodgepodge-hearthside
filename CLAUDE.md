@@ -1,12 +1,12 @@
 # CLAUDE.md — Hodgepodge Hearthside project context
 
-<!-- HH v0.37.1 | Last updated: 2026-10-31 -->
+<!-- HH v0.37.2 | Last updated: 2026-11-06 -->
 
 ---
 
-## Current Version: 0.37.1
+## Current Version: 0.37.2
 
-## Last Updated: 2026-10-31
+## Last Updated: 2026-11-06
 
 **Live at hodgepodgehearthside.com** (Cloudflare Pages, auto-deploys on push to
 `main`). Repo: `ZariasKobold/hodgepodge-hearthside`.
