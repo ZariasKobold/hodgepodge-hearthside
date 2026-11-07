@@ -53,3 +53,9 @@ backups/
 # The extracted book text (scripts/book-extract.mjs). Outside public/, so no
 # build can ever serve it; loaded into D1 by hand, never committed.
 book/
+
+# Working notes and reference copies stay local from v0.37.2 on. Files already
+# tracked here are unaffected until they are removed from the index; a new one
+# needs `git add -f` to be committed. `docs/*.pdf` above stays regardless: it
+# carries the reason the book must never be committed.
+docs/
