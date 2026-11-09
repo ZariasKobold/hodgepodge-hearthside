@@ -270,7 +270,57 @@ export function experienceFor(game, leader) {
     killedNonPeon: Boolean(game.killedNonPeon),
     interactedNearEnemyDeployment: Boolean(game.interactedNearEnemyDeployment),
     lost: game.result === 'loss',
+    // Only counted while the leader holds the trigger, so a box ticked by
+    // mistake on a leader without it cannot mint a point.
+    cruelLessons: Boolean(game.cruelLessons) && holdsCruelLessons(leader),
   })
+}
+
+/**
+ * Whether the leader itself has the Cruel Lessons trigger (p. 40).
+ *
+ * The leader, not the totem: "this model gains +1 experience point", and a
+ * totem has no experience track to gain it on. Matched by name because rows
+ * recorded before v0.22.2 carry no id, and the name is unique across the six
+ * tables.
+ */
+export const CRUEL_LESSONS = 'Cruel Lessons'
+
+export function holdsCruelLessons(leader) {
+  return (leader?.advancements || []).some((a) => a?.name === CRUEL_LESSONS && a.to !== 'totem')
+}
+
+/**
+ * A point of experience claimed for a game whose aftermath was already
+ * finished — v0.38.0, for Cruel Lessons, which the game log never asked about
+ * until then.
+ *
+ * A submitted aftermath stays submitted, so this does not reopen it. It lives
+ * on the record as `aftermath.late`, beside `advance` and shaped like it, and
+ * runs the advancement phase alone: the point is checked on the track and any
+ * box it crosses is chosen for. Nothing else in that aftermath moves.
+ */
+export function createLateClaim(source = 'cruel-lessons') {
+  return { source, earned: 1, taken: [], applied: false, boxesApplied: 0, done: false }
+}
+
+/**
+ * Whether this finished game can still have its Cruel Lessons point claimed.
+ * Not when the game log already counted it, and not twice.
+ */
+export function canClaimCruelLessons(game, leader) {
+  return Boolean(
+    game?.aftermath?.done
+    && !game.aftermath.late
+    && !game.cruelLessons
+    && !withdrewEarly(game)
+    && holdsCruelLessons(leader)
+  )
+}
+
+/** The late claim still waiting to be finished, if any. One at a time. */
+export function pendingLateClaim(games = []) {
+  return games.find((g) => g.aftermath?.late && !g.aftermath.late.done) || null
 }
 
 /**

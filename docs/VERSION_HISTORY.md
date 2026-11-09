@@ -6332,3 +6332,65 @@ mode, but `about:support` would not open under Playwright, so whether that pref
 took effect is unknown. Firefox's printed sheet was not tested (Playwright can
 only make PDFs in Chromium). All measured on the dev server, not production.
 NEXT: the audit, still overdue (now entry 84).
+
+---
+
+### Session 84 — v0.38.0
+Date: 2026-11-09
+
+**feat: Cruel Lessons earns its point, including for a game already finished**
+
+Madeline reported she had "no way to mark that I got an extra xp from Cruel
+Lessons", so she could not get the advancement it owed her. Cruel Lessons
+(attack table, joker, p. 40) reads "Enemy leader only. After killing, this
+model gains +1 experience point during this game's aftermath phase." The game
+log asked about the p. 31 bonuses and nothing else, so that point had nowhere
+to go.
+
+- **`experienceEarned` takes `cruelLessons`**, and `experienceFor` counts it
+  only while the leader holds the trigger (`holdsCruelLessons`: on the leader,
+  not the totem, which has no track; matched by name because older rows carry
+  no id). The per-game ceiling becomes `maxExperienceFor`, which is 3, or 4 with
+  the trigger. `MAX_EXPERIENCE_PER_GAME` stays at 3 for the book's own rule.
+- **Asked twice, counted once.** In the game log, and again in phase four for a
+  game logged before the log asked. Both write `game.cruelLessons`. Phase four
+  will not let it be unticked once the box it crossed has its advancement,
+  because that advancement would then belong to a box the track does not reach.
+- **A finished game gets a late claim, not a reopened aftermath** (owner
+  decision). "A submitted aftermath stays submitted" holds: the claim lives
+  beside it as `aftermath.late`, shaped like `advance`, and runs `PhaseAdvance`
+  alone. Offered from the game's history entry only when the leader holds the
+  trigger, the game log did not already count it, the game did not end in an
+  early withdrawal, and no claim exists yet.
+- **It is finished before anything else is logged.** The claim's advancements
+  name boxes by index, so a game advanced in between would move the track under
+  them. While a claim is open the Aftermath tab shows it instead of the game log.
+  It can be withdrawn until something is taken, because until then nothing on
+  the arsenal has moved.
+- **It is provenance like phase four.** `aftermathDrift` counts `late.taken`
+  and `late.boxesApplied`, so a torn write is caught the same way. The
+  flag-first ordering (audit v0.21.1 M1) is copied, not reinvented. The routing
+  of an advancement to leader, totem or crew card moved into one
+  `takeAdvancement` so the two callers cannot drift apart.
+- **The history says it was later.** "One more experience point from Cruel
+  Lessons, claimed later, crossing 1 box: took …", never folded into the night's
+  own line.
+
+New persisted fields: `game.cruelLessons` (defaulted in `createGame`, carried in
+the full export) and `aftermath.late`. That is §5's third trigger. The audit
+covers it.
+
+Exercised in a browser: a seeded leader with Cruel Lessons and one finished game
+showed the game-log checkbox and the history button. Claiming took the track
+from 1 box to 2, took Eau de Bayou for box 2, wrote the record, removed the
+button, and raised no drift item. 913 tests (14 new in `cruelLessons.test.js`).
+
+Files: `src/lib/campaign.js`, `src/lib/aftermath.js`, `src/lib/repair.js`,
+`src/lib/aftermathHistory.js`, `src/lib/arsenalExport.js`,
+`src/lib/shape/campaign.js`, `src/components/Aftermath.jsx`,
+`src/components/aftermath/GameLog.jsx`, `src/components/aftermath/PhaseAdvance.jsx`,
+`src/lib/cruelLessons.test.js` (new), `package.json`, `CLAUDE.md`.
+UNVERIFIED: not tried by Madeline on her real arsenal. Phase four's checkbox was
+built but only the game-log checkbox and the late claim were clicked in the
+browser.
+NEXT: the audit, entry 85, immediately after this (owner instruction).

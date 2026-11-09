@@ -290,6 +290,7 @@ function resolveGame(game, arsenal, subjects) {
     killed: (game.killedModelIds || []).map((id) => named(subjects, id)),
     killedNonPeon: Boolean(game.killedNonPeon),
     interactedNearEnemyDeployment: Boolean(game.interactedNearEnemyDeployment),
+    cruelLessons: Boolean(game.cruelLessons),
     aftermathDone: Boolean(game.aftermath?.done),
   }
 }

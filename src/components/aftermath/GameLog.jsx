@@ -7,6 +7,7 @@ import {
 } from '../../lib/shape/arsenal.js'
 import { maxEncounterSize } from '../../lib/campaign.js'
 import { gameFieldsFrom, hiredModels, crewRating, hiredEquipment } from '../../lib/encounter.js'
+import { holdsCruelLessons } from '../../lib/aftermath.js'
 
 /**
  * What happened in the game, recorded before the aftermath can start.
@@ -48,6 +49,7 @@ export default function GameLog({ arsenal, leader, week, weeksRemaining, isFirst
     leaderWasKilled: played?.leaderWasKilled ?? false,
     killedNonPeon: false,
     interactedNearEnemyDeployment: false,
+    cruelLessons: false,
   })
 
   const set = (patch) => setG((prev) => ({ ...prev, ...patch }))
@@ -61,6 +63,9 @@ export default function GameLog({ arsenal, leader, week, weeksRemaining, isFirst
     })
 
   const path = leader.advancementPath
+  // Asked only of a leader who has the trigger: for anyone else it is a
+  // question with one answer.
+  const cruel = holdsCruelLessons(leader)
   // Annihilated kit cannot be hired until bought again (p. 22).
   const kit = liveEquipment(arsenal)
   const ownedEquipment = kit.length
@@ -94,6 +99,7 @@ export default function GameLog({ arsenal, leader, week, weeksRemaining, isFirst
       leaderWasKilled: g.leaderWasKilled,
       killedNonPeon: g.killedNonPeon,
       interactedNearEnemyDeployment: g.interactedNearEnemyDeployment,
+      cruelLessons: cruel && g.cruelLessons,
     })
   }
 
@@ -293,6 +299,16 @@ export default function GameLog({ arsenal, leader, week, weeksRemaining, isFirst
               onChange={(e) => set({ interactedNearEnemyDeployment: e.target.checked })}
             />
             Interacted within 6" of the enemy deployment zone <span className="hire__adj">(Strategist)</span>
+          </label>
+        )}
+        {cruel && (
+          <label className="hire__check">
+            <input
+              type="checkbox"
+              checked={g.cruelLessons}
+              onChange={(e) => set({ cruelLessons: e.target.checked })}
+            />
+            Killed the enemy leader with Cruel Lessons <span className="hire__adj">(+1 experience)</span>
           </label>
         )}
         {!path && (

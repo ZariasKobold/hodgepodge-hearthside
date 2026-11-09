@@ -151,6 +151,8 @@ export function createGame(patch = {}) {
      */
     killedNonPeon: false,
     interactedNearEnemyDeployment: false,
+    /** The leader killed the enemy leader with Cruel Lessons (p. 40). v0.38.0. */
+    cruelLessons: false,
     aftermath: {},
     ...patch,
   }

@@ -148,15 +148,32 @@ export const DOCTOR_FEE_PER_ATTEMPT = 1
  * and exactly the three the book's own worked example on p. 37 awards Jack.
  *
  * Nothing here caps the total, because nothing needs to: three ways to earn
- * one point each cannot exceed three.
+ * one point each cannot exceed three. (Four since v0.38.0, when the leader
+ * holds the Cruel Lessons trigger — see below.)
  */
-export function experienceEarned({ path, killedNonPeon, interactedNearEnemyDeployment, lost }) {
+export function experienceEarned({
+  path, killedNonPeon, interactedNearEnemyDeployment, lost, cruelLessons = false,
+}) {
   let xp = 1                                   // for playing at all
   if (path === 'bruiser' && killedNonPeon) xp += 1
   if (path === 'strategist' && interactedNearEnemyDeployment) xp += 1
   if (lost) xp += 1
+  // Cruel Lessons (attack table, joker, p. 40): "Enemy leader only. After
+  // killing, this model gains +1 experience point during this game's aftermath
+  // phase." Outside the three above, which is why the ceiling below moves
+  // when the leader holds it. There is one enemy leader, so it is one point.
+  if (cruelLessons) xp += 1
   return xp
 }
 
-/** The most one game can teach, so a UI can say "2 of 3" without arithmetic. */
+/**
+ * The most one game can teach, so a UI can say "2 of 3" without arithmetic.
+ *
+ * Three from the p. 31 rules. A leader holding Cruel Lessons can earn a
+ * fourth, so a screen that knows the leader asks `maxExperienceFor` instead.
+ */
 export const MAX_EXPERIENCE_PER_GAME = 3
+
+export function maxExperienceFor({ cruelLessons = false } = {}) {
+  return MAX_EXPERIENCE_PER_GAME + (cruelLessons ? 1 : 0)
+}

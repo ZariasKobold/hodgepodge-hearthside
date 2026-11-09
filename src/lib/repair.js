@@ -83,7 +83,9 @@ export function aftermathDrift(arsenal, campaign) {
   for (const game of games) {
     const r = game.aftermath
 
-    for (const t of r.advance?.taken || []) {
+    // A late claim (v0.38.0) takes advancements and checks boxes exactly as the
+    // advancement phase does, so it is provenance in exactly the same way.
+    for (const t of [...(r.advance?.taken || []), ...(r.late?.taken || [])]) {
       if (!t.id || heldAdv.has(t.id)) continue
       const where = destinationFor(t, arsenal)
       // A totem advancement with no totem to put it on. Named rather than
@@ -102,6 +104,9 @@ export function aftermathDrift(arsenal, campaign) {
 
     if (r.advance?.applied && typeof r.advance.boxesApplied === 'number') {
       claimedBoxes += r.advance.boxesApplied
+    }
+    if (r.late?.applied && typeof r.late.boxesApplied === 'number') {
+      claimedBoxes += r.late.boxesApplied
     }
   }
 

@@ -9,6 +9,7 @@ import { aftermathReaction, campaignEnd } from '../data/hank.js'
 import {
   createAftermath, phasesFor, nextPhase, firstPhase, handFor,
   paydayBreakdown, experienceFor, withdrewEarly, boxesCrossed, fateTakesBack,
+  holdsCruelLessons, canClaimCruelLessons, createLateClaim, pendingLateClaim,
 } from '../lib/aftermath.js'
 import {
   weeksRemaining, isCampaignOver, gamesWon, gamesPlayed,
@@ -61,6 +62,28 @@ export default function Aftermath({
   // its facts rather than asking for them again.
   const encounter = openEncounter(campaign, arsenal.id)
 
+  /* ── a late claim on a finished game ───────────────────────────── */
+
+  /**
+   * Finished before the next game is logged, and that order is the point: the
+   * claim's advancements name boxes by index, and a game advanced in between
+   * would move the track under them. One claim at a time for the same reason.
+   */
+  const late = open ? null : pendingLateClaim(finished)
+
+  if (late) {
+    return (
+      <LateClaim
+        game={late}
+        leader={leader}
+        arsenal={arsenal}
+        week={week}
+        rules={rules}
+        actions={actions}
+      />
+    )
+  }
+
   /* ── no game in progress — log one ─────────────────────────────── */
 
   if (!open) {
@@ -87,7 +110,16 @@ export default function Aftermath({
             })
           }}
         />
-        {finished.length > 0 && <History games={finished} />}
+        {finished.length > 0 && (
+          <History
+            games={finished}
+            leader={leader}
+            onClaim={(game) => actions.updateGame(game.id, (g) => ({
+              cruelLessons: true,
+              aftermath: { ...g.aftermath, late: createLateClaim('cruel-lessons') },
+            }))}
+          />
+        )}
         {isCampaignOver(campaign) && (
           <HankSays tone="grave">
             {campaignEnd({
@@ -329,19 +361,13 @@ export default function Aftermath({
           earned={earned}
           record={a.advance}
           rules={rules}
+          cruel={holdsCruelLessons(leader) ? {
+            held: true,
+            value: Boolean(open.cruelLessons),
+            onChange: (v) => actions.updateGame(open.id, { cruelLessons: v }),
+          } : null}
           onTake={(entry) => {
-            // A totem taken from the tier-3 table is not an advancement on the
-            // leader — it is the crew gaining a totem, and it does not count
-            // toward the rating until the totem itself advances.
-            if (entry.tableId === 'totem') {
-              actions.setTotem({ name: entry.name, tableValue: entry.tableValue, stats: entry.stats || undefined })
-            } else if (entry.tableId === 'crew-card') {
-              actions.addCrewCardAdvancement(entry)
-            } else if (entry.to === 'totem') {
-              actions.advanceTotem(entry)
-            } else {
-              actions.advanceLeader({ boxes: 0, taken: [entry] })
-            }
+            takeAdvancement(actions, entry)
             patch({ advance: { ...a.advance, taken: [...(a.advance.taken || []), entry] } })
           }}
           onDone={() => {
@@ -655,8 +681,100 @@ function RevisionWarning({ name, impact, onCancel, onConfirm }) {
  * would bury the game log at the top of this screen, which is the thing
  * somebody arriving mid-campaign came here to use.
  */
-function History({ games }) {
+/**
+ * Taking the advancement routing out of the phase so the late claim routes the
+ * same way. Two copies of "where does a totem advancement go" would drift.
+ */
+function takeAdvancement(actions, entry) {
+  // A totem taken from the tier-3 table is not an advancement on the leader —
+  // it is the crew gaining a totem, and it does not count toward the rating
+  // until the totem itself advances.
+  if (entry.tableId === 'totem') {
+    actions.setTotem({ name: entry.name, tableValue: entry.tableValue, stats: entry.stats || undefined })
+  } else if (entry.tableId === 'crew-card') {
+    actions.addCrewCardAdvancement(entry)
+  } else if (entry.to === 'totem') {
+    actions.advanceTotem(entry)
+  } else {
+    actions.advanceLeader({ boxes: 0, taken: [entry] })
+  }
+}
+
+/**
+ * One point of experience claimed for a finished game — v0.38.0.
+ *
+ * The advancement phase alone, run against `aftermath.late`. The point is real
+ * the moment it is claimed, so the only way out is through: it is checked on
+ * the track like any other, and a box it crosses asks for its advancement.
+ * Withdrawing the claim is allowed until something has been taken, because
+ * until then nothing on the arsenal has moved.
+ */
+function LateClaim({ game, leader, arsenal, week, rules, actions }) {
+  const rec = game.aftermath.late
+  const patchLate = (next) => actions.updateGame(game.id, (g) => ({
+    aftermath: { ...g.aftermath, late: { ...g.aftermath.late, ...next } },
+  }))
+  const earned = rec.earned ?? 1
+
+  return (
+    <>
+      <section className="history">
+        <h2 className="history__head">A point claimed late — week {game.week}{game.opponent ? ` · ${game.opponent}` : ''}</h2>
+        <p className="note">
+          {leader.name || 'Your leader'} killed the enemy leader with Cruel
+          Lessons in this game, and the game log never asked. The rest of that
+          aftermath stays as it was; only this point is added. That game&rsquo;s
+          aftermath hand is long since shuffled away, so flip for any table
+          from the deck as your group agrees.
+        </p>
+      </section>
+
+      <PhaseAdvance
+        week={week}
+        leader={leader}
+        arsenal={arsenal}
+        earned={earned}
+        record={rec}
+        rules={rules}
+        late
+        onTake={(entry) => {
+          takeAdvancement(actions, entry)
+          patchLate({ taken: [...(rec.taken || []), entry] })
+        }}
+        onDone={() => {
+          // Same order as phase four, for the same reason (audit v0.21.1 M1):
+          // the flag first, so a torn write under-advances rather than doubles.
+          const crossed = boxesCrossed(leader.experience?.boxesChecked || 0, earned)
+          const alreadyApplied = rec.applied
+          patchLate({
+            applied: true,
+            done: true,
+            boxesApplied: alreadyApplied ? (rec.boxesApplied ?? 0) : crossed.length,
+          })
+          if (!alreadyApplied && crossed.length) {
+            actions.advanceLeader({ boxes: crossed.length, taken: [] })
+          }
+        }}
+      />
+
+      {!(rec.taken || []).length && (
+        <Button
+          ghost
+          onClick={() => actions.updateGame(game.id, (g) => {
+            const { late: _drop, ...rest } = g.aftermath
+            return { cruelLessons: false, aftermath: rest }
+          })}
+        >
+          Withdraw the claim
+        </Button>
+      )}
+    </>
+  )
+}
+
+function History({ games, leader, onClaim }) {
   const [openId, setOpenId] = useState(null)
+  const [claiming, setClaiming] = useState(null)
 
   return (
     <section className="history">
@@ -695,6 +813,27 @@ function History({ games }) {
 
               {open && (
                 <div className="history__record">
+                  {canClaimCruelLessons(g, leader) && (
+                    claiming === g.id ? (
+                      <div className="gap-note">
+                        <strong>Only if {leader.name || 'your leader'} killed the
+                        enemy leader with Cruel Lessons in this game.</strong>{' '}
+                        It adds one experience point to the track now, and if
+                        that crosses a numbered box you choose its advancement
+                        next. Nothing else in this aftermath changes.
+                        <div>
+                          <Button onClick={() => { setClaiming(null); onClaim(g) }}>
+                            Claim the point
+                          </Button>{' '}
+                          <Button ghost onClick={() => setClaiming(null)}>Not this game</Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <Button ghost onClick={() => setClaiming(g.id)}>
+                        Claim a Cruel Lessons point for this game
+                      </Button>
+                    )
+                  )}
                   {summariseAftermath(g).map((p) => (
                     <div key={p.id} className="history__phase">
                       <Label>{p.n} · {p.name}</Label>

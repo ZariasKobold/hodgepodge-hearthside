@@ -85,6 +85,23 @@ export function summarisePhase(record, phaseId) {
       const boxes = record.advance?.boxesApplied
       if (boxes) out.push(`Crossed ${boxes} experience box${boxes === 1 ? '' : 'es'}.`)
       if (record.advance?.applied && !out.length) out.push('Took no advancement.')
+      // Claimed after the aftermath was submitted (v0.38.0). Said apart, so
+      // the history never reads as if it had been there on the night.
+      const late = record.late
+      if (late) {
+        const why = late.source === 'cruel-lessons' ? 'Cruel Lessons' : 'a late claim'
+        if (!late.done) {
+          out.push(`One more experience point from ${why}, claimed later — not finished yet.`)
+        } else {
+          const lateTaken = (late.taken || []).map((t) => {
+            const onto = t.appliesTo?.name ? ` on ${t.appliesTo.name}` : ''
+            return `${t.name || 'an advancement'}${onto}`
+          })
+          out.push(`One more experience point from ${why}, claimed later`
+            + `${late.boxesApplied ? `, crossing ${late.boxesApplied} box${late.boxesApplied === 1 ? '' : 'es'}` : ''}`
+            + `${lateTaken.length ? `: took ${lateTaken.join(', ')}` : ''}.`)
+        }
+      }
       return out
     }
 

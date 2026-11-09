@@ -1,12 +1,12 @@
 # CLAUDE.md — Hodgepodge Hearthside project context
 
-<!-- HH v0.37.2 | Last updated: 2026-11-06 -->
+<!-- HH v0.38.0 | Last updated: 2026-11-09 -->
 
 ---
 
-## Current Version: 0.37.2
+## Current Version: 0.38.0
 
-## Last Updated: 2026-11-06
+## Last Updated: 2026-11-09
 
 **Live at hodgepodgehearthside.com** (Cloudflare Pages, auto-deploys on push to
 `main`). Repo: `ZariasKobold/hodgepodge-hearthside`.
@@ -97,8 +97,9 @@ of these fire:
   that restarted at 40 and again at 41, so the history holds two 40s and three
   each of 41–47, and an audit due at entry 64 ran at entry 71
   (`docs/audits/audit-v0.28.1.md`, M4). Old headings keep their wrong numbers,
-  because other entries cite them. **Next audit: entry 83** (it was due at 81,
-  and Sessions 81 and 82 shipped features instead).
+  because other entries cite them. **Next audit: entry 85** (it was due at 81,
+  and Sessions 81–84 shipped features and fixes instead; the owner ordered it
+  run straight after 84).
 - Before any milestone that widens blast radius: first D1 write, first
   non-you user, submitting to Wyrd's Community Creators page
 - **A new top-level module, a change under `functions/`, or the first write of a
@@ -123,13 +124,29 @@ audits had to invent the check by hand and one got it wrong.
 
 ## ⚠️ NEXT SESSION — pending
 
-### ⚠ The audit is overdue — entry 83 is the next session
+### ⚠ The audit is overdue — entry 85 is the next session
 
-It was due at entry 81, and Sessions 81 (v0.37.0) and 82 (v0.37.1) shipped
-features instead. §5 calls an overdue audit blocking. On its list:
+It was due at entry 81, and Sessions 81–84 shipped features and fixes instead.
+§5 calls an overdue audit blocking. On its list:
 `pick.signature` (v0.36.0), `encounter.playFacts` and `play:<encounterId>`
 (v0.33.0), v0.37.0's change under `functions/` (the book route, now open to
-any signed-in player), and v0.37.1's `lostInGame` / `lostWeek` on a model.
+any signed-in player), v0.37.1's `lostInGame` / `lostWeek` on a model, and
+v0.38.0's `game.cruelLessons` and `aftermath.late`.
+
+### Cruel Lessons earns its point — v0.38.0
+
+Player report (Madeline): no way to record the +1 experience from Cruel
+Lessons (p. 40), so the advancement it owed could not be taken. The game log
+and phase four both ask now, for a leader holding the trigger, and a
+**finished** game's history entry offers "Claim a Cruel Lessons point". The
+claim is `aftermath.late`, runs the advancement phase alone, and must be
+finished before the next game is logged.
+
+- **A submitted aftermath is still not reopened.** The late claim sits beside
+  it; nothing else in that aftermath moves. This is not the "reopen a finished
+  aftermath" item under Known issues, which is still undecided.
+- **`aftermathDrift` reads `late` as provenance**, exactly like `advance`.
+- **Not yet tried by Madeline on her real arsenal.**
 
 ### A model can be marked lost during a game — v0.37.1
 
@@ -450,7 +467,7 @@ aftermath. Shipped and live:
 | **The service worker** | v0.19.3. It cached Pages' SPA fallback under asset URLs, so a browser that loaded mid-deploy got a **permanent white screen** no reload could clear. Live since v0.14.0, observed in production on 2026-09-03. Two guards now — never write HTML under a non-navigation request, never serve it either — plus a cache-version bump that purges anyone already poisoned. |
 | **Membership** | v0.17.0. Owner-issued single-use invites, two gates (redeem → pending → host admits), per-campaign nicknames, opt-in Discord identity, and a read-only shared arsenal page. Writes were **not** widened — see below. |
 
-899 tests at v0.37.1.
+913 tests at v0.38.0.
 
 ### Unfinished business finds the player now — v0.23.0
 
@@ -2239,7 +2256,7 @@ every session. `docs/VERSION_HISTORY.md` holds how it got this way.
 npm install
 cp .env.example .env
 npm run dev      # Vite only — NO Functions, NO database. useAuth degrades to signed out.
-npm run test     # 899 tests; `functions/` is in the run too, for the authz tests
+npm run test     # 913 tests; `functions/` is in the run too, for the authz tests
 npm run dialogue # hank.js and hank-dialogue.md agree (§1)
 npm run build    # production bundle — the dev proxy does NOT exist here
 npm run seed     # optional local register file; ask BiggerHat's maintainer first

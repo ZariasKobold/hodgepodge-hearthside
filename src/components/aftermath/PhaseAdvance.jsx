@@ -12,7 +12,7 @@ import {
 } from '../../lib/advancement.js'
 import { sourceSlug, findEntry } from '../../lib/rules.js'
 import { uid } from '../../lib/shape/arsenal.js'
-import { MAX_EXPERIENCE_PER_GAME } from '../../lib/campaign.js'
+import { maxExperienceFor } from '../../lib/campaign.js'
 
 /**
  * Phase 4 — experience, then one advancement per numbered box crossed.
@@ -66,8 +66,16 @@ const BLANK = {
   tableId: '', value: null, cheated: false, pick: '', text: '', to: 'leader', target: '',
 }
 
+/**
+ * `cruel` is the Cruel Lessons question, asked here as well as in the game log
+ * (v0.38.0), because a game logged before the log asked it is already past the
+ * log: `{ held, value, onChange }`, or null for a leader without the trigger.
+ *
+ * `late` is set when this is a late claim on a finished game rather than an
+ * aftermath's own phase four — the same screen, a different heading.
+ */
 export default function PhaseAdvance({
-  week, leader, arsenal, earned, record, onTake, onDone, rules,
+  week, leader, arsenal, earned, record, onTake, onDone, rules, cruel = null, late = false,
 }) {
   const checked = leader.experience?.boxesChecked || 0
   const taken = record.taken || []
@@ -158,6 +166,17 @@ export default function PhaseAdvance({
     : 0
 
   const isFirst = checked === 0
+  /**
+   * Unticking Cruel Lessons after its box was chosen for would leave an
+   * advancement on the leader for a box the track no longer reaches. Adding
+   * the point is always safe — it only crosses more — so only the untick is
+   * held back, and only once something sits on the last box.
+   */
+  const lastBox = checked + earned - 1
+  const cruelLocked = Boolean(
+    record.applied
+    || (cruel?.value && taken.some((t) => t.boxIndex >= lastBox))
+  )
   const targetName = writeTarget ? draft.text.trim() : chosenTarget?.name || ''
   /**
    * A written-in target is taken on trust, except where the app can prove it
@@ -219,10 +238,35 @@ export default function PhaseAdvance({
 
   return (
     <>
-      <HankSays>{advancementLine({ isFirst, week })}</HankSays>
+      {!late && <HankSays>{advancementLine({ isFirst, week })}</HankSays>}
+
+      {cruel?.held && !late && (
+        <Field>
+          <label className="hire__check">
+            <input
+              type="checkbox"
+              checked={Boolean(cruel.value)}
+              disabled={cruelLocked}
+              onChange={(e) => cruel.onChange(e.target.checked)}
+            />
+            {leader.name || 'Your leader'} killed the enemy leader with Cruel Lessons{' '}
+            <span className="hire__adj">(+1 experience)</span>
+          </label>
+          <p className="note">
+            {record.applied
+              ? 'The boxes are checked, so this is settled. Unlock and revise this phase to change it.'
+              : cruelLocked
+                ? 'The box this point crossed has its advancement chosen already.'
+                : 'Also asked in the game log. It counts once whichever you tick.'}
+          </p>
+        </Field>
+      )}
 
       <div className="hire__ledger">
-        <span><strong>{earned}</strong> of {MAX_EXPERIENCE_PER_GAME} experience</span>
+        <span>
+          <strong>{earned}</strong>
+          {late ? ' experience, claimed late' : ` of ${maxExperienceFor({ cruelLessons: cruel?.held })} experience`}
+        </span>
         <span>box <strong>{Math.min(checked + earned, TOTAL_EXPERIENCE_BOXES)}</strong> of {TOTAL_EXPERIENCE_BOXES}</span>
         <span><strong>{pending.length}</strong> to choose</span>
       </div>
