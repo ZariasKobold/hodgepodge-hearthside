@@ -9,7 +9,7 @@ import { aftermathReaction, campaignEnd } from '../data/hank.js'
 import {
   createAftermath, phasesFor, nextPhase, firstPhase, handFor,
   paydayBreakdown, experienceFor, withdrewEarly, boxesCrossed, fateTakesBack,
-  holdsCruelLessons, canClaimCruelLessons, createLateClaim, pendingLateClaim,
+  canClaimCruelLessons, cruelLessonsCountsFor, createLateClaim, pendingLateClaim,
 } from '../lib/aftermath.js'
 import {
   weeksRemaining, isCampaignOver, gamesWon, gamesPlayed,
@@ -113,6 +113,7 @@ export default function Aftermath({
         {finished.length > 0 && (
           <History
             games={finished}
+            allGames={games}
             leader={leader}
             onClaim={(game) => actions.updateGame(game.id, (g) => ({
               cruelLessons: true,
@@ -239,7 +240,7 @@ export default function Aftermath({
    */
   const showing = isSettled(a.phase) ? null : a.phase
 
-  const earned = experienceFor(open, leader)
+  const earned = experienceFor(open, leader, games)
 
   return (
     <>
@@ -361,7 +362,7 @@ export default function Aftermath({
           earned={earned}
           record={a.advance}
           rules={rules}
-          cruel={holdsCruelLessons(leader) ? {
+          cruel={cruelLessonsCountsFor(open, leader, games) ? {
             held: true,
             value: Boolean(open.cruelLessons),
             onChange: (v) => actions.updateGame(open.id, { cruelLessons: v }),
@@ -772,7 +773,7 @@ function LateClaim({ game, leader, arsenal, week, rules, actions }) {
   )
 }
 
-function History({ games, leader, onClaim }) {
+function History({ games, allGames = games, leader, onClaim }) {
   const [openId, setOpenId] = useState(null)
   const [claiming, setClaiming] = useState(null)
 
@@ -813,7 +814,7 @@ function History({ games, leader, onClaim }) {
 
               {open && (
                 <div className="history__record">
-                  {canClaimCruelLessons(g, leader) && (
+                  {canClaimCruelLessons(g, leader, allGames) && (
                     claiming === g.id ? (
                       <div className="gap-note">
                         <strong>Only if {leader.name || 'your leader'} killed the

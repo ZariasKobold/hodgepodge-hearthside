@@ -1,10 +1,10 @@
 # CLAUDE.md — Hodgepodge Hearthside project context
 
-<!-- HH v0.38.0 | Last updated: 2026-11-09 -->
+<!-- HH v0.38.2 | Last updated: 2026-11-09 -->
 
 ---
 
-## Current Version: 0.38.0
+## Current Version: 0.38.2
 
 ## Last Updated: 2026-11-09
 
@@ -97,9 +97,9 @@ of these fire:
   that restarted at 40 and again at 41, so the history holds two 40s and three
   each of 41–47, and an audit due at entry 64 ran at entry 71
   (`docs/audits/audit-v0.28.1.md`, M4). Old headings keep their wrong numbers,
-  because other entries cite them. **Next audit: entry 85** (it was due at 81,
-  and Sessions 81–84 shipped features and fixes instead; the owner ordered it
-  run straight after 84).
+  because other entries cite them. **Next audit: entry 95.** The one due at 81
+  ran at 85 (`docs/audits/audit-v0.38.0.md`), and its high finding arrived in
+  the fourth of the four sessions it was late for.
 - Before any milestone that widens blast radius: first D1 write, first
   non-you user, submitting to Wyrd's Community Creators page
 - **A new top-level module, a change under `functions/`, or the first write of a
@@ -124,14 +124,27 @@ audits had to invent the check by hand and one got it wrong.
 
 ## ⚠️ NEXT SESSION — pending
 
-### ⚠ The audit is overdue — entry 85 is the next session
+### ⚠ Audit v0.38.0 has run — its findings wait on the owner
 
-It was due at entry 81, and Sessions 81–84 shipped features and fixes instead.
-§5 calls an overdue audit blocking. On its list:
-`pick.signature` (v0.36.0), `encounter.playFacts` and `play:<encounterId>`
-(v0.33.0), v0.37.0's change under `functions/` (the book route, now open to
-any signed-in player), v0.37.1's `lostInGame` / `lostWeek` on a model, and
-v0.38.0's `game.cruelLessons` and `aftermath.late`.
+`docs/audits/audit-v0.38.0.md` (Session 85). 1 high, 2 medium, 5 low.
+**H1 is fixed (v0.38.2).** The owner picks which of the rest to fix.
+
+- ~~**H1**~~ — **fixed v0.38.2.** Cruel Lessons counts only for a game played
+  after the trigger was taken. `cruelLessonsGainedAt` reads that from the
+  records (phase four's `advance.taken` by the game's `playedAt`, a late
+  claim's `late.taken` by its new `claimedAt`). No record means nothing can be
+  proven, so nothing is refused.
+- **M1** — "Delete my account" clears only `hodgepodge:campaign*` keys, so
+  every arsenal stays on the device (since v0.19.2). The fix is one line; the
+  owner says yes first.
+- **M2** — CLAUDE.md drift: the v0.5.2 lows are all closed, v3 arsenals are
+  *not* lifted on load (campaigns are), §12's erasure claim, and the repository map.
+- **L1–L5** — `createGame` defaults land on every past game at the next edit;
+  orphaned `play:` keys; `/api/book` never exercised against real D1; the dev
+  server serves the project root; a 543 kB bundle.
+
+Verified clean: `pick.signature`, `playFacts` / `play:<id>`, the book route,
+`lostInGame` / `lostWeek`, `aftermath.late` as provenance, `encounterStore`.
 
 ### Cruel Lessons earns its point — v0.38.0
 
@@ -467,7 +480,7 @@ aftermath. Shipped and live:
 | **The service worker** | v0.19.3. It cached Pages' SPA fallback under asset URLs, so a browser that loaded mid-deploy got a **permanent white screen** no reload could clear. Live since v0.14.0, observed in production on 2026-09-03. Two guards now — never write HTML under a non-navigation request, never serve it either — plus a cache-version bump that purges anyone already poisoned. |
 | **Membership** | v0.17.0. Owner-issued single-use invites, two gates (redeem → pending → host admits), per-campaign nicknames, opt-in Discord identity, and a read-only shared arsenal page. Writes were **not** widened — see below. |
 
-913 tests at v0.38.0.
+918 tests at v0.38.2.
 
 ### Unfinished business finds the player now — v0.23.0
 
@@ -1275,10 +1288,13 @@ problem; the loops around it had none.
 
 ### Audits
 
-`docs/audits/audit-v0.28.1.md` is the current one (Session 71). **Every
+`docs/audits/audit-v0.38.0.md` is the current one (Session 85, due at 81).
+**Nothing is fixed yet.** H1, M1, M2 and L1–L5 are open, and the status block
+says so. The next audit is due at entry 95 (§5).
+
+`docs/audits/audit-v0.28.1.md` is the one before (Session 71). **Every
 finding is closed**, H1 at v0.29.0 and the rest at v0.30.0; the file carries a
 status block. H2 was closed by owner decision rather than a code fix alone.
-The next audit is due at entry 81 (§5).
 
 `docs/audits/audit-v0.21.1.md` is the one before (Session 54 by ordinal count;
 its heading says 40). H1, M1 and M2 were closed in v0.22.0. M3, L1, L2 and L3
@@ -2256,7 +2272,7 @@ every session. `docs/VERSION_HISTORY.md` holds how it got this way.
 npm install
 cp .env.example .env
 npm run dev      # Vite only — NO Functions, NO database. useAuth degrades to signed out.
-npm run test     # 913 tests; `functions/` is in the run too, for the authz tests
+npm run test     # 918 tests; `functions/` is in the run too, for the authz tests
 npm run dialogue # hank.js and hank-dialogue.md agree (§1)
 npm run build    # production bundle — the dev proxy does NOT exist here
 npm run seed     # optional local register file; ask BiggerHat's maintainer first

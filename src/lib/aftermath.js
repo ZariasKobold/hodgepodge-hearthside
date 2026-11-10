@@ -264,7 +264,7 @@ export const TOTAL_EXPERIENCE_BOXES = EXPERIENCE_BOXES.length
  * about what happened on the table — the app cannot know them, and asking is
  * honest where guessing would be wrong.
  */
-export function experienceFor(game, leader) {
+export function experienceFor(game, leader, games = []) {
   return experienceEarned({
     path: leader?.advancementPath,
     killedNonPeon: Boolean(game.killedNonPeon),
@@ -272,7 +272,9 @@ export function experienceFor(game, leader) {
     lost: game.result === 'loss',
     // Only counted while the leader holds the trigger, so a box ticked by
     // mistake on a leader without it cannot mint a point.
-    cruelLessons: Boolean(game.cruelLessons) && holdsCruelLessons(leader),
+    // …and only for a game played after the trigger was taken (audit v0.38.0
+    // H1), so taking it in this aftermath cannot also earn it here.
+    cruelLessons: Boolean(game.cruelLessons) && cruelLessonsCountsFor(game, leader, games),
   })
 }
 
@@ -300,21 +302,70 @@ export function holdsCruelLessons(leader) {
  * runs the advancement phase alone: the point is checked on the track and any
  * box it crosses is chosen for. Nothing else in that aftermath moves.
  */
-export function createLateClaim(source = 'cruel-lessons') {
-  return { source, earned: 1, taken: [], applied: false, boxesApplied: 0, done: false }
+export function createLateClaim(source = 'cruel-lessons', now = Date.now()) {
+  return {
+    source, earned: 1, taken: [], applied: false, boxesApplied: 0, done: false,
+    /** When it was claimed, because an advancement it takes is gained *now*,
+        not in the game it is attached to. See `cruelLessonsGainedAt`. */
+    claimedAt: now,
+  }
+}
+
+const isCruel = (t) => t?.name === CRUEL_LESSONS && t.to !== 'totem'
+
+/**
+ * When the leader gained Cruel Lessons, as a time a game's `playedAt` can be
+ * compared with — audit v0.38.0 H1.
+ *
+ * The trigger had to be held **during** the game for its kill to count, and
+ * the records already say when it arrived: phase four of some game took it
+ * (so it counts from the next game on), or a late claim did (so it counts
+ * only for games logged after that claim). The earliest is the answer.
+ *
+ * `null` when no record took it — a row from before records carried ids, or
+ * one written in by hand. Nothing can be proven then, so nothing is refused.
+ */
+export function cruelLessonsGainedAt(games = []) {
+  let at = null
+  const latest = Math.max(0, ...games.map((g) => g.playedAt || 0))
+  for (const g of games) {
+    const a = g.aftermath || {}
+    if ((a.advance?.taken || []).some(isCruel) && g.playedAt != null) {
+      at = at == null ? g.playedAt : Math.min(at, g.playedAt)
+    }
+    if ((a.late?.taken || []).some(isCruel)) {
+      // A claim from before `claimedAt` existed was made after every game
+      // then on file, which is as late as this list can say.
+      const t = a.late.claimedAt ?? latest
+      at = at == null ? t : Math.min(at, t)
+    }
+  }
+  return at
+}
+
+/**
+ * Whether a Cruel Lessons kill could have happened in this game: the leader
+ * holds the trigger, and the game was played after it was gained. A game the
+ * trigger was taken *in* does not qualify — its kill came before the flip.
+ */
+export function cruelLessonsCountsFor(game, leader, games = []) {
+  if (!holdsCruelLessons(leader)) return false
+  const at = cruelLessonsGainedAt(games)
+  if (at == null || game?.playedAt == null) return true
+  return game.playedAt > at
 }
 
 /**
  * Whether this finished game can still have its Cruel Lessons point claimed.
  * Not when the game log already counted it, and not twice.
  */
-export function canClaimCruelLessons(game, leader) {
+export function canClaimCruelLessons(game, leader, games = []) {
   return Boolean(
     game?.aftermath?.done
     && !game.aftermath.late
     && !game.cruelLessons
     && !withdrewEarly(game)
-    && holdsCruelLessons(leader)
+    && cruelLessonsCountsFor(game, leader, games)
   )
 }
 

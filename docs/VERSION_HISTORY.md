@@ -6394,3 +6394,89 @@ UNVERIFIED: not tried by Madeline on her real arsenal. Phase four's checkbox was
 built but only the game-log checkbox and the late claim were clicked in the
 browser.
 NEXT: the audit, entry 85, immediately after this (owner instruction).
+
+---
+
+### Session 85 — v0.38.1
+Date: 2026-11-09
+
+**docs: the overdue §5 audit — 1 high, 2 medium, 5 low, no fixes yet**
+
+`docs/audits/audit-v0.38.0.md`. Due at entry 81 and run at 85, straight after
+v0.38.0 by owner instruction. 913 tests, the build and `npm run dialogue` all
+pass, before and after. The audit covers everything the NEXT SESSION block
+named: `pick.signature`, `encounter.playFacts` and `play:<id>`, the v0.37.0
+book route under `functions/`, `lostInGame` / `lostWeek`, `game.cruelLessons`
+and `aftermath.late`. It also covers `encounterStore.js`, new under
+`functions/` since the last audit.
+
+**Read by risk, not end to end, and the audit says so.** Every file on the
+brief was read in full, and so was the sync seam beside them. About sixty other
+`src/` files were grepped, not re-read.
+
+- **H1.** `holdsCruelLessons` asks about the leader as it is now. So phase
+  four offers the Cruel Lessons point in the same aftermath that took the
+  trigger, and the late claim appears on every finished game, including games
+  played before the trigger was taken. Both mint experience, and a crossed box
+  mints an advancement. It came in with v0.38.0, the fourth of the four
+  sessions the audit was late for.
+- **M1.** Account erasure clears only `hodgepodge:campaign*`, so every v3
+  arsenal survives on the device, hidden by `belongsTo` but not deleted. Broken
+  since v0.19.2.
+- **M2.** CLAUDE.md drift. The v0.5.2 "nine lows" are all closed. v3 arsenals
+  are not lifted on load; campaigns are. §12's erasure claim is false (M1).
+  The repository map is half updated.
+- **L1–L5.** `createGame`'s new default lands on every past game at the next
+  edit (same as `encounters: []`). `play:` keys can be orphaned. `/api/book`
+  has never answered a real request. The dev server serves the project root.
+  The bundle is 543 kB.
+
+Verified clean, with the reasons in the audit: signature answers stay null
+until answered, `playFacts` is numbers and ids, the book route's guards,
+`loseModelPatch`'s undo, the late claim's flag-first write and its drift
+accounting, and `encounterStore`'s SQL-side hiding.
+
+Files: `docs/audits/audit-v0.38.0.md` (new), `CLAUDE.md`,
+`docs/VERSION_HISTORY.md`, `package.json`.
+UNVERIFIED: the code outside the brief was not re-read line by line.
+NEXT: the owner picks which findings to fix; H1 first. Next audit: entry 95.
+
+---
+
+### Session 86 — v0.38.2
+Date: 2026-11-09
+
+**fix: Cruel Lessons counts only for games played after it was taken (audit v0.38.0 H1)**
+
+v0.38.0 asked whether the leader holds Cruel Lessons *now*. So phase four
+offered the point in the very aftermath that took the trigger, and the late
+claim was offered on every finished game, including those before it. Both mint
+experience, and a box crossed mints an advancement.
+
+- **When it arrived is already on the records.** `cruelLessonsGainedAt(games)`
+  takes the earliest of: the `playedAt` of a game whose `advance.taken` holds it,
+  or the `claimedAt` of a late claim whose `late.taken` does. A game counts
+  only if its `playedAt` is later (`cruelLessonsCountsFor`). The game that took
+  it does not count, because its kill came before the flip.
+- **`experienceFor`, phase four's checkbox and `canClaimCruelLessons` all go
+  through it**, so a stray tick cannot count either.
+- **`createLateClaim` stamps `claimedAt`.** An advancement taken in a late claim
+  is gained when it is claimed, not in the game it is filed under. A claim from
+  the brief v0.38.0 window without the stamp is read as after every game on
+  file, the latest this list can say.
+- **No record, no refusal.** A trigger recorded before ids, or written in by
+  hand, cannot be dated, so every game stays eligible. That is the case the
+  late claim was built for. A totem's Cruel Lessons is ignored, as before.
+
+Five tests built from records shaped the way the app writes them, including the
+audit's two (taken in phase four; three games with the trigger taken in the
+second, claim offered on the third only). Mutation-checked: with the date
+comparison removed, three fail. In the browser, an open aftermath whose phase
+four had taken Cruel Lessons showed "of 3 experience" and no checkbox. 918
+tests.
+
+Files: `src/lib/aftermath.js`, `src/components/Aftermath.jsx`,
+`src/lib/cruelLessons.test.js`, `docs/audits/audit-v0.38.0.md` (status line),
+`package.json`, `CLAUDE.md`.
+UNVERIFIED: the late claim's refusal on an earlier game was tested, not clicked.
+NEXT: the owner picks among M1, M2, L1–L5. Next audit: entry 95.
